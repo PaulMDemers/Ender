@@ -1,0 +1,36 @@
+{
+  "name": "ender",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Agentic runtime with iterative tool-calling using LangChain",
+  "type": "commonjs",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "concurrently -k -n api,ui -c cyan,magenta \"npm:dev:api\" \"npm:dev:ui\"",
+    "dev:api": "node --watch src/server.js",
+    "dev:ui": "npm --prefix ui run dev",
+    "start": "node src/server.js",
+    "build:ui": "npm --prefix ui run build",
+    "check": "node --check src/server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@langchain/aws": "^0.1.13",
+    "@langchain/core": "^0.3.69",
+    "@langchain/openai": "^0.4.5",
+    "concurrently": "^9.2.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^5.1.0",
+    "imapflow": "^1.0.181",
+    "node-cron": "^4.2.1",
+    "nodemailer": "^7.0.5",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.1.4",
+    "vite": "^7.3.1"
+  }
+}

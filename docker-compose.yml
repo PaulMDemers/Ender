@@ -1,0 +1,28 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    env_file:
+      - .env
+    environment:
+      AGENT_THREADS_DIR: /app/threads
+      AGENT_WORKDIR: /app/workspace
+      AGENT_SCHEDULES_DIR: /app/schedules
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./threads:/app/threads
+      - ./workspace:/app/workspace
+      - ./schedules:/app/schedules
+
+  ui:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+      args:
+        VITE_ENDER_API: http://localhost:3000
+    depends_on:
+      - api
+    ports:
+      - "5173:80"
