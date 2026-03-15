@@ -7,6 +7,16 @@ function sortServers(items) {
   });
 }
 
+function formatLastUsed(value) {
+  if (!value) return "never";
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(value));
+}
+
 export default function ServerModal({
   open,
   currentEndpoint,
@@ -25,10 +35,9 @@ export default function ServerModal({
   }, [open, currentEndpoint]);
 
   const sortedServers = useMemo(() => sortServers(servers), [servers]);
-  const hasSavedServers = sortedServers.length > 0;
 
-  const submit = async (e) => {
-    e?.preventDefault?.();
+  const submit = async (event) => {
+    event?.preventDefault?.();
     const nextEndpoint = endpoint.trim();
     if (!nextEndpoint) return;
     await onConnect?.({
@@ -44,46 +53,51 @@ export default function ServerModal({
     <div className="modalBackdrop" onClick={() => onClose?.()}>
       <div
         className="modalCard serverModal"
-        onClick={(e) => e.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label="Server connections"
       >
-        <div className="modalHeader">
-          <div>
-            <div className="modalTitle">Connect to Ender</div>
-            <div className="modalSubtitle">Switch fast from saved servers, or add a new endpoint below.</div>
-          </div>
+        <div className="panelChrome">
+          <div className="panelLabel mono">server.connections</div>
           <button type="button" className="iconButton" aria-label="Close server modal" onClick={() => onClose?.()}>
-            X
+            Close
           </button>
         </div>
 
-        {!hasSavedServers ? (
-          <div className="serverHint">
-            Save a server once and it will show up here for quick switching.
+        <div className="modalBody">
+          <div className="modalHeader">
+            <div>
+              <div className="modalTitle">Connect to Ender backends</div>
+              <div className="modalSubtitle">
+                Save multiple API endpoints, favorite the ones you use most, and switch control surfaces without losing the thread ledger.
+              </div>
+            </div>
           </div>
-        ) : (
-          <section className="serverSection compact">
-            <div className="sectionLabel">Saved Servers</div>
+
+          <section className="serverSection">
+            <div className="sectionHeading">
+              <span>Saved servers</span>
+              <span className="sectionCount mono">{sortedServers.length}</span>
+            </div>
+
             <div className="serverGroups">
-              {sortedServers.map((server) => (
-                <div key={server.endpoint} className="serverRow">
-                  <button
-                    type="button"
-                    className={`serverRowMain ${server.endpoint === currentEndpoint ? "active" : ""}`}
-                    onClick={() => onConnect?.(server)}
-                  >
+              {sortedServers.length ? sortedServers.map((server) => (
+                <div key={server.endpoint} className={`serverRow ${server.endpoint === currentEndpoint ? "active" : ""}`}>
+                  <button type="button" className="serverRowMain" onClick={() => onConnect?.(server)}>
                     <div className="serverNameRow">
                       <div className="serverName">{server.name}</div>
-                      {server.favorite ? <span className="serverBadge">Favorite</span> : null}
-                      <span className="serverConnectHint">
-                        {server.endpoint === currentEndpoint ? "Connected" : "Connect"}
-                      </span>
+                      {server.favorite ? <span className="threadTag">Favorite</span> : null}
                     </div>
-                    <div className="serverEndpoint">{server.endpoint}</div>
+                    <div className="serverEndpoint mono">{server.endpoint}</div>
+                    <div className="panelNote">Last connected {formatLastUsed(server.lastUsedAt)}</div>
                   </button>
+
                   <div className="serverRowActions">
+                    <span className={`connectionStatus ${server.endpoint === currentEndpoint ? "ready" : "notReady"}`}>
+                      <span className="statusDot" />
+                      {server.endpoint === currentEndpoint ? "Connected" : "Standby"}
+                    </span>
                     <button type="button" className="miniButton" onClick={() => onToggleFavorite?.(server.endpoint)}>
                       {server.favorite ? "Unfavorite" : "Favorite"}
                     </button>
@@ -92,31 +106,41 @@ export default function ServerModal({
                     </button>
                   </div>
                 </div>
-              ))}
+              )) : (
+                <div className="emptyState">Save a server once and it will appear here for quick switching.</div>
+              )}
             </div>
           </section>
-        )}
 
-        <section className="serverFormSection">
-          <div className="sectionLabel">Add Server</div>
-          <form className="serverForm" onSubmit={submit}>
-            <input
-              className="serverInput"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Friendly name"
-            />
-            <input
-              className="serverInput"
-              value={endpoint}
-              onChange={(e) => setEndpoint(e.target.value)}
-              placeholder="Server URL"
-            />
-            <button className="actionButton serverConnectButton" type="submit">
-              Save & Connect
-            </button>
-          </form>
-        </section>
+          <section className="serverFormSection">
+            <div className="sectionHeading">
+              <span>Add server</span>
+            </div>
+            <form className="serverForm" onSubmit={submit}>
+              <label className="workflowField">
+                <span className="workflowFieldLabel">Friendly name</span>
+                <input
+                  className="consoleInput"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="Production API"
+                />
+              </label>
+              <label className="workflowField">
+                <span className="workflowFieldLabel">Base URL</span>
+                <input
+                  className="consoleInput mono"
+                  value={endpoint}
+                  onChange={(event) => setEndpoint(event.target.value)}
+                  placeholder="https://api.ender.dev:8443"
+                />
+              </label>
+              <button className="primaryButton serverConnectButton" type="submit">
+                Save and connect
+              </button>
+            </form>
+          </section>
+        </div>
       </div>
     </div>
   );

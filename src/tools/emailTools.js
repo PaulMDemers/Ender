@@ -40,7 +40,7 @@ function parseTextFromRawMessage(raw) {
   return body.slice(0, 6000);
 }
 
-function createEmailTools(emailConfig) {
+function createEmailTools(emailConfig, { requestApproval, onLog } = {}) {
   const email_send = tool(
     async ({ to, subject, text, html }) => {
       if (!emailConfigured(emailConfig)) {
@@ -48,6 +48,27 @@ function createEmailTools(emailConfig) {
           ok: false,
           error: "email_not_configured",
           message: "Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS (and optionally SMTP_FROM)"
+        });
+      }
+
+      onLog?.({ level: "warn", data: `email approval required: to=${to} subject=${subject}` });
+      const approved = await requestApproval?.({
+        type: "email_send",
+        title: "Approve email send",
+        description: `Allow Ender to send an email to ${to}?`,
+        details: {
+          to,
+          subject,
+          textPreview: text ? String(text).slice(0, 500) : "",
+          hasHtml: Boolean(html)
+        }
+      });
+
+      if (!approved) {
+        return JSON.stringify({
+          ok: false,
+          error: "approval_denied",
+          message: "email send denied by user"
         });
       }
 

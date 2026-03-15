@@ -23,6 +23,9 @@ export function useTaskLogs(taskId, apiBase, runToken) {
           setStatus(task.status);
           if (isTerminal(task.status)) setCompleted(true);
         }
+        if (Array.isArray(task?.pendingApprovals)) {
+          setPendingApprovals(task.pendingApprovals);
+        }
         if (logs?.entries) {
           setEntries(logs.entries);
         }

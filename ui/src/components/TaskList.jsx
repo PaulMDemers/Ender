@@ -1,17 +1,34 @@
 import { useState } from "react";
 
-function StatusPill({ status }) {
-  const normalized = status || "running";
-  let cls = "statusPill";
-  if (normalized.startsWith("done")) cls += " done";
-  else if (normalized.startsWith("error")) cls += " error";
-  else if (normalized.startsWith("canceled") || normalized.startsWith("terminated")) cls += " canceled";
-  else if (normalized.startsWith("awaiting_approval")) cls += " awaiting";
-  return <span className={cls}>{normalized}</span>;
+function getStatusTone(status) {
+  const normalized = String(status || "idle");
+  if (normalized === "running") return "running";
+  if (normalized === "awaiting_approval") return "approval";
+  if (normalized === "done") return "success";
+  if (normalized === "error") return "danger";
+  if (normalized === "terminated" || normalized === "canceled") return "warning";
+  return "neutral";
+}
+
+function getStatusLabel(status) {
+  if (!status) return "idle";
+  if (status === "awaiting_approval") return "approval needed";
+  if (status === "done") return "completed";
+  return String(status).replaceAll("_", " ");
 }
 
 function isActive(status) {
-  return !status.startsWith("done") && !status.startsWith("error") && !status.startsWith("canceled") && !status.startsWith("terminated");
+  return !["done", "error", "canceled", "terminated"].includes(status);
+}
+
+function formatTimestamp(value) {
+  if (!value) return "n/a";
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(value));
 }
 
 export default function TaskList({
@@ -44,96 +61,85 @@ export default function TaskList({
     <div className="taskList">
       {items.map((task) => {
         const expanded = expandedIds.has(task.id);
-        const needsClamp = String(task.goal || "").length > 140;
         const pinned = Boolean(taskState?.[task.id]?.pinned);
         const archived = Boolean(taskState?.[task.id]?.archived);
+        const selected = selectedId === task.id;
 
         return (
-          <button
-            key={task.id}
-            className={`taskCard ${selectedId === task.id ? "active" : ""}`}
-            onClick={() => onSelect?.(task.id)}
-          >
-            <div className="taskCardTop">
-              <div className="taskCardTopLeft">
-                <StatusPill status={task.status} />
-                {pinned ? <span className="taskBadge">Pinned</span> : null}
-                {archived ? <span className="taskBadge muted">Archived</span> : null}
+          <article key={task.id} className={`threadCard ${selected ? "selected" : ""}`}>
+            <button
+              type="button"
+              className="threadCardMain"
+              onClick={() => {
+                onSelect?.(task.id);
+                if (!expanded) toggleExpanded(task.id);
+              }}
+            >
+              <div className="threadCardTop">
+                <div className="threadStatusRow">
+                  <span className={`statusPill ${getStatusTone(task.status)}`}>{getStatusLabel(task.status)}</span>
+                  {pinned ? <span className="threadTag">Pinned</span> : null}
+                </div>
+                <span className="threadTimestamp mono">{formatTimestamp(task.finishedAt || task.startedAt)}</span>
               </div>
-              <span className="taskStamp">{new Date(task.startedAt).toLocaleTimeString()}</span>
-            </div>
-            <div className={`taskGoal ${expanded ? "expanded" : "clamped"}`}>{task.goal}</div>
-            {needsClamp ? (
-              <span
-                className="taskExpand"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleExpanded(task.id);
-                }}
+
+              <div className={`threadTitle ${expanded ? "expanded" : "clamped"}`}>{task.goal}</div>
+            </button>
+            <div className="threadCardFooter">
+              <button
+                type="button"
+                className="summaryToggle threadEntryToggle"
+                aria-label={expanded ? "Collapse thread entry" : "Expand thread entry"}
+                title={expanded ? "Collapse thread entry" : "Expand thread entry"}
+                onClick={() => toggleExpanded(task.id)}
               >
-                {expanded ? "Show less" : "Show more"}
-              </span>
+                <span className={`summaryToggleIcon ${expanded ? "expanded" : "collapsed"}`} aria-hidden="true" />
+              </button>
+            </div>
+            {expanded ? (
+              <>
+                <div className="threadCardDetails">
+                  <div className="threadCardMeta">
+                    <span className="mono">{task.id}</span>
+                    <span className="mono">runs {task.runCount || 1}</span>
+                    <span className="mono">logs {task.logCount || 0}</span>
+                  </div>
+
+                  {task.workspace ? <div className="threadCardWorkspace mono">{task.workspace}</div> : null}
+                </div>
+
+                <div className="threadActions">
+                  {isActive(task.status) ? (
+                    <button type="button" className="miniButton" onClick={() => onTerminate?.(task.id)}>
+                      Terminate
+                    </button>
+                  ) : null}
+                  <button type="button" className="miniButton" onClick={() => onRerun?.(task.id)}>
+                    Re-run
+                  </button>
+                  <button type="button" className="miniButton" onClick={() => onTogglePinned?.(task.id)}>
+                    {pinned ? "Unpin" : "Pin"}
+                  </button>
+                  <button type="button" className="miniButton" onClick={() => onToggleArchived?.(task.id)}>
+                    {archived ? "Restore" : "Archive"}
+                  </button>
+                  <button type="button" className="miniButton miniButtonDanger" onClick={() => onDelete?.(task.id)}>
+                    Delete
+                  </button>
+                </div>
+              </>
             ) : null}
-            <div className="taskMeta">{task.id}</div>
-            {task.workspace ? <div className="taskWorkspace">workspace: {task.workspace}</div> : null}
-            <div className="taskActions">
-              {isActive(task.status) ? (
-                <span
-                  className="miniButton"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onTerminate?.(task.id);
-                  }}
-                >
-                  Terminate
-                </span>
-              ) : null}
-              <span
-                className="miniButton"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRerun?.(task.id);
-                }}
-              >
-                Re-run
-              </span>
-              <span
-                className="miniButton"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onTogglePinned?.(task.id);
-                }}
-              >
-                {pinned ? "Unpin" : "Pin"}
-              </span>
-              <span
-                className="miniButton"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToggleArchived?.(task.id);
-                }}
-              >
-                {archived ? "Restore" : "Archive"}
-              </span>
-              <span
-                className="miniButton miniButtonDanger"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete?.(task.id);
-                }}
-              >
-                Delete
-              </span>
-            </div>
-          </button>
+          </article>
         );
       })}
+
       {hasMore ? (
         <button type="button" className="loadMoreButton" onClick={() => onLoadMore?.()}>
           {loadMoreLabel || "Load more"}
         </button>
       ) : null}
-      {!items.length ? <div className="emptyState">{emptyLabel || "No tasks yet"}</div> : null}
+
+      {!items.length ? <div className="emptyState">{emptyLabel || "No threads yet"}</div> : null}
     </div>
   );
 }

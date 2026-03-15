@@ -1,5 +1,24 @@
 import { useEffect, useMemo, useState } from "react";
-import { advanceWorkflowSession, continueTask, createSchedule, createWorkflowSession, deleteSchedule, deleteTaskWithOptions, getApiBase, getHealth, listSchedules, listTasks, listWorkflows, rerunTask, resolveApproval, retreatWorkflowSession, runScheduleNow, setApiBase, terminateTask, updateSchedule } from "./agentClient";
+import {
+  advanceWorkflowSession,
+  continueTask,
+  createSchedule,
+  createWorkflowSession,
+  deleteSchedule,
+  deleteTaskWithOptions,
+  getApiBase,
+  getHealth,
+  listSchedules,
+  listTasks,
+  listWorkflows,
+  rerunTask,
+  resolveApproval,
+  retreatWorkflowSession,
+  runScheduleNow,
+  setApiBase,
+  terminateTask,
+  updateSchedule
+} from "./agentClient";
 import { useTaskLogs } from "./hooks/useTaskLogs";
 import NewTaskForm from "./components/NewTaskForm";
 import TaskList from "./components/TaskList";
@@ -9,14 +28,18 @@ import ApprovalPrompt from "./components/ApprovalPrompt";
 import ServerModal from "./components/ServerModal";
 import WorkflowPanel from "./components/WorkflowPanel";
 import SchedulePanel from "./components/SchedulePanel";
-import logoIcon from "./assets/ender-logo.png";
+
+const logoIcon = "/icons/icon-rounded-master.png";
 
 const SAVED_SERVERS_KEY = "ender_saved_servers";
 const TASK_UI_STATE_KEY = "ender_task_ui_state";
+const RAIL_COLLAPSED_KEY = "ender_rail_collapsed";
 const TASK_PAGE_SIZE = 12;
 
 function compareTasksByNewest(a, b) {
-  return new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime();
+  const aTime = new Date(a.finishedAt || a.startedAt || 0).getTime();
+  const bTime = new Date(b.finishedAt || b.startedAt || 0).getTime();
+  return bTime - aTime;
 }
 
 function loadSavedServers() {
@@ -53,8 +76,131 @@ function saveTaskUiState(value) {
   localStorage.setItem(TASK_UI_STATE_KEY, JSON.stringify(value));
 }
 
+function loadRailCollapsed() {
+  try {
+    return localStorage.getItem(RAIL_COLLAPSED_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
 function isThreadIdle(status) {
   return status === "done" || status === "error" || status === "canceled" || status === "terminated";
+}
+
+function getStatusTone(status) {
+  const normalized = String(status || "idle");
+  if (normalized === "running") return "running";
+  if (normalized === "awaiting_approval") return "approval";
+  if (normalized === "done") return "success";
+  if (normalized === "error") return "danger";
+  if (normalized === "terminated" || normalized === "canceled") return "warning";
+  return "neutral";
+}
+
+function getStatusLabel(status) {
+  if (!status) return "idle";
+  if (status === "awaiting_approval") return "approval needed";
+  if (status === "done") return "completed";
+  return String(status).replaceAll("_", " ");
+}
+
+function formatTimestamp(value) {
+  if (!value) return "n/a";
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(value));
+}
+
+function formatRelative(value) {
+  if (!value) return "No activity yet";
+  const deltaMs = new Date(value).getTime() - Date.now();
+  const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+  const minute = 60_000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+
+  if (Math.abs(deltaMs) < hour) {
+    return formatter.format(Math.round(deltaMs / minute), "minute");
+  }
+  if (Math.abs(deltaMs) < day) {
+    return formatter.format(Math.round(deltaMs / hour), "hour");
+  }
+  return formatter.format(Math.round(deltaMs / day), "day");
+}
+
+function formatPathTail(value, segmentCount = 4) {
+  const path = String(value || "").trim();
+  if (!path) return "none";
+
+  const normalized = path.replaceAll("\\", "/");
+  const isAbsolute = normalized.startsWith("/");
+  const segments = normalized.split("/").filter(Boolean);
+
+  if (segments.length <= segmentCount) return path;
+
+  return `${isAbsolute ? "/" : ""}.../${segments.slice(-segmentCount).join("/")}`;
+}
+
+function summarizeHealth(health, hasSelectedThread) {
+  return [
+    {
+      label: "API healthy",
+      ready: Boolean(health?.ok)
+    },
+    {
+      label: "LLM ready",
+      ready: Boolean(health?.services?.llm?.ready),
+      detail: health?.services?.llm?.missing?.length ? `Missing ${health.services.llm.missing.join(", ")}` : ""
+    },
+    {
+      label: "Workflow ready",
+      ready: Boolean(health?.workflows?.jira_to_repo_task?.ready),
+      detail: health?.workflows?.jira_to_repo_task?.missing?.length
+        ? `Needs ${health.workflows.jira_to_repo_task.missing.join(", ")}`
+        : ""
+    },
+    {
+      label: "Browser capture",
+      ready: Boolean(health?.services?.browserCapture?.ready),
+      detail: health?.services?.browserCapture?.detail || ""
+    },
+    {
+      label: "GitHub token",
+      ready: Boolean(health?.services?.github?.ready),
+      detail: health?.services?.github?.missing?.length ? `Needs ${health.services.github.missing.join(", ")}` : ""
+    },
+    {
+      label: "Stream attached",
+      ready: hasSelectedThread,
+      detail: hasSelectedThread ? "Transcript stream active" : "Select a live thread to attach"
+    }
+  ];
+}
+
+function getModeCopy(mode) {
+  if (mode === "workflow") {
+    return {
+      eyebrow: "Workflow",
+      title: "Run a guided launch",
+      subtitle: "Server-defined setup flows prepare parameters, validation, and task handoff before execution begins."
+    };
+  }
+  if (mode === "schedule") {
+    return {
+      eyebrow: "Schedules",
+      title: "Supervise recurring automations",
+      subtitle: "Create cron-driven prompts, thread continuations, and workflow launches without leaving the main console."
+    };
+  }
+  return {
+    eyebrow: "Launch",
+    title: "Start a new task",
+    subtitle: "Set the goal, scope the workspace if needed, and move straight into the live transcript once the run starts."
+  };
 }
 
 export default function App() {
@@ -64,7 +210,7 @@ export default function App() {
   const [loadError, setLoadError] = useState("");
   const [serverUrl, setServerUrl] = useState(getApiBase());
   const [savedServers, setSavedServers] = useState([]);
-  const [serverModalOpen, setServerModalOpen] = useState(true);
+  const [serverModalOpen, setServerModalOpen] = useState(false);
   const [composeMode, setComposeMode] = useState("new");
   const [workflows, setWorkflows] = useState([]);
   const [workflowLoading, setWorkflowLoading] = useState(false);
@@ -79,18 +225,29 @@ export default function App() {
   const [taskVisibleCount, setTaskVisibleCount] = useState(TASK_PAGE_SIZE);
   const [showArchived, setShowArchived] = useState(false);
   const [headerCollapsed, setHeaderCollapsed] = useState(false);
+  const [serverSummaryCollapsed, setServerSummaryCollapsed] = useState(true);
+  const [modeSectionCollapsed, setModeSectionCollapsed] = useState(true);
+  const [railCollapsed, setRailCollapsed] = useState(() => loadRailCollapsed());
+  const [railOpen, setRailOpen] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem("ender_api_base");
-    setSavedServers(loadSavedServers());
+    const nextSavedServers = loadSavedServers();
+    setSavedServers(nextSavedServers);
     setTaskUiState(loadTaskUiState());
     if (saved) {
       const normalized = setApiBase(saved);
       setServerUrl(normalized);
+      setServerModalOpen(false);
     } else {
       setServerUrl(getApiBase());
+      setServerModalOpen(nextSavedServers.length === 0);
     }
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem(RAIL_COLLAPSED_KEY, String(railCollapsed));
+  }, [railCollapsed]);
 
   useEffect(() => {
     if (composeMode !== "workflow" && composeMode !== "schedule") return;
@@ -140,18 +297,24 @@ export default function App() {
 
   useEffect(() => {
     let live = true;
-    getHealth()
-      .then((data) => {
+
+    const loadHealth = async () => {
+      try {
+        const data = await getHealth();
         if (!live) return;
         setHealth(data);
-      })
-      .catch(() => {
+      } catch {
         if (!live) return;
         setHealth(null);
-      });
+      }
+    };
+
+    loadHealth();
+    const intervalId = setInterval(loadHealth, 15000);
 
     return () => {
       live = false;
+      clearInterval(intervalId);
     };
   }, [serverUrl]);
 
@@ -184,7 +347,7 @@ export default function App() {
     };
   }, [selectedId, serverUrl, composeMode]);
 
-  const selectedTask = useMemo(() => tasks.find((t) => t.id === selectedId) || null, [tasks, selectedId]);
+  const selectedTask = useMemo(() => tasks.find((task) => task.id === selectedId) || null, [tasks, selectedId]);
   const taskStateForServer = taskUiState[serverUrl] || {};
   const activeTasks = useMemo(() => {
     const pinned = [];
@@ -214,6 +377,24 @@ export default function App() {
   useEffect(() => {
     setTaskVisibleCount(TASK_PAGE_SIZE);
   }, [showArchived, serverUrl, tasks.length]);
+
+  const currentServer = useMemo(
+    () => savedServers.find((server) => server.endpoint === serverUrl) || null,
+    [savedServers, serverUrl]
+  );
+
+  const effectiveStatus = selectedTask ? status || selectedTask.status : null;
+  const activeMode = composeMode === "thread" && !selectedTask ? "new" : composeMode;
+  const sendLocked = !selectedTask || !isThreadIdle(effectiveStatus);
+  const latestEntry = entries.length ? entries[entries.length - 1] : null;
+  const selectedTaskUpdatedAt = latestEntry?.t
+    ? new Date(latestEntry.t).toISOString()
+    : selectedTask?.finishedAt || selectedTask?.startedAt || null;
+  const readinessChecks = useMemo(
+    () => summarizeHealth(health, Boolean(selectedTask)),
+    [health, selectedTask]
+  );
+  const headerModeCopy = getModeCopy(activeMode);
 
   const refresh = async () => {
     try {
@@ -280,6 +461,18 @@ export default function App() {
     });
   };
 
+  const openMode = (nextMode) => {
+    setComposeMode(nextMode);
+    if (nextMode !== "thread") {
+      setSelectedId(null);
+    }
+    setWorkflowError("");
+    if (nextMode !== "workflow") {
+      setWorkflowSession(null);
+    }
+    setRailOpen(false);
+  };
+
   const onStarted = ({ id, goal, workspace }) => {
     setTasks((prev) => [...prev, {
       id,
@@ -288,11 +481,13 @@ export default function App() {
       status: "running",
       startedAt: new Date().toISOString(),
       logCount: 0,
-      runCount: 1
+      runCount: 1,
+      pendingApprovalCount: 0
     }]);
     setSelectedId(id);
     setComposeMode("thread");
     setWorkflowSession(null);
+    setRailOpen(false);
   };
 
   const startWorkflow = async (workflowId) => {
@@ -477,7 +672,7 @@ export default function App() {
   };
 
   const onRerun = async (id) => {
-    const task = tasks.find((t) => t.id === id);
+    const task = tasks.find((item) => item.id === id);
     if (!task) return;
     const result = await rerunTask(id);
     onStarted({ id: result.id, goal: task.goal, workspace: task.workspace });
@@ -490,9 +685,9 @@ export default function App() {
     if (!selectedTask) return;
     await continueTask(selectedTask.id, prompt);
     setTasks((prev) =>
-      prev.map((t) => (t.id === selectedTask.id
-        ? { ...t, status: "running", goal: prompt, runCount: (t.runCount || 0) + 1 }
-        : t))
+      prev.map((task) => (task.id === selectedTask.id
+        ? { ...task, status: "running", goal: prompt, runCount: (task.runCount || 0) + 1 }
+        : task))
     );
     setTimeout(() => {
       refresh();
@@ -506,12 +701,74 @@ export default function App() {
     await refresh();
   };
 
-  const effectiveStatus = selectedTask ? status || selectedTask.status : null;
-  const sendLocked = !selectedTask || !isThreadIdle(effectiveStatus);
-  const showNewThreadComposer = composeMode === "new";
+  const renderMainContent = () => {
+    if (activeMode === "workflow") {
+      return (
+        <WorkflowPanel
+          workflows={workflows}
+          loading={workflowLoading}
+          error={workflowError}
+          session={workflowSession}
+          busy={workflowBusy}
+          onStartWorkflow={startWorkflow}
+          onAdvance={advanceWorkflow}
+          onBack={retreatWorkflow}
+          onReset={() => {
+            setWorkflowSession(null);
+            setWorkflowError("");
+          }}
+        />
+      );
+    }
+
+    if (activeMode === "schedule") {
+      return (
+        <SchedulePanel
+          schedules={schedules}
+          workflows={workflows}
+          tasks={tasks}
+          busy={scheduleBusy}
+          error={scheduleError}
+          onCreate={createScheduleEntry}
+          onUpdate={updateScheduleEntry}
+          onDelete={deleteScheduleEntry}
+          onRunNow={runScheduleEntryNow}
+        />
+      );
+    }
+
+    if (selectedTask && composeMode === "thread") {
+      return (
+        <div className="transcriptStack">
+          {pendingApprovals.length ? (
+            <ApprovalPrompt
+              approval={pendingApprovals[0]}
+              onApprove={(approvalId) => decideApproval(approvalId, true)}
+              onDeny={(approvalId) => decideApproval(approvalId, false)}
+            />
+          ) : null}
+          <LogViewer
+            entries={entries}
+            status={effectiveStatus}
+            entryCount={entries.length}
+            taskId={selectedTask.id}
+          />
+        </div>
+      );
+    }
+
+    return (
+          <NewTaskForm
+            onStarted={onStarted}
+            serverName={currentServer?.name || "Direct connection"}
+            serverUrl={serverUrl}
+            readinessChecks={readinessChecks}
+          />
+        );
+  };
 
   return (
-    <div className="layout">
+    <>
       <ServerModal
         open={serverModalOpen}
         currentEndpoint={serverUrl}
@@ -521,184 +778,294 @@ export default function App() {
         onToggleFavorite={toggleFavoriteServer}
         onRemove={removeServer}
       />
-      <aside className="leftRail">
-        <div className="railHeader">
-          <div className="brand">
-            <img className="brandMark" src={logoIcon} alt="Ender logo" />
-            <div>
-              <div className="brandEyebrow">Ops Console</div>
-              <h1 className="title">Ender</h1>
-              <p className="subtitle">Agent task console</p>
-            </div>
-          </div>
-          <div className="railActions">
-            <button type="button" className="miniButton" onClick={() => setServerModalOpen(true)}>
-              Servers
-            </button>
-          </div>
-        </div>
-        <div className="serverSummary">
-          <div className="sectionLabel">Connected</div>
-          <div className="taskMeta">{serverUrl}</div>
-          <div className={`healthPill ${health?.workflows?.jira_to_repo_task?.ready ? "ready" : "notReady"}`}>
-            {health?.workflows?.jira_to_repo_task?.ready ? "Workflow Ready" : "Workflow Needs Config"}
-          </div>
-          {!health?.workflows?.jira_to_repo_task?.ready && health?.workflows?.jira_to_repo_task?.missing?.length ? (
-            <div className="healthMeta">
-              Missing: {health.workflows.jira_to_repo_task.missing.join(", ")}
-            </div>
-          ) : null}
-          <div className={`healthPill ${health?.services?.browserCapture?.ready ? "ready" : "notReady"}`}>
-            {health?.services?.browserCapture?.ready ? "Browser Capture Ready" : "Browser Capture Needs Setup"}
-          </div>
-          {!health?.services?.browserCapture?.ready ? (
-            <div className="healthMeta">
-              {health?.services?.browserCapture?.detail || "Install Playwright + Chromium to enable browser snapshots."}
-            </div>
-          ) : null}
-        </div>
-        {loadError ? <div className="errorText">{loadError}</div> : null}
-        <div className="railPrimaryActions">
-          <button
-            type="button"
-            className="newThreadButton"
-            onClick={() => {
-              setSelectedId(null);
-              setComposeMode("new");
-              setWorkflowSession(null);
-              setWorkflowError("");
-            }}
-          >
-            New Thread
-          </button>
-          <button
-            type="button"
-            className="newThreadButton"
-            onClick={() => {
-              setSelectedId(null);
-              setComposeMode("workflow");
-              setWorkflowSession(null);
-              setWorkflowError("");
-            }}
-          >
-            Workflows
-          </button>
-          <button
-            type="button"
-            className="newThreadButton"
-            onClick={() => {
-              setSelectedId(null);
-              setComposeMode("schedule");
-              setWorkflowSession(null);
-              setWorkflowError("");
-            }}
-          >
-            Schedules
-          </button>
-        </div>
-        <TaskList
-          items={visibleTasks}
-          selectedId={selectedId}
-          taskState={taskStateForServer}
-          hasMore={(showArchived ? archivedTasks : activeTasks).length > visibleTasks.length}
-          loadMoreLabel={`Load more ${showArchived ? "archived" : "threads"}`}
-          emptyLabel={showArchived ? "No archived threads" : "No tasks yet"}
-          onSelect={(id) => {
-            setSelectedId(id);
-            setComposeMode("thread");
-          }}
-          onTogglePinned={togglePinned}
-          onToggleArchived={toggleArchived}
-          onLoadMore={() => setTaskVisibleCount((count) => count + TASK_PAGE_SIZE)}
-          onTerminate={onTerminate}
-          onDelete={onDelete}
-          onRerun={onRerun}
-        />
-        <button
-          type="button"
-          className={`newThreadButton railArchiveButton ${showArchived ? "active" : ""}`}
-          onClick={() => {
-            setShowArchived((prev) => !prev);
-            setSelectedId(null);
-          }}
-        >
-          {showArchived ? `Show Active (${activeTasks.length})` : `Show Archived (${archivedTasks.length})`}
-        </button>
-      </aside>
-      <main className="mainPane">
-        <div className={`mainHeader ${headerCollapsed ? "collapsed" : ""}`}>
-          <div>
-            <div className="headerGoal">{selectedTask ? selectedTask.goal : "Start a new thread"}</div>
-            <div className="headerMeta">
-              {selectedTask
-                ? `${selectedTask.id} | ${effectiveStatus}${completed ? " | complete" : ""}`
-                : loading
-                  ? "Loading tasks..."
-                  : "Choose a server and start a fresh run"}
-            </div>
-          </div>
-          <button
-            type="button"
-            className="miniButton headerToggle"
-            onClick={() => setHeaderCollapsed((prev) => !prev)}
-          >
-            {headerCollapsed ? "Expand" : "Collapse"}
-          </button>
-        </div>
-        <div className="mainBody">
-          {pendingApprovals.length ? (
-            <ApprovalPrompt
-              approval={pendingApprovals[0]}
-              onApprove={(approvalId) => decideApproval(approvalId, true)}
-              onDeny={(approvalId) => decideApproval(approvalId, false)}
-            />
-          ) : null}
 
-          {composeMode === "workflow" ? (
-            <WorkflowPanel
-              workflows={workflows}
-              loading={workflowLoading}
-              error={workflowError}
-              session={workflowSession}
-              busy={workflowBusy}
-              onStartWorkflow={startWorkflow}
-              onAdvance={advanceWorkflow}
-              onBack={retreatWorkflow}
-              onReset={() => {
-                setWorkflowSession(null);
-                setWorkflowError("");
-              }}
-            />
-          ) : composeMode === "schedule" ? (
-            <SchedulePanel
-              schedules={schedules}
-              workflows={workflows}
-              tasks={tasks}
-              busy={scheduleBusy}
-              error={scheduleError}
-              onCreate={createScheduleEntry}
-              onUpdate={updateScheduleEntry}
-              onDelete={deleteScheduleEntry}
-              onRunNow={runScheduleEntryNow}
-            />
-          ) : selectedTask ? (
-            <LogViewer entries={entries} />
-          ) : (
-            <div className="blankPanel">
-              <img className="blankPanelLogo" src={logoIcon} alt="" aria-hidden="true" />
-              <div className="blankPanelTitle">Ready for a new thread</div>
-              <div className="blankPanelText">
-                Pick a workspace if you need one, then ask Ender what to work on. Once a thread starts, this pane becomes the live transcript.
+      <div className={`railScrim ${railOpen ? "visible" : ""}`} onClick={() => setRailOpen(false)} />
+
+      <div className={`layout ${railCollapsed ? "railCollapsed" : ""}`}>
+        <aside className={`leftRail ${railOpen ? "open" : ""}`}>
+          <button
+            type="button"
+            className="railCollapseToggle"
+            aria-label={railCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={railCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            onClick={() => setRailCollapsed((prev) => !prev)}
+          >
+            <span className={`chevronIcon ${railCollapsed ? "right" : "left"}`} aria-hidden="true" />
+          </button>
+
+          <div className="leftRailContent">
+            <div className="railHeader">
+              <div className="brand">
+                <div className="brandMarkWrap">
+                  <img className="brandMark" src={logoIcon} alt="Ender logo" />
+                </div>
+                <div className="brandCopy">
+                  <div className="brandEyebrow">Agent operations console</div>
+                  <h1 className="title">Ender</h1>
+                  <p className="subtitle">Live supervision for long-running agent work.</p>
+                </div>
               </div>
             </div>
-          )}
-        </div>
-        {composeMode === "workflow" || composeMode === "schedule" ? null : showNewThreadComposer ? (
-          <NewTaskForm onStarted={onStarted} />
-        ) : (
-          <ThreadComposer disabled={sendLocked} onSend={sendNextPrompt} />
-        )}
-      </main>
-    </div>
+
+            <section className="serverSummary">
+              <div className="connectionRow">
+                <div>
+                  <div className="sectionLabel">Current server</div>
+                  <div className="serverNameDisplay">{currentServer?.name || "Direct endpoint"}</div>
+                </div>
+                <div className="serverSummaryActions">
+                  <div className={`connectionStatus ${health?.ok ? "ready" : "notReady"}`}>
+                    <span className="statusDot" />
+                    {health?.ok ? "Connected" : "Offline"}
+                  </div>
+                  <button
+                    type="button"
+                    className="summaryToggle"
+                    aria-label={serverSummaryCollapsed ? "Expand server details" : "Collapse server details"}
+                    title={serverSummaryCollapsed ? "Expand server details" : "Collapse server details"}
+                    onClick={() => setServerSummaryCollapsed((prev) => !prev)}
+                  >
+                    <span
+                      className={`summaryToggleIcon ${serverSummaryCollapsed ? "collapsed" : "expanded"}`}
+                      aria-hidden="true"
+                    />
+                  </button>
+                </div>
+              </div>
+              {!serverSummaryCollapsed ? (
+                <>
+                  <div className="serverEndpointDisplay mono">{serverUrl}</div>
+                  <div className="readinessGrid">
+                    {readinessChecks.map((item) => (
+                      <div key={item.label} className={`readinessChip ${item.ready ? "ready" : "notReady"}`}>
+                        <span>{item.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {readinessChecks.some((item) => item.detail) ? (
+                    <div className="readinessMeta">
+                      {readinessChecks.find((item) => item.detail)?.detail}
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
+            </section>
+
+            {loadError ? <div className="errorBanner">{loadError}</div> : null}
+
+            <section className="railSection">
+              <div className="railSectionHeader">
+                <div className="sectionHeading">
+                  <span>Launch modes</span>
+                </div>
+                <button
+                  type="button"
+                  className="summaryToggle"
+                  aria-label={modeSectionCollapsed ? "Expand launch modes" : "Collapse launch modes"}
+                  title={modeSectionCollapsed ? "Expand launch modes" : "Collapse launch modes"}
+                  onClick={() => setModeSectionCollapsed((prev) => !prev)}
+                >
+                  <span className={`summaryToggleIcon ${modeSectionCollapsed ? "collapsed" : "expanded"}`} aria-hidden="true" />
+                </button>
+              </div>
+              {!modeSectionCollapsed ? (
+                <div className="railPrimaryActions">
+                  <button
+                    type="button"
+                    className={`modeButton ${activeMode === "new" ? "active" : ""}`}
+                    onClick={() => openMode("new")}
+                  >
+                    <span className="modeButtonLabel">New Thread</span>
+                    <span className="modeButtonMeta">Launch task</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`modeButton ${activeMode === "workflow" ? "active" : ""}`}
+                    onClick={() => openMode("workflow")}
+                  >
+                    <span className="modeButtonLabel">Workflows</span>
+                    <span className="modeButtonMeta">Guided setup</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`modeButton ${activeMode === "schedule" ? "active" : ""}`}
+                    onClick={() => openMode("schedule")}
+                  >
+                    <span className="modeButtonLabel">Schedules</span>
+                    <span className="modeButtonMeta">Recurring runs</span>
+                  </button>
+                </div>
+              ) : null}
+            </section>
+
+            <section className="railSection threadCollection">
+              <div className="railSectionHeader">
+                <div className="sectionHeading">
+                  <span>{showArchived ? "Archived threads" : "Thread ledger"}</span>
+                  <span className="sectionCount mono">
+                    {showArchived ? archivedTasks.length : activeTasks.length}
+                  </span>
+                </div>
+              </div>
+              <TaskList
+                items={visibleTasks}
+                selectedId={selectedId}
+                taskState={taskStateForServer}
+                hasMore={(showArchived ? archivedTasks : activeTasks).length > visibleTasks.length}
+                loadMoreLabel={`Load more ${showArchived ? "archived" : "threads"}`}
+                emptyLabel={showArchived ? "No archived threads" : "No threads on this server yet"}
+                onSelect={(id) => {
+                  setSelectedId(id);
+                  setComposeMode("thread");
+                  setRailOpen(false);
+                }}
+                onTogglePinned={togglePinned}
+                onToggleArchived={toggleArchived}
+                onLoadMore={() => setTaskVisibleCount((count) => count + TASK_PAGE_SIZE)}
+                onTerminate={onTerminate}
+                onDelete={onDelete}
+                onRerun={onRerun}
+              />
+            </section>
+
+            <div className="railFooter">
+              <button
+                type="button"
+                className={`modeButton modeButtonSecondary ${showArchived ? "active" : ""}`}
+                onClick={() => {
+                  setShowArchived((prev) => !prev);
+                  setSelectedId(null);
+                }}
+              >
+                <span className="modeButtonLabel">
+                  {showArchived ? `Show Active (${activeTasks.length})` : `Show Archived (${archivedTasks.length})`}
+                </span>
+                <span className="modeButtonMeta">Toggle archive scope</span>
+              </button>
+              <div className="railFootnote mono">
+                v0.1.0 · {loading ? "syncing" : "ready"} · {tasks.length} total threads
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <main className="mainPane">
+          <header className={`mainHeader ${headerCollapsed ? "collapsed" : ""}`}>
+            <div className="headerTopRow">
+              <div className="headerTitleGroup">
+                <button
+                  type="button"
+                  className="mobileRailButton"
+                  onClick={() => setRailOpen((prev) => !prev)}
+                >
+                  Menu
+                </button>
+                <div>
+                  <div className="headerEyebrow">
+                    {selectedTask && composeMode === "thread" ? "Live transcript" : headerModeCopy.eyebrow}
+                  </div>
+                  <div className="headerGoal">
+                    {selectedTask && composeMode === "thread" ? selectedTask.goal : headerModeCopy.title}
+                  </div>
+                  {!selectedTask || composeMode !== "thread" ? <div className="headerMeta">{headerModeCopy.subtitle}</div> : null}
+                </div>
+              </div>
+              <div className="headerActionColumn">
+                <div className="headerActions">
+                  <div className={`connectionStatus ${health?.ok ? "ready" : "notReady"}`}>
+                    <span className="statusDot" />
+                    {health?.ok ? "Server ready" : "Connection issue"}
+                  </div>
+                  <button type="button" className="iconButton" onClick={() => setServerModalOpen(true)}>
+                    Switch Server
+                  </button>
+                  <button
+                    type="button"
+                    className="summaryToggle headerToggleButton"
+                    aria-label={headerCollapsed ? "Expand header" : "Collapse header"}
+                    title={headerCollapsed ? "Expand header" : "Collapse header"}
+                    onClick={() => setHeaderCollapsed((prev) => !prev)}
+                  >
+                    <span
+                      className={`summaryToggleIcon ${headerCollapsed ? "collapsed" : "expanded"}`}
+                      aria-hidden="true"
+                    />
+                  </button>
+                </div>
+                {selectedTask && composeMode === "thread" ? (
+                  <div className="headerThreadMeta mono">
+                    {`Thread ${String(selectedTask.id).slice(0, 8)} · ${formatRelative(selectedTaskUpdatedAt)}`}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            {!headerCollapsed ? (
+              <div
+                className={`headerChipRow ${
+                  selectedTask && composeMode === "thread" ? "threadHeaderChipRow" : "overviewHeaderChipRow"
+                }`}
+              >
+                <div className="headerChip">
+                  <span className="headerChipLabel">Server</span>
+                  <span className="headerChipValue mono">{currentServer?.name || serverUrl}</span>
+                </div>
+                {selectedTask && composeMode === "thread" ? (
+                  <>
+                    <div className="headerChip">
+                      <span className="headerChipLabel">Status</span>
+                      <span className={`statusPill headerStatusPill ${getStatusTone(effectiveStatus)}`}>
+                        {getStatusLabel(effectiveStatus)}
+                      </span>
+                    </div>
+                    <div className="headerChip">
+                      <span className="headerChipLabel">Workspace</span>
+                      <span className="headerChipValue headerPathValue mono" title={selectedTask.workspace || "none"}>
+                        {formatPathTail(selectedTask.workspace, 3)}
+                      </span>
+                    </div>
+                    <div className="headerChip">
+                      <span className="headerChipLabel">Updated</span>
+                      <span className="headerChipValue mono">{formatTimestamp(selectedTaskUpdatedAt)}</span>
+                    </div>
+                    <div className="headerChip">
+                      <span className="headerChipLabel">Approvals</span>
+                      <span className="headerChipValue mono">{pendingApprovals.length}</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="headerChip">
+                      <span className="headerChipLabel">Threads</span>
+                      <span className="headerChipValue mono">{activeTasks.length}</span>
+                    </div>
+                    <div className="headerChip">
+                      <span className="headerChipLabel">Archived</span>
+                      <span className="headerChipValue mono">{archivedTasks.length}</span>
+                    </div>
+                    <div className="headerChip">
+                      <span className="headerChipLabel">Timezone</span>
+                      <span className="headerChipValue mono">{Intl.DateTimeFormat().resolvedOptions().timeZone}</span>
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : null}
+          </header>
+
+          <section className="mainBody">{renderMainContent()}</section>
+
+          {selectedTask && composeMode === "thread" ? (
+            <ThreadComposer
+              disabled={sendLocked}
+              onSend={sendNextPrompt}
+              workspace={selectedTask.workspace}
+              taskId={selectedTask.id}
+              status={effectiveStatus}
+            />
+          ) : null}
+        </main>
+      </div>
+    </>
   );
 }

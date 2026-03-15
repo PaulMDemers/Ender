@@ -544,6 +544,17 @@ async function advance(session, input, { config, taskManager }) {
       : { mode: "leave_unchanged" };
 
     const taskPrompt = buildTaskPrompt(session.state.issue || {}, repoPath, session.state.delivery || {}, jiraOutcome);
+    if (session.mode === "schedule_config") {
+      session.state.jiraOutcome = jiraOutcome;
+      session.state.scheduledTaskPreview = {
+        workspace: repoPath,
+        promptPreview: taskPrompt.slice(0, 400)
+      };
+      session.state.stage = "complete";
+      session.status = "completed";
+      return { ok: true };
+    }
+
     const started = taskManager.start(taskPrompt, repoPath);
     if (!started.ok) {
       return { ok: false, error: started.message || started.error || "Unable to start task" };
@@ -563,6 +574,7 @@ const jiraToRepoWorkflow = {
   id: "jira_to_repo_task",
   name: "Jira -> Repo -> Work",
   description: "Pull Jira issues, pick one, clone the repository, and start a task.",
+  supportsScheduling: true,
   async createInitialState(_input, { config }) {
     const projectResult = await loadProjects(config);
     const state = {

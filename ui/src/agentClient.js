@@ -129,8 +129,12 @@ export function deleteSchedule(id) {
   return request(`/schedules/${id}`, { method: "DELETE" });
 }
 
-export function createWorkflowSession(id) {
-  return request(`/workflows/${id}/sessions`, { method: "POST" });
+export function createWorkflowSession(id, options = {}) {
+  return request(`/workflows/${id}/sessions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(options || {})
+  });
 }
 
 export function advanceWorkflowSession(id, input) {

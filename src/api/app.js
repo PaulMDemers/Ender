@@ -74,7 +74,7 @@ function createApp(taskManager, workflowManager, scheduleManager, config) {
   });
 
   app.post("/workflows/:id/sessions", async (req, res) => {
-    const result = await workflowManager.createSession(req.params.id);
+    const result = await workflowManager.createSession(req.params.id, req.body || {});
     if (!result.ok) {
       return res.status(result.error === "not_found" ? 404 : 500).json(result);
     }

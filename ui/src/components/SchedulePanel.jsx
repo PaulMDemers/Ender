@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import { advanceWorkflowSession, createWorkflowSession, retreatWorkflowSession } from "../agentClient";
+import WorkflowStepRenderer from "./WorkflowStepRenderer";
 
-function buildTargetFromForm(kind, form) {
+function buildTargetFromForm(kind, form, workflowInputs) {
   if (kind === "prompt") {
     return {
       kind,
@@ -18,22 +20,42 @@ function buildTargetFromForm(kind, form) {
   return {
     kind: "workflow",
     workflowId: String(form.workflowId || "").trim(),
-    inputs: []
+    inputs: Array.isArray(workflowInputs) ? workflowInputs : []
   };
 }
 
 function targetSummary(schedule) {
   const target = schedule?.target || {};
   if (target.kind === "prompt") {
-    return `Prompt${target.workspace ? ` @ ${target.workspace}` : ""}`;
+    return `Start prompt${target.workspace ? ` @ ${target.workspace}` : ""}`;
   }
   if (target.kind === "thread") {
-    return `Thread ${target.threadId}`;
+    return `Continue thread ${String(target.threadId || "").slice(0, 8)}`;
   }
   if (target.kind === "workflow") {
-    return `Workflow ${target.workflowId}`;
+    const inputCount = Array.isArray(target.inputs) ? target.inputs.length : 0;
+    return `Run workflow ${target.workflowId}${inputCount ? ` · ${inputCount} inputs` : ""}`;
   }
   return "Unknown target";
+}
+
+function formatTimestamp(value) {
+  if (!value) return "Never";
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(value));
+}
+
+function compactResultLabel(value) {
+  if (!value) return "n/a";
+  return String(value).replaceAll("_", " ");
+}
+
+function isWorkflowConfigured(session) {
+  return session?.currentStep?.type === "complete";
 }
 
 export default function SchedulePanel({
@@ -57,10 +79,41 @@ export default function SchedulePanel({
   const [workspace, setWorkspace] = useState("");
   const [threadId, setThreadId] = useState("");
   const [workflowId, setWorkflowId] = useState("");
+  const [workflowSession, setWorkflowSession] = useState(null);
+  const [workflowInputs, setWorkflowInputs] = useState([]);
+  const [workflowConfigBusy, setWorkflowConfigBusy] = useState(false);
+  const [workflowConfigError, setWorkflowConfigError] = useState("");
+  const [workflowBootstrap, setWorkflowBootstrap] = useState({ nonce: 0, inputs: [] });
 
-  const threadOptions = useMemo(() => (
-    (tasks || []).map((task) => ({ value: task.id, label: `${task.id.slice(0, 8)} - ${task.goal}` }))
-  ), [tasks]);
+  const threadOptions = useMemo(
+    () => (tasks || []).map((task) => ({ value: task.id, label: `${task.id.slice(0, 8)} · ${task.goal}` })),
+    [tasks]
+  );
+
+  const schedulableWorkflows = useMemo(
+    () => (workflows || []).filter((item) => item.supportsScheduling !== false || item.id === workflowId),
+    [workflows, workflowId]
+  );
+
+  const selectedWorkflow = useMemo(
+    () => schedulableWorkflows.find((item) => item.id === workflowId) || null,
+    [schedulableWorkflows, workflowId]
+  );
+
+  const queueWorkflowBootstrap = (inputs = []) => {
+    setWorkflowBootstrap({
+      nonce: Date.now() + Math.random(),
+      inputs: Array.isArray(inputs) ? inputs : []
+    });
+  };
+
+  const resetWorkflowConfigState = () => {
+    setWorkflowSession(null);
+    setWorkflowInputs([]);
+    setWorkflowConfigError("");
+    setWorkflowConfigBusy(false);
+    setWorkflowBootstrap({ nonce: 0, inputs: [] });
+  };
 
   const beginCreate = () => {
     setEditingId(null);
@@ -73,11 +126,56 @@ export default function SchedulePanel({
     setWorkspace("");
     setThreadId("");
     setWorkflowId("");
+    resetWorkflowConfigState();
   };
 
   useEffect(() => {
     beginCreate();
   }, []);
+
+  useEffect(() => {
+    let live = true;
+
+    if (targetKind !== "workflow" || !workflowId) {
+      setWorkflowSession(null);
+      setWorkflowInputs([]);
+      setWorkflowConfigError("");
+      setWorkflowConfigBusy(false);
+      return () => {
+        live = false;
+      };
+    }
+
+    const bootstrapInputs = Array.isArray(workflowBootstrap.inputs) ? workflowBootstrap.inputs : [];
+
+    setWorkflowConfigBusy(true);
+    setWorkflowConfigError("");
+
+    (async () => {
+      let nextSession = await createWorkflowSession(workflowId, { mode: "schedule_config" });
+      for (const input of bootstrapInputs) {
+        const advanced = await advanceWorkflowSession(nextSession.id, input || {});
+        nextSession = advanced.session;
+      }
+
+      if (!live) return;
+      setWorkflowSession(nextSession);
+      setWorkflowInputs(bootstrapInputs);
+    })()
+      .catch((err) => {
+        if (!live) return;
+        setWorkflowSession(null);
+        setWorkflowInputs(bootstrapInputs);
+        setWorkflowConfigError(err.message || "Unable to prepare workflow schedule configuration");
+      })
+      .finally(() => {
+        if (live) setWorkflowConfigBusy(false);
+      });
+
+    return () => {
+      live = false;
+    };
+  }, [targetKind, workflowId, workflowBootstrap.nonce]);
 
   const startEdit = (schedule) => {
     setEditingId(schedule.id);
@@ -91,11 +189,64 @@ export default function SchedulePanel({
     setWorkspace(target.workspace || "");
     setThreadId(target.threadId || "");
     setWorkflowId(target.workflowId || "");
+    setWorkflowConfigError("");
+    if (target.kind === "workflow" && target.workflowId) {
+      queueWorkflowBootstrap(target.inputs || []);
+    } else {
+      resetWorkflowConfigState();
+    }
   };
 
-  const submit = async (e) => {
-    e?.preventDefault?.();
-    const target = buildTargetFromForm(targetKind, { prompt, workspace, threadId, workflowId });
+  const advanceWorkflowConfig = async (input) => {
+    if (!workflowSession) return;
+    setWorkflowConfigBusy(true);
+    setWorkflowConfigError("");
+    try {
+      const result = await advanceWorkflowSession(workflowSession.id, input || {});
+      setWorkflowSession(result.session);
+      setWorkflowInputs((prev) => [...prev, input || {}]);
+    } catch (err) {
+      setWorkflowConfigError(err.message || "Unable to save workflow step");
+    } finally {
+      setWorkflowConfigBusy(false);
+    }
+  };
+
+  const retreatWorkflowConfig = async () => {
+    if (!workflowSession?.canGoBack) return;
+    setWorkflowConfigBusy(true);
+    setWorkflowConfigError("");
+    try {
+      const session = await retreatWorkflowSession(workflowSession.id);
+      setWorkflowSession(session);
+      setWorkflowInputs((prev) => prev.slice(0, -1));
+    } catch (err) {
+      setWorkflowConfigError(err.message || "Unable to go back");
+    } finally {
+      setWorkflowConfigBusy(false);
+    }
+  };
+
+  const resetWorkflowConfiguration = () => {
+    if (!workflowId) return;
+    queueWorkflowBootstrap([]);
+  };
+
+  const submit = async (event) => {
+    event?.preventDefault?.();
+
+    if (targetKind === "workflow") {
+      if (!workflowId) {
+        setWorkflowConfigError("Choose a workflow to continue");
+        return;
+      }
+      if (!workflowSession || !isWorkflowConfigured(workflowSession)) {
+        setWorkflowConfigError("Complete the workflow configuration before saving this schedule");
+        return;
+      }
+    }
+
+    const target = buildTargetFromForm(targetKind, { prompt, workspace, threadId, workflowId }, workflowInputs);
     const payload = {
       name: String(name || "").trim(),
       cron: String(cronExpr || "").trim(),
@@ -111,139 +262,249 @@ export default function SchedulePanel({
     beginCreate();
   };
 
-  return (
-    <div className="workflowPanel">
-      <div className="blankPanelTitle">{editingId ? "Edit schedule" : "Create schedule"}</div>
-      <div className="blankPanelText">
-        Use cron syntax to run prompts, continue threads, or trigger workflows automatically.
-      </div>
-      <form className="workflowStep" onSubmit={submit}>
-        <label className="workflowField">
-          <span className="workflowFieldLabel">Name</span>
-          <input className="serverInput" value={name} onChange={(e) => setName(e.target.value)} required />
-        </label>
-        <label className="workflowField">
-          <span className="workflowFieldLabel">Cron</span>
-          <input
-            className="serverInput"
-            value={cronExpr}
-            onChange={(e) => setCronExpr(e.target.value)}
-            required
-            placeholder="0 9 * * 1-5"
-          />
-        </label>
-        <label className="workflowField">
-          <span className="workflowFieldLabel">Timezone</span>
-          <input
-            className="serverInput"
-            value={timezone}
-            onChange={(e) => setTimezone(e.target.value)}
-            placeholder="America/New_York"
-          />
-        </label>
-        <label className="workflowField">
-          <span className="workflowFieldLabel">Target</span>
-          <select className="serverInput" value={targetKind} onChange={(e) => setTargetKind(e.target.value)}>
-            <option value="prompt">Start new prompt task</option>
-            <option value="thread">Continue existing thread</option>
-            <option value="workflow">Run workflow</option>
-          </select>
-        </label>
-        {targetKind === "prompt" ? (
-          <>
-            <label className="workflowField">
-              <span className="workflowFieldLabel">Prompt</span>
-              <textarea className="serverInput" value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={4} required />
-            </label>
-            <label className="workflowField">
-              <span className="workflowFieldLabel">Workspace (optional)</span>
-              <input className="serverInput" value={workspace} onChange={(e) => setWorkspace(e.target.value)} />
-            </label>
-          </>
-        ) : null}
-        {targetKind === "thread" ? (
-          <>
-            <label className="workflowField">
-              <span className="workflowFieldLabel">Thread</span>
-              <select className="serverInput" value={threadId} onChange={(e) => setThreadId(e.target.value)} required>
-                <option value="">Select thread...</option>
-                {threadOptions.map((item) => (
-                  <option key={item.value} value={item.value}>{item.label}</option>
-                ))}
-              </select>
-            </label>
-            <label className="workflowField">
-              <span className="workflowFieldLabel">Prompt</span>
-              <textarea className="serverInput" value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={4} required />
-            </label>
-          </>
-        ) : null}
-        {targetKind === "workflow" ? (
-          <label className="workflowField">
-            <span className="workflowFieldLabel">Workflow</span>
-            <select className="serverInput" value={workflowId} onChange={(e) => setWorkflowId(e.target.value)} required>
-              <option value="">Select workflow...</option>
-              {(workflows || []).map((item) => (
-                <option key={item.id} value={item.id}>{item.name}</option>
-              ))}
-            </select>
-          </label>
-        ) : null}
-        <label className="workflowField">
-          <span className="workflowFieldLabel">Enabled</span>
-          <select className="serverInput" value={enabled ? "yes" : "no"} onChange={(e) => setEnabled(e.target.value === "yes")}>
-            <option value="yes">Yes</option>
-            <option value="no">No</option>
-          </select>
-        </label>
-        <div className="workflowStepActions">
-          <button type="submit" className="actionButton workflowAction" disabled={busy}>
-            {busy ? "Saving..." : editingId ? "Save Changes" : "Create Schedule"}
-          </button>
-          {editingId ? (
-            <button type="button" className="miniButton" disabled={busy} onClick={beginCreate}>
-              Cancel Edit
-            </button>
-          ) : null}
-        </div>
-      </form>
+  const workflowReady = isWorkflowConfigured(workflowSession);
 
-      <div className="blankPanelTitle">Current schedules</div>
-      <div className="workflowList">
-        {(schedules || []).map((schedule) => (
-          <div key={schedule.id} className="workflowCard">
-            <div className="workflowName">{schedule.name}</div>
-            <div className="workflowDesc">
-              {schedule.cron} {schedule.timezone ? `(${schedule.timezone})` : ""}
-            </div>
-            <div className="workflowDesc">{targetSummary(schedule)}</div>
-            {schedule.lastRunAt ? (
-              <div className="workflowDesc">
-                Last run: {new Date(schedule.lastRunAt).toLocaleString()} [{schedule.lastRunStatus || "unknown"}]
-              </div>
-            ) : null}
-            {schedule.lastRunMessage ? <div className="workflowDesc">{schedule.lastRunMessage}</div> : null}
-            <div className="taskActions">
-              <button type="button" className="miniButton" disabled={busy} onClick={() => startEdit(schedule)}>
-                Edit
-              </button>
-              <button type="button" className="miniButton" disabled={busy} onClick={() => onRunNow?.(schedule.id)}>
-                Run Now
-              </button>
-              <button
-                type="button"
-                className="miniButton miniButtonDanger"
-                disabled={busy}
-                onClick={() => onDelete?.(schedule.id)}
-              >
-                Delete
-              </button>
+  return (
+    <div className="scheduleWorkspace">
+      <section className="consolePanel scheduleEditor">
+        <div className="panelChrome">
+          <div className="panelLabel mono">schedules.panel</div>
+        </div>
+
+        <div className="panelBody workflowPanelBody">
+          <div className="workflowHero">
+            <span className="workflowBadge">SCHEDULE</span>
+            <div className="launchTitle">{editingId ? "Edit automation" : "Create a recurring run"}</div>
+            <div className="launchDescription">
+              Schedules are first-class operators in Ender. Use them to start prompts, resume existing threads, or
+              trigger guided workflows on a cron cadence.
             </div>
           </div>
-        ))}
-        {!schedules?.length ? <div className="emptyState">No schedules yet</div> : null}
-      </div>
-      {error ? <div className="errorText">{error}</div> : null}
+
+          <form className="workflowStep" onSubmit={submit}>
+            <div className="workflowGrid">
+              <label className="workflowField">
+                <span className="workflowFieldLabel">Name</span>
+                <input className="consoleInput" value={name} onChange={(event) => setName(event.target.value)} required />
+              </label>
+
+              <label className="workflowField">
+                <span className="workflowFieldLabel">Cron</span>
+                <input
+                  className="consoleInput mono"
+                  value={cronExpr}
+                  onChange={(event) => setCronExpr(event.target.value)}
+                  required
+                  placeholder="0 9 * * 1-5"
+                />
+              </label>
+
+              <label className="workflowField">
+                <span className="workflowFieldLabel">Timezone</span>
+                <input
+                  className="consoleInput"
+                  value={timezone}
+                  onChange={(event) => setTimezone(event.target.value)}
+                  placeholder="America/New_York"
+                />
+              </label>
+
+              <label className="workflowField">
+                <span className="workflowFieldLabel">Target type</span>
+                <select
+                  className="consoleInput"
+                  value={targetKind}
+                  onChange={(event) => {
+                    const nextKind = event.target.value;
+                    setTargetKind(nextKind);
+                    if (nextKind !== "workflow") {
+                      resetWorkflowConfigState();
+                    }
+                  }}
+                >
+                  <option value="prompt">Start new prompt</option>
+                  <option value="thread">Continue existing thread</option>
+                  <option value="workflow">Run workflow</option>
+                </select>
+              </label>
+            </div>
+
+            {targetKind === "prompt" ? (
+              <>
+                <label className="workflowField">
+                  <span className="workflowFieldLabel">Prompt</span>
+                  <textarea className="consoleTextarea compact" value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={4} required />
+                </label>
+                <label className="workflowField">
+                  <span className="workflowFieldLabel">Workspace</span>
+                  <input className="consoleInput" value={workspace} onChange={(event) => setWorkspace(event.target.value)} placeholder="Optional repo or folder" />
+                </label>
+              </>
+            ) : null}
+
+            {targetKind === "thread" ? (
+              <>
+                <label className="workflowField">
+                  <span className="workflowFieldLabel">Thread</span>
+                  <select className="consoleInput" value={threadId} onChange={(event) => setThreadId(event.target.value)} required>
+                    <option value="">Select thread...</option>
+                    {threadOptions.map((item) => (
+                      <option key={item.value} value={item.value}>{item.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="workflowField">
+                  <span className="workflowFieldLabel">Resume prompt</span>
+                  <textarea className="consoleTextarea compact" value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={4} required />
+                </label>
+              </>
+            ) : null}
+
+            {targetKind === "workflow" ? (
+              <>
+                <label className="workflowField">
+                  <span className="workflowFieldLabel">Workflow</span>
+                  <select
+                    className="consoleInput"
+                    value={workflowId}
+                    onChange={(event) => {
+                      const nextWorkflowId = event.target.value;
+                      setWorkflowId(nextWorkflowId);
+                      if (nextWorkflowId) queueWorkflowBootstrap([]);
+                      else resetWorkflowConfigState();
+                    }}
+                    required
+                  >
+                    <option value="">Select workflow...</option>
+                    {schedulableWorkflows.map((item) => (
+                      <option key={item.id} value={item.id}>{item.name}</option>
+                    ))}
+                  </select>
+                </label>
+
+                {workflowId ? (
+                  <div className="scheduleWorkflowConfigurator pickerBox">
+                    <div className="workflowToolbar">
+                      <div className="stepProgress mono">
+                        {workflowConfigBusy
+                          ? "Preparing schedule workflow..."
+                          : workflowReady
+                            ? `Configured · ${workflowInputs.length} saved inputs`
+                            : `Configure ${selectedWorkflow?.name || workflowId}`}
+                      </div>
+                      <div className="workflowActionBar">
+                        <button type="button" className="secondaryButton" disabled={busy || workflowConfigBusy} onClick={resetWorkflowConfiguration}>
+                          Reset config
+                        </button>
+                        {workflowSession?.canGoBack ? (
+                          <button type="button" className="secondaryButton" disabled={busy || workflowConfigBusy} onClick={retreatWorkflowConfig}>
+                            Back
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div className="panelNote">
+                      {workflowReady
+                        ? "This workflow is fully configured and ready for scheduled execution."
+                        : "Complete these workflow steps now so the scheduled run can execute without interactive prompts."}
+                    </div>
+
+                    {workflowSession ? (
+                      <WorkflowStepRenderer
+                        step={workflowSession.currentStep}
+                        onSubmit={advanceWorkflowConfig}
+                        busy={busy || workflowConfigBusy}
+                        submitLabel="Save step"
+                      />
+                    ) : workflowConfigBusy ? (
+                      <div className="emptyState">Preparing workflow configuration…</div>
+                    ) : null}
+
+                    {workflowConfigError ? <div className="errorBanner">{workflowConfigError}</div> : null}
+                  </div>
+                ) : (
+                  <div className="panelNote">Only workflows that support scheduled execution appear here.</div>
+                )}
+              </>
+            ) : null}
+
+            <label className="workflowField">
+              <span className="workflowFieldLabel">Enabled</span>
+              <select className="consoleInput" value={enabled ? "yes" : "no"} onChange={(event) => setEnabled(event.target.value === "yes")}>
+                <option value="yes">Enabled</option>
+                <option value="no">Disabled</option>
+              </select>
+            </label>
+
+            <div className="workflowActionBar">
+              <button type="submit" className="primaryButton workflowAction" disabled={busy || workflowConfigBusy}>
+                {busy ? "Saving..." : editingId ? "Save schedule" : "Create schedule"}
+              </button>
+              {editingId ? (
+                <button type="button" className="secondaryButton" disabled={busy || workflowConfigBusy} onClick={beginCreate}>
+                  Cancel edit
+                </button>
+              ) : null}
+            </div>
+          </form>
+
+          {error ? <div className="errorBanner">{error}</div> : null}
+        </div>
+      </section>
+
+      <section className="consolePanel scheduleLedger">
+        <div className="panelChrome">
+          <div className="panelLabel mono">automation.ledger</div>
+        </div>
+
+        <div className="panelBody workflowPanelBody">
+          <div className="workflowHero compact">
+            <span className="workflowBadge">ACTIVE JOBS</span>
+            <div className="launchTitle">Current schedules</div>
+          </div>
+
+          <div className="scheduleList">
+            {(schedules || []).map((schedule) => (
+              <div key={schedule.id} className="scheduleRow">
+                <div className="scheduleRowHeader">
+                  <div>
+                    <div className="workflowName">{schedule.name}</div>
+                    <div className="workflowDesc">{targetSummary(schedule)}</div>
+                  </div>
+                  <div className={`scheduleStatus ${schedule.enabled ? "ready" : "notReady"}`}>
+                    <span className="statusDot" />
+                    {schedule.enabled ? "Enabled" : "Disabled"}
+                  </div>
+                </div>
+
+                <div className="scheduleMetaInline">
+                  <span className="scheduleMetaChip mono">cron {schedule.cron}</span>
+                  <span className="scheduleMetaChip mono">{schedule.timezone || "server default"}</span>
+                  <span className="scheduleMetaChip mono">last {formatTimestamp(schedule.lastRunAt)}</span>
+                  <span className="scheduleMetaChip mono">result {compactResultLabel(schedule.lastRunStatus)}</span>
+                </div>
+
+                {schedule.lastRunMessage ? <div className="panelNote">{schedule.lastRunMessage}</div> : null}
+
+                <div className="scheduleActions">
+                  <button type="button" className="miniButton" disabled={busy} onClick={() => startEdit(schedule)}>
+                    Edit
+                  </button>
+                  <button type="button" className="miniButton" disabled={busy} onClick={() => onRunNow?.(schedule.id)}>
+                    Run now
+                  </button>
+                  <button type="button" className="miniButton miniButtonDanger" disabled={busy} onClick={() => onDelete?.(schedule.id)}>
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))}
+
+            {!schedules?.length ? <div className="emptyState">No schedules created yet</div> : null}
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

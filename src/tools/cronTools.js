@@ -21,7 +21,7 @@ function getTimeSnapshot() {
   };
 }
 
-function createCronTools(scheduleManager, { taskId } = {}) {
+function createCronTools(scheduleManager, { taskId, requestApproval, onLog } = {}) {
   const time_now = tool(
     async () => JSON.stringify({ ok: true, now: getTimeSnapshot() }),
     {
@@ -91,7 +91,25 @@ function createCronTools(scheduleManager, { taskId } = {}) {
   );
 
   const cron_delete = tool(
-    async ({ id }) => JSON.stringify(await scheduleManager.delete(String(id))),
+    async ({ id }) => {
+      onLog?.({ level: "warn", data: `schedule delete approval required: ${id}` });
+      const approved = await requestApproval?.({
+        type: "schedule_delete",
+        title: "Approve schedule deletion",
+        description: `Allow Ender to delete schedule ${id}?`,
+        details: { scheduleId: String(id) }
+      });
+
+      if (!approved) {
+        return JSON.stringify({
+          ok: false,
+          error: "approval_denied",
+          message: "schedule deletion denied by user"
+        });
+      }
+
+      return JSON.stringify(await scheduleManager.delete(String(id)));
+    },
     {
       name: "cron_delete",
       description: "Delete a schedule by id",

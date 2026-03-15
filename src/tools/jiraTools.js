@@ -72,7 +72,7 @@ function ensureEnderPrefix(text) {
   return value.startsWith("[Ender]") ? value : `[Ender] ${value}`;
 }
 
-function createJiraTools(jiraConfig) {
+function createJiraTools(jiraConfig, { requestApproval, onLog } = {}) {
   const jira_get_board_issues = tool(
     async ({ boardId, startAt, maxResults, jql }) => {
       const params = new URLSearchParams();
@@ -124,6 +124,22 @@ function createJiraTools(jiraConfig) {
           ok: false,
           error: "transition_not_found",
           message: `Unable to resolve transition '${transition}' for issue ${issueKey}`
+        });
+      }
+
+      onLog?.({ level: "warn", data: `jira transition approval required: ${issueKey} -> ${transition}` });
+      const approved = await requestApproval?.({
+        type: "jira_transition",
+        title: "Approve Jira transition",
+        description: `Allow Ender to transition ${issueKey} to ${transition}?`,
+        details: { issueKey, transition, transitionId }
+      });
+
+      if (!approved) {
+        return JSON.stringify({
+          ok: false,
+          error: "approval_denied",
+          message: "jira transition denied by user"
         });
       }
 

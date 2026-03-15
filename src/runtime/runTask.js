@@ -27,10 +27,10 @@ async function runTask({ goal, config, onLog, requestApproval, workspaceDir, tas
     ...createGitTools(activeWorkdir, { requestApproval, onLog, githubConfig: config.github }),
     ...createGitLabTools(config.gitlab),
     ...createGitHubTools(config.github),
-    ...createJiraTools(config.jira),
-    ...createEmailTools(config.email),
-    ...(scheduleManager ? createCronTools(scheduleManager, { taskId }) : []),
-    createExecTool(activeWorkdir),
+    ...createJiraTools(config.jira, { requestApproval, onLog }),
+    ...createEmailTools(config.email, { requestApproval, onLog }),
+    ...(scheduleManager ? createCronTools(scheduleManager, { taskId, requestApproval, onLog }) : []),
+    createExecTool(activeWorkdir, { requestApproval, onLog }),
     ...createLedgerTools(ledger)
   ];
 

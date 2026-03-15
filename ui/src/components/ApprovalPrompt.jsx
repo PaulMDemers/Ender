@@ -1,19 +1,44 @@
+function formatTimestamp(value) {
+  if (!value) return "pending";
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  }).format(new Date(value));
+}
+
 export default function ApprovalPrompt({ approval, onApprove, onDeny }) {
   if (!approval) return null;
 
   return (
-    <div className="approvalBox">
-      <div className="approvalTitle">{approval.title || "Approval required"}</div>
-      <div className="approvalDesc">{approval.description}</div>
-      <div className="approvalMeta">Task requests action type: {approval.type}</div>
-      <div className="approvalActions">
-        <button className="actionButton" onClick={() => onApprove?.(approval.id)}>
-          Approve
-        </button>
-        <button className="dangerButton" onClick={() => onDeny?.(approval.id)}>
-          Deny
-        </button>
+    <section className="approvalCard">
+      <div className="approvalHeader">
+        <div>
+          <div className="workflowBadge">APPROVAL REQUIRED</div>
+          <div className="approvalTitle">{approval.title || "Sensitive action requested"}</div>
+        </div>
+        <div className="approvalCode mono">{approval.type || "sensitive_action"} · {String(approval.id || "").slice(0, 8)}</div>
       </div>
-    </div>
+
+      <div className="approvalDesc">
+        {approval.description || "The agent has paused because this action could change external state or perform a privileged operation."}
+      </div>
+
+      {approval.details ? (
+        <pre className="approvalDetails mono">{typeof approval.details === "string" ? approval.details : JSON.stringify(approval.details, null, 2)}</pre>
+      ) : null}
+
+      <div className="approvalFooter">
+        <div className="panelNote">Requested at {formatTimestamp(approval.requestedAt)}. Approval decisions are reflected in the transcript history.</div>
+        <div className="approvalActions">
+          <button className="primaryButton" onClick={() => onApprove?.(approval.id)}>
+            Approve
+          </button>
+          <button className="dangerButton" onClick={() => onDeny?.(approval.id)}>
+            Deny
+          </button>
+        </div>
+      </div>
+    </section>
   );
 }

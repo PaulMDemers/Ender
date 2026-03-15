@@ -17,17 +17,20 @@ class WorkflowManager {
     return [...this.definitions.values()].map((workflow) => ({
       id: workflow.id,
       name: workflow.name,
-      description: workflow.description
+      description: workflow.description,
+      supportsScheduling: workflow.supportsScheduling !== false
     }));
   }
 
-  async createSession(workflowId) {
+  async createSession(workflowId, options = {}) {
     const workflow = this.definitions.get(workflowId);
     if (!workflow) return { ok: false, error: "not_found" };
+    const mode = options?.mode === "schedule_config" ? "schedule_config" : "interactive";
 
     const session = {
       id: randomUUID(),
       workflowId,
+      mode,
       status: "active",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -132,6 +135,7 @@ class WorkflowManager {
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
       startedTaskId: session.state.startedTaskId || null,
+      mode: session.mode || "interactive",
       canGoBack: !session.state.startedTaskId && session.history.length > 0,
       bootstrapError: session.state.bootstrapError || null,
       debug: Array.isArray(session.state.debug) ? session.state.debug : [],

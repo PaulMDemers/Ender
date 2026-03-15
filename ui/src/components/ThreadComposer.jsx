@@ -1,10 +1,17 @@
 import { useState } from "react";
 
-export default function ThreadComposer({ disabled, onSend }) {
+function getStatusLabel(status) {
+  if (!status) return "idle";
+  if (status === "awaiting_approval") return "approval needed";
+  if (status === "done") return "completed";
+  return String(status).replaceAll("_", " ");
+}
+
+export default function ThreadComposer({ disabled, onSend, workspace, taskId, status }) {
   const [text, setText] = useState("");
 
-  const submit = async (e) => {
-    e?.preventDefault?.();
+  const submit = async (event) => {
+    event?.preventDefault?.();
     const next = text.trim();
     if (!next || disabled) return;
     await onSend?.(next);
@@ -13,22 +20,34 @@ export default function ThreadComposer({ disabled, onSend }) {
 
   return (
     <form className="threadComposer" onSubmit={submit}>
-      <textarea
-        value={text}
-        className="threadInput"
-        rows={2}
-        placeholder="Add next prompt for this thread"
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            submit();
-          }
-        }}
-      />
-      <button className="actionButton" disabled={disabled || !text.trim()}>
-        Send
-      </button>
+      <div className="composerTop">
+        <div>
+          <div className="composerEyebrow">Continue operation</div>
+          <div className="composerContext mono">
+            {taskId ? `${taskId.slice(0, 8)} · ${getStatusLabel(status)}` : "No active thread"}
+          </div>
+        </div>
+        <div className="composerContext mono">{workspace || "No workspace scope"}</div>
+      </div>
+
+      <div className="composerInputRow">
+        <textarea
+          value={text}
+          className="composerTextarea"
+          rows={2}
+          placeholder="Continue this thread with the next instruction. Shift+Enter adds a new line."
+          onChange={(event) => setText(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              submit();
+            }
+          }}
+        />
+        <button className="primaryButton composerButton" disabled={disabled || !text.trim()}>
+          {disabled ? "Run active" : "Resume thread"}
+        </button>
+      </div>
     </form>
   );
 }
