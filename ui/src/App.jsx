@@ -145,6 +145,24 @@ function formatPathTail(value, segmentCount = 4) {
   return `${isAbsolute ? "/" : ""}.../${segments.slice(-segmentCount).join("/")}`;
 }
 
+function normalizeFsPath(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+
+  const normalized = raw.replaceAll("\\", "/").replace(/\/+$/, "");
+  if (!normalized) return "/";
+  if (/^[A-Z]:$/i.test(normalized)) return `${normalized.toLowerCase()}/`;
+  if (/^[A-Z]:\//i.test(normalized)) return `${normalized.slice(0, 1).toLowerCase()}${normalized.slice(1)}`;
+  return normalized;
+}
+
+function isWorkspaceDeletionCandidate(workspacePath, workspaceRoot) {
+  const target = normalizeFsPath(workspacePath);
+  const root = normalizeFsPath(workspaceRoot);
+  if (!target || !root || target === root) return false;
+  return target.startsWith(`${root}/`);
+}
+
 function summarizeHealth(health, hasSelectedThread) {
   return [
     {
@@ -605,12 +623,13 @@ export default function App() {
   const onDelete = async (id) => {
     const task = tasks.find((item) => item.id === id);
     if (!task) return;
+    const workspaceRoot = health?.paths?.workspaceRoot;
 
     const confirmed = window.confirm("Delete this thread? This cannot be undone.");
     if (!confirmed) return;
 
     let deleteWorkspace = false;
-    if (task.workspace) {
+    if (isWorkspaceDeletionCandidate(task.workspace, workspaceRoot)) {
       deleteWorkspace = window.confirm(
         `Also delete this workspace folder?\n\n${task.workspace}\n\nChoose Cancel to leave it on disk.`
       );
@@ -625,7 +644,7 @@ export default function App() {
       } else if (workspaceDeletion.reason === "still_in_use") {
         window.alert(`Thread deleted. Workspace left on disk because it is still in use by another thread:\n${workspaceDeletion.path}`);
       } else if (workspaceDeletion.reason === "protected_workspace") {
-        window.alert(`Thread deleted. Workspace was not deleted because it is a protected base directory:\n${workspaceDeletion.path}`);
+        window.alert(`Thread deleted. Workspace was not deleted because it is not an eligible workspace subdirectory:\n${workspaceDeletion.path}`);
       }
     }
 

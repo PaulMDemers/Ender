@@ -127,6 +127,9 @@ function getReadiness(config) {
   return {
     ok: true,
     backend: config.backend,
+    paths: {
+      workspaceRoot: config.workdir
+    },
     services: {
       llm,
       jira,

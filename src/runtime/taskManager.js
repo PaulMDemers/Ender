@@ -367,6 +367,14 @@ class TaskManager {
     return false;
   }
 
+  _isWorkspaceChildOfRoot(workspacePath) {
+    const root = path.resolve(this.config.workdir);
+    const target = path.resolve(workspacePath);
+    const relative = path.relative(root, target);
+
+    return Boolean(relative) && !relative.startsWith("..") && !path.isAbsolute(relative);
+  }
+
   _canDeleteWorkspace(workspacePath) {
     const target = path.resolve(workspacePath);
     const rootPath = path.parse(target).root;
@@ -375,7 +383,7 @@ class TaskManager {
     if (target === rootPath) return false;
     if (target === workdir) return false;
     if (workspaceBase && target === workspaceBase) return false;
-    return true;
+    return this._isWorkspaceChildOfRoot(target);
   }
 
   _renderPrompt(thread) {
