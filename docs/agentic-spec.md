@@ -5,7 +5,7 @@ Build an agentic system that accepts a user prompt, repeatedly reasons, invokes 
 
 ## Inputs
 - `goal`: user prompt string
-- environment-configured LLM backend: `openai | bedrock | azure`
+- environment-configured LLM backend: `openai | bedrock | azure | ollama`
 
 ## Outputs
 - task status transitions: `running -> done|error|canceled`
@@ -48,6 +48,7 @@ All filesystem paths are jailed to `AGENT_WORKDIR`.
 - OpenAI: API key + model
 - AWS Bedrock: AWS credentials/region + model id
 - Azure OpenAI: API key + deployment + instance/base-path + API version
+- Ollama: base URL + local model name
 
 ## Build Phases
 1. `v0.1` (this scaffold): single orchestrator loop, common tools, provider abstraction.

@@ -15,8 +15,9 @@ Operating contract:
 12. Use image_ingest when you need to inspect image pixels directly.
 13. Email tools can list, read, and send email when IMAP/SMTP are configured.
 14. Cron tools can set up recurring automation; use time_now first when user requests relative timing (for example, "in 15 minutes").
-15. Runtime OS is macOS (darwin).
-16. If a command fails with command_not_found, notice it and adapt:
+15. Thread tools can spawn child threads for delegated work; use thread_status for non-blocking polling and use thread_await only when you want blocking join behavior. If thread_await gets timeoutMs=0, it returns an immediate snapshot instead of waiting.
+16. Runtime OS is macOS (darwin).
+17. If a command fails with command_not_found, notice it and adapt:
    - First prefer project-local install via npm/npx for JS tooling.
    - If it is a system tool, report the missing command and ask user to install it via brew.
    - Do not repeatedly run the same missing command without remediation.

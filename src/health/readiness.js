@@ -17,6 +17,18 @@ function getBackendReadiness(config) {
     };
   }
 
+  if (config.backend === "ollama") {
+    const missing = [];
+    if (!config.ollama.baseUrl) missing.push("OLLAMA_BASE_URL");
+    if (!config.ollama.model) missing.push("OLLAMA_MODEL");
+
+    return {
+      backend: "ollama",
+      ready: missing.length === 0,
+      missing
+    };
+  }
+
   const missing = [];
   if (!config.azure.apiKey) missing.push("AZURE_OPENAI_API_KEY");
   if (!config.azure.deploymentName) missing.push("AZURE_OPENAI_API_DEPLOYMENT_NAME");

@@ -14,6 +14,10 @@ class TaskManager {
     this._persistQueue = Promise.resolve();
   }
 
+  _isTerminalStatus(status) {
+    return status === "done" || status === "error" || status === "canceled" || status === "terminated";
+  }
+
   async init() {
     await fs.mkdir(this.threadsDir, { recursive: true });
     await this._loadPersistedTasks();
@@ -76,7 +80,9 @@ class TaskManager {
       runCount: t.runCount,
       pendingApprovalCount: t.pendingApprovals.size,
       workspace: t.workspace,
-      workspaceLabel: t.workspaceLabel
+      workspaceLabel: t.workspaceLabel,
+      parentTaskId: t.parentTaskId || null,
+      childTaskIds: Array.isArray(t.childTaskIds) ? [...t.childTaskIds] : []
     }));
   }
 
@@ -94,6 +100,8 @@ class TaskManager {
       runCount: t.runCount,
       workspace: t.workspace,
       workspaceLabel: t.workspaceLabel,
+      parentTaskId: t.parentTaskId || null,
+      childTaskIds: Array.isArray(t.childTaskIds) ? [...t.childTaskIds] : [],
       pendingApprovals: [...t.pendingApprovals.values()].map((a) => ({
         id: a.id,
         type: a.type,
@@ -111,6 +119,67 @@ class TaskManager {
     const start = Math.max(0, Number(from) || 0);
     const entries = t.logs.slice(start);
     return { from: start, to: start + entries.length, entries };
+  }
+
+  getTaskSummary(id, options = {}) {
+    const task = this.tasks.get(id);
+    if (!task) return null;
+    return this._taskSummary(task, options);
+  }
+
+  async waitForTask(id, options = {}) {
+    const task = this.tasks.get(id);
+    if (!task) return { ok: false, error: "not_found" };
+
+    const hasTimeout = options.timeoutMs !== null && options.timeoutMs !== undefined;
+    const timeoutMsRaw = Number(options.timeoutMs);
+    const timeoutMs = hasTimeout && Number.isFinite(timeoutMsRaw) && timeoutMsRaw >= 0 ? Math.floor(timeoutMsRaw) : null;
+    const includeLogs = Boolean(options.includeLogs);
+
+    if (this._isTerminalStatus(task.status)) {
+      return {
+        ok: true,
+        timedOut: false,
+        task: this._taskSummary(task, { includeLogs })
+      };
+    }
+
+    if (timeoutMs === 0) {
+      return {
+        ok: true,
+        timedOut: true,
+        task: this._taskSummary(task, { includeLogs })
+      };
+    }
+
+    return new Promise((resolve) => {
+      const waiter = {
+        resolve: () => {
+          clearTimeout(waiter.timer);
+          task.waiters.delete(waiter);
+          resolve({
+            ok: true,
+            timedOut: false,
+            task: this._taskSummary(task, { includeLogs })
+          });
+        },
+        timer: null
+      };
+
+      if (timeoutMs !== null && timeoutMs > 0) {
+        waiter.timer = setTimeout(() => {
+          task.waiters.delete(waiter);
+          resolve({
+            ok: true,
+            timedOut: true,
+            task: this._taskSummary(task, { includeLogs })
+          });
+        }, timeoutMs);
+        waiter.timer.unref?.();
+      }
+
+      task.waiters.add(waiter);
+    });
   }
 
   rerun(id) {
@@ -178,6 +247,7 @@ class TaskManager {
       t.pendingApprovals.clear();
       t.finishedAt = t.finishedAt || new Date().toISOString();
       this._schedulePersist(t);
+      this._resolveWaiters(t);
     }
 
     return { ok: true };
@@ -202,6 +272,14 @@ class TaskManager {
     task.deleted = true;
     clearTimeout(task.persistTimer);
 
+    if (task.parentTaskId) {
+      const parent = this.tasks.get(task.parentTaskId);
+      if (parent && Array.isArray(parent.childTaskIds)) {
+        parent.childTaskIds = parent.childTaskIds.filter((childId) => childId !== task.id);
+        this._schedulePersist(parent);
+      }
+    }
+
     if (task.status === "running" || task.status === "awaiting_approval") {
       task.status = "terminated";
       for (const approval of task.pendingApprovals.values()) {
@@ -209,6 +287,7 @@ class TaskManager {
       }
       task.pendingApprovals.clear();
       this._closeSubscribers(task);
+      this._resolveWaiters(task);
     }
 
     this.tasks.delete(id);
@@ -241,7 +320,7 @@ class TaskManager {
     return { ok: true, workspaceDeletion };
   }
 
-  start(goal, workspaceInput) {
+  start(goal, workspaceInput, options = {}) {
     let workspace;
     let workspaceLabel;
     try {
@@ -267,12 +346,42 @@ class TaskManager {
       thread: [{ role: "user", content: cleanGoal }],
       pendingApprovals: new Map(),
       workspace,
-      workspaceLabel
+      workspaceLabel,
+      parentTaskId: options.parentTaskId ? String(options.parentTaskId) : null,
+      childTaskIds: [],
+      waiters: new Set()
     };
     this.tasks.set(id, task);
+    if (task.parentTaskId) {
+      const parent = this.tasks.get(task.parentTaskId);
+      if (parent) {
+        if (!Array.isArray(parent.childTaskIds)) parent.childTaskIds = [];
+        if (!parent.childTaskIds.includes(id)) {
+          parent.childTaskIds.push(id);
+          this._schedulePersist(parent);
+        }
+      }
+    }
     this._schedulePersist(task);
     this._runThread(task);
     return { ok: true, id };
+  }
+
+  startChildTask(parentTaskId, goal, workspaceInput) {
+    const parent = this.tasks.get(parentTaskId);
+    if (!parent) return { ok: false, error: "parent_not_found" };
+
+    const started = this.start(goal, workspaceInput || parent.workspace, { parentTaskId });
+    if (!started.ok) return started;
+
+    const child = this.tasks.get(started.id);
+    if (!child) return { ok: false, error: "child_start_failed" };
+
+    return {
+      ok: true,
+      id: child.id,
+      task: this._taskSummary(child)
+    };
   }
 
   sse(id, res) {
@@ -301,7 +410,7 @@ class TaskManager {
       res.write(`event: approval_required\ndata: ${JSON.stringify(payload)}\n\n`);
     }
 
-    if (t.status === "done" || t.status === "error" || t.status === "canceled" || t.status === "terminated") {
+    if (this._isTerminalStatus(t.status)) {
       res.write(`event: complete\ndata: ${JSON.stringify({ status: t.status, result: t.result || null })}\n\n`);
       res.end();
       return true;
@@ -451,7 +560,8 @@ class TaskManager {
           requestApproval,
           workspaceDir: task.workspace,
           taskId: task.id,
-          scheduleManager: this.scheduleManager
+          scheduleManager: this.scheduleManager,
+          taskManager: this
         });
 
         if (task.deleted || task.status === "canceled" || task.status === "terminated") return;
@@ -465,6 +575,7 @@ class TaskManager {
         this._broadcastLog(task, this._normalizeLog(finalEntry));
         this._broadcastStatus(task);
         await this._persistTask(task);
+        this._resolveWaiters(task);
         this._broadcastEvent(task, "complete", { status: task.status, result: task.result });
         this._closeSubscribers(task);
       } catch (err) {
@@ -476,6 +587,7 @@ class TaskManager {
         this._broadcastLog(task, this._normalizeLog(errorEntry));
         this._broadcastStatus(task);
         await this._persistTask(task);
+        this._resolveWaiters(task);
         this._broadcastEvent(task, "complete", { status: task.status, result: null });
         this._closeSubscribers(task);
       }
@@ -552,6 +664,38 @@ class TaskManager {
     return id;
   }
 
+  _taskSummary(task, options = {}) {
+    const includeLogs = Boolean(options.includeLogs);
+    return {
+      id: task.id,
+      goal: task.goal,
+      status: task.status,
+      startedAt: task.startedAt,
+      finishedAt: task.finishedAt || null,
+      result: task.result ?? null,
+      runCount: Number.isFinite(task.runCount) ? task.runCount : 0,
+      workspace: task.workspace,
+      workspaceLabel: task.workspaceLabel || task.workspace,
+      parentTaskId: task.parentTaskId || null,
+      childTaskIds: Array.isArray(task.childTaskIds) ? [...task.childTaskIds] : [],
+      pendingApprovalCount: task.pendingApprovals instanceof Map ? task.pendingApprovals.size : 0,
+      logCount: Array.isArray(task.logs) ? task.logs.length : 0,
+      logs: includeLogs ? (Array.isArray(task.logs) ? task.logs : []) : undefined
+    };
+  }
+
+  _resolveWaiters(task) {
+    if (!task.waiters || !task.waiters.size) return;
+    for (const waiter of task.waiters) {
+      try {
+        waiter.resolve();
+      } catch {
+        // no-op
+      }
+    }
+    task.waiters.clear();
+  }
+
   _taskFile(taskId) {
     return path.join(this.threadsDir, `${taskId}.json`);
   }
@@ -569,6 +713,8 @@ class TaskManager {
       thread: Array.isArray(task.thread) ? task.thread : [],
       workspace: task.workspace,
       workspaceLabel: task.workspaceLabel || task.workspace,
+      parentTaskId: task.parentTaskId || null,
+      childTaskIds: Array.isArray(task.childTaskIds) ? task.childTaskIds : [],
       pendingApprovals: [...task.pendingApprovals.values()].map((approval) => ({
         id: approval.id,
         type: approval.type,
@@ -594,7 +740,10 @@ class TaskManager {
       thread: Array.isArray(data.thread) ? data.thread : [],
       pendingApprovals: new Map(),
       workspace: String(data.workspace || this.config.workdir),
-      workspaceLabel: String(data.workspaceLabel || data.workspace || this.config.workdir)
+      workspaceLabel: String(data.workspaceLabel || data.workspace || this.config.workdir),
+      parentTaskId: data.parentTaskId ? String(data.parentTaskId) : null,
+      childTaskIds: Array.isArray(data.childTaskIds) ? data.childTaskIds.map((id) => String(id)) : [],
+      waiters: new Set()
     };
 
     const approvals = Array.isArray(data.pendingApprovals) ? data.pendingApprovals : [];

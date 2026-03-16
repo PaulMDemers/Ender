@@ -11,10 +11,11 @@ const { createGitHubTools } = require("../tools/githubTools");
 const { createJiraTools } = require("../tools/jiraTools");
 const { createEmailTools } = require("../tools/emailTools");
 const { createCronTools } = require("../tools/cronTools");
+const { createThreadTools } = require("../tools/threadTools");
 const { runAgentLoop } = require("./runAgentLoop");
 const { SYSTEM_PROMPT } = require("../agents/systemPrompt");
 
-async function runTask({ goal, config, onLog, requestApproval, workspaceDir, taskId, scheduleManager }) {
+async function runTask({ goal, config, onLog, requestApproval, workspaceDir, taskId, scheduleManager, taskManager }) {
   const activeWorkdir = workspaceDir || config.workdir;
   await fs.mkdir(activeWorkdir, { recursive: true });
 
@@ -30,6 +31,7 @@ async function runTask({ goal, config, onLog, requestApproval, workspaceDir, tas
     ...createJiraTools(config.jira, { requestApproval, onLog }),
     ...createEmailTools(config.email, { requestApproval, onLog }),
     ...(scheduleManager ? createCronTools(scheduleManager, { taskId, requestApproval, onLog }) : []),
+    ...(taskManager ? createThreadTools(taskManager, { taskId, onLog }) : []),
     createExecTool(activeWorkdir, { requestApproval, onLog }),
     ...createLedgerTools(ledger)
   ];

@@ -1,5 +1,6 @@
 const { ChatOpenAI, AzureChatOpenAI } = require("@langchain/openai");
 const { ChatBedrockConverse } = require("@langchain/aws");
+const { ChatOllama } = require("@langchain/ollama");
 
 function validateConfig(config) {
   if (config.backend === "openai" && !config.openai.apiKey) {
@@ -21,6 +22,15 @@ function validateConfig(config) {
       throw new Error("Set AZURE_OPENAI_API_INSTANCE_NAME or AZURE_OPENAI_BASE_PATH when LLM_BACKEND=azure");
     }
   }
+
+  if (config.backend === "ollama") {
+    if (!config.ollama.baseUrl) {
+      throw new Error("OLLAMA_BASE_URL is required when LLM_BACKEND=ollama");
+    }
+    if (!config.ollama.model) {
+      throw new Error("OLLAMA_MODEL is required when LLM_BACKEND=ollama");
+    }
+  }
 }
 
 function createChatModel(config) {
@@ -40,6 +50,14 @@ function createChatModel(config) {
       model: config.bedrock.model,
       temperature: 0.2,
       toolChoice: "auto"
+    });
+  }
+
+  if (config.backend === "ollama") {
+    return new ChatOllama({
+      baseUrl: config.ollama.baseUrl,
+      model: config.ollama.model,
+      temperature: 0.2
     });
   }
 

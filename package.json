@@ -19,6 +19,7 @@
   "dependencies": {
     "@langchain/aws": "^0.1.13",
     "@langchain/core": "^0.3.69",
+    "@langchain/ollama": "^0.2.4",
     "@langchain/openai": "^0.4.5",
     "concurrently": "^9.2.1",
     "cors": "^2.8.5",

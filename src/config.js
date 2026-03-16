@@ -9,7 +9,7 @@ const schema = z.object({
   AGENT_SCHEDULES_DIR: z.string().optional(),
   AGENT_MAX_STEPS: z.string().optional(),
   AGENT_STALL_LIMIT: z.string().optional(),
-  LLM_BACKEND: z.enum(["openai", "bedrock", "azure"]).default("openai"),
+  LLM_BACKEND: z.enum(["openai", "bedrock", "azure", "ollama"]).default("openai"),
 
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_MODEL: z.string().default("gpt-4.1-mini"),
@@ -22,6 +22,9 @@ const schema = z.object({
   AZURE_OPENAI_API_DEPLOYMENT_NAME: z.string().optional(),
   AZURE_OPENAI_API_VERSION: z.string().default("2024-10-21"),
   AZURE_OPENAI_BASE_PATH: z.string().optional(),
+
+  OLLAMA_BASE_URL: z.string().default("http://127.0.0.1:11434"),
+  OLLAMA_MODEL: z.string().default("llama3.1:8b"),
 
   GITLAB_BASE_URL: z.string().optional(),
   GITLAB_TOKEN: z.string().optional(),
@@ -100,6 +103,11 @@ function loadConfig(env = process.env) {
       deploymentName: parsed.AZURE_OPENAI_API_DEPLOYMENT_NAME,
       apiVersion: parsed.AZURE_OPENAI_API_VERSION,
       basePath: parsed.AZURE_OPENAI_BASE_PATH
+    },
+
+    ollama: {
+      baseUrl: parsed.OLLAMA_BASE_URL,
+      model: parsed.OLLAMA_MODEL
     },
 
     gitlab: {

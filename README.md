@@ -12,6 +12,7 @@ Ender is an agentic runtime scaffold that repeatedly reprompts and invokes tools
   - OpenAI API key
   - AWS Bedrock
   - Azure OpenAI
+  - Ollama
 - Task API + SSE log streaming compatible with existing `agent-ui` shape
 - Workspace-jail file tools and execution tool
 
@@ -21,7 +22,7 @@ Ender is an agentic runtime scaffold that repeatedly reprompts and invokes tools
    - `npm --prefix ui install`
 2. Configure env:
    - `cp .env.example .env`
-   - choose `LLM_BACKEND=openai|bedrock|azure`
+   - choose `LLM_BACKEND=openai|bedrock|azure|ollama`
    - fill provider-specific env vars
 3. Run:
    - `npm run dev`
@@ -75,6 +76,15 @@ Inside `ender/ui`:
 - `AZURE_OPENAI_API_DEPLOYMENT_NAME=...`
 - `AZURE_OPENAI_API_INSTANCE_NAME=...` or `AZURE_OPENAI_BASE_PATH=...`
 - `AZURE_OPENAI_API_VERSION=2024-10-21`
+
+### Ollama
+- `LLM_BACKEND=ollama`
+- `OLLAMA_BASE_URL=http://127.0.0.1:11434`
+- `OLLAMA_MODEL=llama3.1:8b`
+- make sure Ollama is running and the model is available locally
+- example: `ollama pull llama3.1:8b`
+
+If Ender is running in Docker while Ollama is running on your host, point `OLLAMA_BASE_URL` at a host-reachable address such as `http://host.docker.internal:11434`.
 
 ## Email Setup
 ### SMTP (send)
@@ -152,6 +162,7 @@ Inside `ender/ui`:
   - install Chromium binary: `npx playwright install chromium`
 - Email tools: `email_list`, `email_read`, `email_send`.
 - Cron tools: `time_now`, `cron_schedule`, `cron_list`, `cron_delete`.
+- Thread tools: `thread_spawn`, `thread_status`, `thread_await`.
 - All generated files are constrained to `AGENT_WORKDIR`.
 
 ## Adding Workflows
