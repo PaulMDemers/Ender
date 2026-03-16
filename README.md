@@ -1,190 +1,312 @@
 # Ender
 
-Ender is an agentic runtime scaffold that repeatedly reprompts and invokes tools until a task is solved.
+<p align="center">
+  <img src="ui/public/icons/icon-rounded-master.png" alt="Ender logo" width="120">
+</p>
 
-## Features
-- LangChain tool-calling loop with optional max step limit
-- Repeated-cycle stall detection to prevent endless tool loops
-- Per-thread workspace selection from UI
-- JSON-backed thread persistence across server restarts
-- JSON-backed schedule persistence for cron automation
-- Backend selection via env:
-  - OpenAI API key
-  - AWS Bedrock
-  - Azure OpenAI
-  - Ollama
-- Task API + SSE log streaming compatible with existing `agent-ui` shape
-- Workspace-jail file tools and execution tool
+Ender is a local-first agent runtime with a React/Electron control surface, guided workflows, recurring schedules, and a tool-calling execution loop built on LangChain.
+
+It is designed for operator-driven work: launch a task against a workspace, watch the live transcript, approve sensitive actions, and keep thread history on disk.
+
+## What Ender Does
+
+- Runs an iterative tool-calling loop until the task is completed, stalled, canceled, or reaches a configured step cap.
+- Exposes a local API for threads, live logs, approvals, workflows, schedules, health, and workspace browsing.
+- Ships a React UI and an Electron desktop app built from the same frontend.
+- Persists threads and schedules to JSON on disk so they survive server restarts.
+- Supports guided workflows that gather structured inputs before starting work.
+- Supports recurring automation for three targets: start a new prompt, continue an existing thread, or run a workflow on a cron cadence.
+- Works with multiple LLM backends: OpenAI, AWS Bedrock, Azure OpenAI, and Ollama.
+- Includes tools for files, shell execution, git, GitHub, GitLab, Jira, Confluence, Google Drive, email, browser capture, schedules, and child threads.
+
+## Project Layout
+
+```text
+ender/
+├── src/        # API server, runtime loop, managers, tools, workflows
+├── ui/         # React UI + Electron packaging
+├── docs/       # Tutorials, references, architecture notes
+├── threads/    # Persisted task snapshots
+├── schedules/  # Persisted cron schedules
+└── workspace/  # Default working directory for cloned/generated work
+```
 
 ## Quickstart
-1. Install dependencies:
-   - `npm install`
-   - `npm --prefix ui install`
-2. Configure env:
-   - `cp .env.example .env`
-   - choose `LLM_BACKEND=openai|bedrock|azure|ollama`
-   - fill provider-specific env vars
-3. Run:
-   - `npm run dev`
 
-This starts both API (`http://localhost:3000`) and UI (`http://localhost:5173`).
+### Prerequisites
+
+- Node.js 20+
+- npm
+- At least one configured LLM backend
+
+### Install
+
+```bash
+npm install
+npm --prefix ui install
+cp .env.example .env
+```
+
+### Configure
+
+Pick a backend in `.env`:
+
+- `LLM_BACKEND=openai`
+- `LLM_BACKEND=bedrock`
+- `LLM_BACKEND=azure`
+- `LLM_BACKEND=ollama`
+
+Then fill in the matching credentials. For the default OpenAI setup, the minimum is:
+
+```env
+LLM_BACKEND=openai
+OPENAI_API_KEY=...
+OPENAI_MODEL=gpt-4.1-mini
+```
+
+### Run
+
+```bash
+npm run dev
+```
+
+This starts:
+
+- API: [http://localhost:3000](http://localhost:3000)
+- UI: [http://localhost:5173](http://localhost:5173)
+
+## Desktop App
+
+The desktop app lives in [`ui/`](ui/) and packages the same React UI with Electron.
+
+```bash
+cd ui
+npm install
+npm run electron:dev
+```
+
+Packaging commands:
+
+```bash
+npm run electron:pack
+npm run electron:dist
+```
+
+Current build targets:
+
+- macOS: `dmg`
+- Windows: `nsis`
+- Linux: `AppImage`
 
 ## Docker
-From `ender/`:
 
-1. Build and run:
-   - `docker compose up --build`
-2. Services:
-   - API: `http://localhost:3000`
-   - UI: `http://localhost:5173`
+From the repository root:
+
+```bash
+docker compose up --build
+```
 
 The compose stack includes:
-- `Dockerfile.api` for the backend runtime
-- `ui/Dockerfile` (multi-stage build + nginx) for the frontend
-- bind mounts for `./threads`, `./workspace`, and `./schedules` so data persists on disk
 
-## UI
-`ender/ui` is a React + Vite console for tasks and live logs.
+- `Dockerfile.api` for the API/runtime
+- [`ui/Dockerfile`](ui/Dockerfile) for the frontend
+- bind mounts for `./threads`, `./workspace`, and `./schedules`
 
-- `npm run dev:ui` to run UI only
-- `npm run build:ui` to build UI only
-- Server picker in sidebar supports custom API base URLs and persists locally.
+Published ports:
 
-### Optional Electron Build
-Inside `ender/ui`:
+- API: `3000`
+- UI: `5173`
 
-1. `npm install`
-2. `npm run electron:dev` for desktop dev (uses Vite + Electron)
-3. `npm run electron:pack` for unpacked build output
-4. `npm run electron:dist` for installer artifacts (`dmg`/`nsis`/`AppImage`)
+## Configuration
 
-## Provider Setup
-### OpenAI
-- `LLM_BACKEND=openai`
-- `OPENAI_API_KEY=...`
-- `OPENAI_MODEL=gpt-4.1-mini` (or your model)
+### Core Runtime
 
-### Bedrock
-- `LLM_BACKEND=bedrock`
-- `AWS_REGION=us-east-1`
-- `BEDROCK_MODEL_ID=anthropic.claude-3-5-sonnet-20240620-v1:0`
-- provide AWS credentials via standard SDK env/profile
+- `PORT`: API port. Default `3000`.
+- `AGENT_WORKDIR`: default working directory for generated files and cloned repos. Default `./workspace`.
+- `AGENT_WORKSPACE_BASE`: root used by the workspace picker. Default `..`.
+- `AGENT_THREADS_DIR`: thread persistence directory. Default `./threads`.
+- `AGENT_SCHEDULES_DIR`: schedule persistence directory. Default `./schedules`.
+- `AGENT_MAX_STEPS`: optional hard limit on model/tool loop iterations.
+- `AGENT_STALL_LIMIT`: repeated-iteration cutoff. Default `4`. Set `0` to disable.
 
-### Azure OpenAI
-- `LLM_BACKEND=azure`
-- `AZURE_OPENAI_API_KEY=...`
-- `AZURE_OPENAI_API_DEPLOYMENT_NAME=...`
-- `AZURE_OPENAI_API_INSTANCE_NAME=...` or `AZURE_OPENAI_BASE_PATH=...`
-- `AZURE_OPENAI_API_VERSION=2024-10-21`
+### LLM Backends
 
-### Ollama
-- `LLM_BACKEND=ollama`
-- `OLLAMA_BASE_URL=http://127.0.0.1:11434`
-- `OLLAMA_MODEL=llama3.1:8b`
-- make sure Ollama is running and the model is available locally
-- example: `ollama pull llama3.1:8b`
+OpenAI:
 
-If Ender is running in Docker while Ollama is running on your host, point `OLLAMA_BASE_URL` at a host-reachable address such as `http://host.docker.internal:11434`.
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL`
 
-## Email Setup
-### SMTP (send)
-- `SMTP_HOST=...`
-- `SMTP_PORT=587`
-- `SMTP_SECURE=false` (`true` for SMTPS)
-- `SMTP_USER=...`
-- `SMTP_PASS=...`
-- optional: `SMTP_FROM=...`
+AWS Bedrock:
 
-### IMAP (list/read)
-- `IMAP_HOST=...`
-- `IMAP_PORT=993`
-- `IMAP_SECURE=true`
-- `IMAP_USER=...`
-- `IMAP_PASS=...`
-- optional: `IMAP_MAILBOX=INBOX`
+- `AWS_REGION`
+- `BEDROCK_MODEL_ID`
 
-## SCM Setup
-### GitHub
-- `GITHUB_TOKEN=...`
-- optional: `GITHUB_BASE_URL=https://github.com` or your GitHub Enterprise base URL
-- private GitHub clones/fetch/pull/push use HTTPS token auth via Ender tools; no SSH keys required
+Azure OpenAI:
 
-### GitLab
-- `GITLAB_TOKEN=...`
-- optional: `GITLAB_BASE_URL=https://gitlab.com`
+- `AZURE_OPENAI_API_KEY`
+- `AZURE_OPENAI_API_DEPLOYMENT_NAME`
+- `AZURE_OPENAI_API_INSTANCE_NAME` or `AZURE_OPENAI_BASE_PATH`
+- `AZURE_OPENAI_API_VERSION`
 
-## Docs Setup
-### Confluence
-- `CONFLUENCE_BASE_URL=https://your-domain.atlassian.net/wiki`
-- `CONFLUENCE_EMAIL=...`
-- `CONFLUENCE_API_TOKEN=...`
-- supports page search, page read, page creation, and page updates
+Ollama:
 
-### Google Drive
-- `GOOGLE_DRIVE_ACCESS_TOKEN=...`
-- supports file search, metadata read, plain-text file reads, Google Workspace export to text, plain-text upload, and plain-text file updates
-- note: this expects a valid bearer access token for the Drive API
+- `OLLAMA_BASE_URL`
+- `OLLAMA_MODEL`
 
-## API
+### SCM and Knowledge Sources
+
+GitHub:
+
+- `GITHUB_TOKEN`
+- optional `GITHUB_BASE_URL`
+
+GitLab:
+
+- `GITLAB_TOKEN`
+- optional `GITLAB_BASE_URL`
+
+Jira:
+
+- `JIRA_BASE_URL`
+- `JIRA_EMAIL`
+- `JIRA_API_TOKEN`
+
+Confluence:
+
+- `CONFLUENCE_BASE_URL`
+- `CONFLUENCE_EMAIL`
+- `CONFLUENCE_API_TOKEN`
+
+Google Drive:
+
+- `GOOGLE_DRIVE_ACCESS_TOKEN`
+
+### Email
+
+SMTP send:
+
+- `SMTP_HOST`
+- `SMTP_PORT`
+- `SMTP_SECURE`
+- `SMTP_USER`
+- `SMTP_PASS`
+- optional `SMTP_FROM`
+
+IMAP read:
+
+- `IMAP_HOST`
+- `IMAP_PORT`
+- `IMAP_SECURE`
+- `IMAP_USER`
+- `IMAP_PASS`
+- optional `IMAP_MAILBOX`
+
+## Main User Flows
+
+### 1. Start a Direct Task
+
+Use the main composer to send a prompt and optionally choose a workspace. Ender starts a thread, streams logs over SSE, and pauses for UI approval when a tool requires it.
+
+### 2. Launch a Guided Workflow
+
+Ender currently ships one built-in workflow: `jira_to_repo_task`.
+
+It walks through:
+
+1. Select Jira project
+2. Select Jira board
+3. Select issue
+4. Clone repository
+5. Choose commit/push policy
+6. Choose final Jira action
+7. Start a task in the cloned repository
+
+### 3. Create a Schedule
+
+Schedules are persisted cron jobs. A schedule can:
+
+- start a new prompt
+- continue an existing thread
+- run a workflow with stored inputs
+
+### 4. Run the Desktop App
+
+Use Electron during local operations when you want a dedicated desktop window, OS-specific packaging, and local icon/install assets.
+
+## API Overview
+
+Health and discovery:
+
 - `GET /health`
-- `GET /workspaces` (workspace picker source)
-- `GET /filesystem/directories?path=/optional/absolute/path` (browse folders for picker)
+- `GET /workspaces`
+- `GET /filesystem/directories?path=/optional/absolute/path`
+
+Threads:
+
 - `GET /tasks`
+- `POST /tasks`
+- `GET /tasks/:id`
+- `POST /tasks/:id/messages`
+- `POST /tasks/:id/terminate`
+- `POST /tasks/:id/rerun`
+- `DELETE /tasks/:id`
+- `GET /tasks/:id/logs?from=0`
+- `GET /tasks/:id/stream`
+- `POST /tasks/:id/approvals/:approvalId`
+
+Workflows:
+
 - `GET /workflows`
+- `POST /workflows/:id/sessions`
+- `GET /workflow-sessions/:id`
+- `POST /workflow-sessions/:id/advance`
+- `POST /workflow-sessions/:id/back`
+
+Schedules:
+
 - `GET /schedules`
 - `POST /schedules`
 - `PUT /schedules/:id`
 - `POST /schedules/:id/run`
 - `DELETE /schedules/:id`
-- `POST /workflows/:id/sessions`
-- `GET /workflow-sessions/:id`
-- `POST /workflow-sessions/:id/advance`
-- `POST /tasks` `{ "goal": "...", "workspace": "optional/path" }`
-- `POST /tasks/:id/messages` `{ "prompt": "..." }` (continue an existing thread when idle)
-- `POST /tasks/:id/terminate`
-- `GET /tasks/:id`
-- `GET /tasks/:id/logs?from=0`
-- `GET /tasks/:id/stream`
-- `POST /tasks/:id/approvals/:approvalId` `{ "approved": true|false }`
-- `DELETE /tasks/:id` `{ "deleteWorkspace": true|false }` (remove thread history and persisted snapshot; optionally delete workspace directory)
-- `POST /tasks/:id/rerun`
 
-## Notes
-- Current cancel is soft cancel (status change + stream close).
-- `POST /tasks/:id/terminate` keeps thread history; `DELETE /tasks/:id` removes it entirely.
-- When deleting a thread with `deleteWorkspace: true`, the workspace is only removed if it is not used by another thread.
-- Built-in workflows are currently server-defined. The first workflow guides: Jira items -> issue selection -> repo clone -> commit/push policy -> final Jira status -> task start.
-- Schedules are cron-based and persisted to `./schedules` by default. Override with `AGENT_SCHEDULES_DIR=/absolute/path`.
-- Use [workflowTemplate.js](/Users/pauldemers/Desktop/ender-workspace/ender/src/workflows/workflowTemplate.js) as the copy/paste starting point for a new workflow.
-- New workflows should live in `src/workflows/`, export a definition with `id`, `name`, `description`, `createInitialState`, `getCurrentStep`, and `advance`, then be added once in [index.js](/Users/pauldemers/Desktop/ender-workspace/ender/src/workflows/index.js).
-- If `AGENT_MAX_STEPS` is unset, the loop runs without a hard cap.
-- `AGENT_STALL_LIMIT` stops repeated tool-call cycles (set `0` to disable).
-- Threads are persisted to `./threads` by default. Override with `AGENT_THREADS_DIR=/absolute/path`.
-- Thread workspaces can be any existing directory selected in the picker.
-- `exec_run` reports `command_not_found` explicitly to prevent blind retries.
-- Git tools are included: clone/fetch/status/add/commit/pull/push.
-- Private GitHub repositories can be cloned and synced over HTTPS when `GITHUB_TOKEN` is set.
-- `git_push` is approval-gated through the UI prompt.
-- GitLab tools: list projects, list/create/comment merge requests.
-- GitHub tools: list repositories, list/create/comment pull requests.
-- Jira tools: list board issues, get issue, transition issue, comment issue.
-- Confluence tool: `confluence` with `search_pages`, `get_page`, `create_page`, `update_page`.
-- Google Drive tool: `google_drive` with `search_files`, `get_file`, `read_text_file`, `export_file`, `upload_text_file`, `update_text_file`.
-- Web tools: `web_search`, `web_page_read`, `http_get`, `image_ingest`, `browser_snapshot_page`.
-- `browser_snapshot_page` requires Playwright + browser binaries in the runtime environment.
-  - install: `npm install playwright`
-  - install Chromium binary: `npx playwright install chromium`
-- Email tools: `email_list`, `email_read`, `email_send`.
-- Cron tools: `time_now`, `cron_schedule`, `cron_list`, `cron_delete`.
-- Thread tools: `thread_spawn`, `thread_status`, `thread_await`.
-- All generated files are constrained to `AGENT_WORKDIR`.
+## Operational Notes
 
-## Adding Workflows
-1. Copy [workflowTemplate.js](/Users/pauldemers/Desktop/ender-workspace/ender/src/workflows/workflowTemplate.js) to a new file in [src/workflows](/Users/pauldemers/Desktop/ender-workspace/ender/src/workflows).
-2. Replace the template `id`, `name`, `description`, and step logic.
-3. Register the workflow once in [index.js](/Users/pauldemers/Desktop/ender-workspace/ender/src/workflows/index.js).
+- Thread snapshots are persisted to disk. Workflow sessions are not; they are held in memory by `WorkflowManager`.
+- `DELETE /tasks/:id` can optionally delete the task workspace if it is an eligible child workspace and not in use by another thread.
+- `git_push` and schedule deletion are approval-gated through the UI.
+- `browser_snapshot_page` requires Playwright plus a Chromium binary in the runtime environment.
+- The health endpoint reports backend and integration readiness, including whether the Jira workflow is currently runnable.
 
-Workflow contract:
-- `createInitialState(input, context)`: bootstrap server-side state for the first step.
-- `getCurrentStep(session)`: return the UI-visible step definition (forms/select steps are rendered dynamically by the workflow panel).
-- `advance(session, input, context)`: mutate `session.state`, optionally call `taskManager.start(...)`, and return `{ ok: true, startedTaskId? }`.
+## Documentation
+
+Start here:
+
+- [Documentation index](docs/README.md)
+- [First task tutorial](docs/tutorials/first-task.md)
+- [Jira workflow tutorial](docs/tutorials/jira-workflow.md)
+- [Schedules tutorial](docs/tutorials/schedules.md)
+- [Desktop app tutorial](docs/tutorials/desktop-app.md)
+- [Custom workflow guide](docs/guides/custom-workflow.md)
+- [Workflow UI step schema reference](docs/reference/workflow-step-schema.md)
+- [Architecture overview](docs/architecture/overview.md)
+
+## Workflow Development
+
+To add a workflow:
+
+1. Copy [`src/workflows/workflowTemplate.js`](src/workflows/workflowTemplate.js).
+2. Implement `createInitialState`, `getCurrentStep`, and `advance`.
+3. Register it in [`src/workflows/index.js`](src/workflows/index.js).
+
+Workflow UI is generated from the step object returned by `getCurrentStep(session)`. See [Workflow UI step schema reference](docs/reference/workflow-step-schema.md).
+
+## Release Checklist Notes
+
+Before publishing publicly, confirm:
+
+- `.env` is not committed
+- provider credentials are removed from local examples
+- `threads/`, `schedules/`, and `workspace/` do not contain sensitive data
+- desktop packaging assets are the intended release icons
+
