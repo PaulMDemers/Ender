@@ -1,7 +1,7 @@
 # Ender
 
 <p align="center">
-  <img src="ui/public/icons/icon-rounded-master.png" alt="Ender logo" width="120">
+  <img src="ui/public/icons/electron-icon-256.png" alt="Ender logo" width="120">
 </p>
 
 Ender is a local-first agent runtime with a React/Electron control surface, guided workflows, recurring schedules, and a tool-calling execution loop built on LangChain.
@@ -310,3 +310,8 @@ Before publishing publicly, confirm:
 - `threads/`, `schedules/`, and `workspace/` do not contain sensitive data
 - desktop packaging assets are the intended release icons
 
+---
+
+This project was developed independently by Paul Demers
+outside the scope of any employment and without the use
+of employer resources or confidential information.
