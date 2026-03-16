@@ -12,6 +12,8 @@ const { createJiraTools } = require("../tools/jiraTools");
 const { createEmailTools } = require("../tools/emailTools");
 const { createCronTools } = require("../tools/cronTools");
 const { createThreadTools } = require("../tools/threadTools");
+const { createConfluenceTools } = require("../tools/confluenceTools");
+const { createGoogleDriveTools } = require("../tools/googleDriveTools");
 const { runAgentLoop } = require("./runAgentLoop");
 const { SYSTEM_PROMPT } = require("../agents/systemPrompt");
 
@@ -29,6 +31,8 @@ async function runTask({ goal, config, onLog, requestApproval, workspaceDir, tas
     ...createGitLabTools(config.gitlab),
     ...createGitHubTools(config.github),
     ...createJiraTools(config.jira, { requestApproval, onLog }),
+    ...createConfluenceTools(config.confluence, { requestApproval, onLog }),
+    ...createGoogleDriveTools(config.googleDrive, { requestApproval, onLog }),
     ...createEmailTools(config.email, { requestApproval, onLog }),
     ...(scheduleManager ? createCronTools(scheduleManager, { taskId, requestApproval, onLog }) : []),
     ...(taskManager ? createThreadTools(taskManager, { taskId, onLog }) : []),
@@ -43,7 +47,7 @@ async function runTask({ goal, config, onLog, requestApproval, workspaceDir, tas
   const result = await runAgentLoop({
     model,
     tools,
-    systemPrompt: SYSTEM_PROMPT,
+    systemPrompt: config.systemPrompt || SYSTEM_PROMPT,
     userPrompt: goal,
     maxSteps: config.maxSteps,
     stallLimit: config.stallLimit,

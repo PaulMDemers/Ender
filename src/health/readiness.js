@@ -65,6 +65,28 @@ function getGitHubReadiness(config) {
   };
 }
 
+function getConfluenceReadiness(config) {
+  const missing = [];
+  if (!config.confluence?.baseUrl) missing.push("CONFLUENCE_BASE_URL");
+  if (!config.confluence?.email) missing.push("CONFLUENCE_EMAIL");
+  if (!config.confluence?.apiToken) missing.push("CONFLUENCE_API_TOKEN");
+
+  return {
+    ready: missing.length === 0,
+    missing
+  };
+}
+
+function getGoogleDriveReadiness(config) {
+  const missing = [];
+  if (!config.googleDrive?.accessToken) missing.push("GOOGLE_DRIVE_ACCESS_TOKEN");
+
+  return {
+    ready: missing.length === 0,
+    missing
+  };
+}
+
 function getBrowserCaptureReadiness() {
   let playwright;
   try {
@@ -133,6 +155,8 @@ function getReadiness(config) {
   const llm = getBackendReadiness(config);
   const jira = getJiraReadiness(config);
   const github = getGitHubReadiness(config);
+  const confluence = getConfluenceReadiness(config);
+  const googleDrive = getGoogleDriveReadiness(config);
   const browserCapture = getBrowserCaptureReadiness();
   const email = getEmailReadiness(config);
 
@@ -146,6 +170,8 @@ function getReadiness(config) {
       llm,
       jira,
       github,
+      confluence,
+      googleDrive,
       browserCapture,
       email
     },

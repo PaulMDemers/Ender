@@ -1,5 +1,7 @@
 const path = require("node:path");
+const os = require("node:os");
 const { z } = require("zod");
+const { createSystemPrompt } = require("./agents/systemPrompt");
 
 const schema = z.object({
   PORT: z.string().optional(),
@@ -36,6 +38,12 @@ const schema = z.object({
   JIRA_EMAIL: z.string().optional(),
   JIRA_API_TOKEN: z.string().optional(),
 
+  CONFLUENCE_BASE_URL: z.string().optional(),
+  CONFLUENCE_EMAIL: z.string().optional(),
+  CONFLUENCE_API_TOKEN: z.string().optional(),
+
+  GOOGLE_DRIVE_ACCESS_TOKEN: z.string().optional(),
+
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.string().optional(),
   SMTP_SECURE: z.string().optional(),
@@ -51,8 +59,27 @@ const schema = z.object({
   IMAP_MAILBOX: z.string().optional()
 });
 
+function describeRuntimeOs() {
+  const platform = os.platform();
+  const arch = os.arch();
+
+  const platformLabel = {
+    darwin: "macOS",
+    linux: "Linux",
+    win32: "Windows",
+    freebsd: "FreeBSD",
+    openbsd: "OpenBSD",
+    aix: "AIX",
+    android: "Android",
+    sunos: "Solaris"
+  }[platform] || platform;
+
+  return `${platformLabel} (${platform}, ${arch})`;
+}
+
 function loadConfig(env = process.env) {
   const parsed = schema.parse(env);
+  const runtimeOs = describeRuntimeOs();
   const workdir = path.resolve(parsed.AGENT_WORKDIR || path.resolve(process.cwd(), "workspace"));
   const workspaceBase = path.resolve(parsed.AGENT_WORKSPACE_BASE || path.resolve(process.cwd(), ".."));
   const threadsDir = path.resolve(parsed.AGENT_THREADS_DIR || path.resolve(process.cwd(), "threads"));
@@ -82,6 +109,8 @@ function loadConfig(env = process.env) {
     maxSteps,
     stallLimit,
     backend: parsed.LLM_BACKEND,
+    runtimeOs,
+    systemPrompt: createSystemPrompt({ runtimeOs }),
     workdir,
     workspaceBase,
     threadsDir,
@@ -124,6 +153,16 @@ function loadConfig(env = process.env) {
       baseUrl: parsed.JIRA_BASE_URL,
       email: parsed.JIRA_EMAIL,
       apiToken: parsed.JIRA_API_TOKEN
+    },
+
+    confluence: {
+      baseUrl: parsed.CONFLUENCE_BASE_URL,
+      email: parsed.CONFLUENCE_EMAIL,
+      apiToken: parsed.CONFLUENCE_API_TOKEN
+    },
+
+    googleDrive: {
+      accessToken: parsed.GOOGLE_DRIVE_ACCESS_TOKEN
     },
 
     email: {

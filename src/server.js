@@ -19,6 +19,7 @@ async function main() {
   app.listen(config.port, () => {
     console.log(`Ender server listening on http://localhost:${config.port}`);
     console.log(`backend=${config.backend} workdir=${config.workdir}`);
+    console.log(`runtimeOs=${config.runtimeOs}`);
     console.log(`threadsDir=${config.threadsDir}`);
   });
 }

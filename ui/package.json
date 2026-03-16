@@ -28,7 +28,7 @@
   "build": {
     "appId": "com.ender.ui",
     "productName": "Ender UI",
-    "icon": "public/icons/icon.png",
+    "icon": "public/icons/electron-icon.png",
     "directories": {
       "buildResources": "public"
     },
@@ -39,27 +39,27 @@
       "package.json"
     ],
     "mac": {
-      "icon": "public/icons/icon.icns",
+      "icon": "public/icons/electron-icon.icns",
       "target": [
         "dmg"
       ]
     },
     "win": {
-      "icon": "public/icons/icon.ico",
+      "icon": "public/icons/electron-icon.ico",
       "target": [
         "nsis"
       ]
     },
     "linux": {
-      "icon": "public/icons/icon-512.png",
+      "icon": "public/icons/electron-icon-512.png",
       "target": [
         "AppImage"
       ]
     },
     "nsis": {
-      "installerIcon": "public/icons/icon.ico",
-      "uninstallerIcon": "public/icons/icon.ico",
-      "installerHeaderIcon": "public/icons/icon.ico"
+      "installerIcon": "public/icons/electron-icon.ico",
+      "uninstallerIcon": "public/icons/electron-icon.ico",
+      "installerHeaderIcon": "public/icons/electron-icon.ico"
     }
   }
 }

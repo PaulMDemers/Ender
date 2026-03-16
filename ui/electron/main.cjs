@@ -2,7 +2,7 @@ const path = require("node:path");
 const { app, BrowserWindow } = require("electron");
 
 const isDev = Boolean(process.env.ELECTRON_RENDERER_URL);
-const runtimeIconPath = path.join(__dirname, "..", "public", "icons", "icon-256.png");
+const runtimeIconPath = path.join(__dirname, "..", "public", "icons", "electron-icon-256.png");
 
 function createMainWindow() {
   const win = new BrowserWindow({
@@ -29,7 +29,7 @@ function createMainWindow() {
 
 app.whenReady().then(() => {
   if (process.platform === "darwin") {
-    app.dock.setIcon(path.join(__dirname, "..", "public", "icons", "icon-mac.png"));
+    app.dock.setIcon(path.join(__dirname, "..", "public", "icons", "electron-icon-mac.png"));
   }
 
   createMainWindow();

@@ -113,6 +113,18 @@ If Ender is running in Docker while Ollama is running on your host, point `OLLAM
 - `GITLAB_TOKEN=...`
 - optional: `GITLAB_BASE_URL=https://gitlab.com`
 
+## Docs Setup
+### Confluence
+- `CONFLUENCE_BASE_URL=https://your-domain.atlassian.net/wiki`
+- `CONFLUENCE_EMAIL=...`
+- `CONFLUENCE_API_TOKEN=...`
+- supports page search, page read, page creation, and page updates
+
+### Google Drive
+- `GOOGLE_DRIVE_ACCESS_TOKEN=...`
+- supports file search, metadata read, plain-text file reads, Google Workspace export to text, plain-text upload, and plain-text file updates
+- note: this expects a valid bearer access token for the Drive API
+
 ## API
 - `GET /health`
 - `GET /workspaces` (workspace picker source)
@@ -156,6 +168,8 @@ If Ender is running in Docker while Ollama is running on your host, point `OLLAM
 - GitLab tools: list projects, list/create/comment merge requests.
 - GitHub tools: list repositories, list/create/comment pull requests.
 - Jira tools: list board issues, get issue, transition issue, comment issue.
+- Confluence tool: `confluence` with `search_pages`, `get_page`, `create_page`, `update_page`.
+- Google Drive tool: `google_drive` with `search_files`, `get_file`, `read_text_file`, `export_file`, `upload_text_file`, `update_text_file`.
 - Web tools: `web_search`, `web_page_read`, `http_get`, `image_ingest`, `browser_snapshot_page`.
 - `browser_snapshot_page` requires Playwright + browser binaries in the runtime environment.
   - install: `npm install playwright`
