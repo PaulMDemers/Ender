@@ -67,7 +67,20 @@ async function runAgentLoop({ model, tools, systemPrompt, userPrompt, maxSteps =
       const name = call.name;
       const tool = toolsByName[name];
       const callId = call.id;
-      const args = typeof call.args === "string" ? JSON.parse(call.args || "{}") : call.args || {};
+      let args;
+
+      try {
+        args = typeof call.args === "string" ? JSON.parse(call.args || "{}") : call.args || {};
+      } catch (err) {
+        const content = JSON.stringify({
+          ok: false,
+          error: "tool_args_invalid_json",
+          message: err?.message || "Tool arguments were not valid JSON"
+        });
+        onLog({ level: "error", data: `tool args parse failed (${name}): ${content}` });
+        messages.push(new ToolMessage({ content, tool_call_id: callId, name }));
+        continue;
+      }
 
       if (!tool) {
         const err = `ERROR: unknown tool ${name}`;
@@ -77,7 +90,28 @@ async function runAgentLoop({ model, tools, systemPrompt, userPrompt, maxSteps =
       }
 
       onLog({ level: "info", data: `tool call: ${name}` });
-      const result = await tool.invoke(args);
+      let result;
+      try {
+        result = await tool.invoke(args);
+      } catch (err) {
+        const content = JSON.stringify(sanitizeJsonValue({
+          ok: false,
+          error: "tool_invocation_failed",
+          tool: name,
+          message: err?.message || "Tool invocation failed"
+        }));
+        onLog({ level: "error", data: `tool error (${name}): ${content}` });
+        fingerprintParts.push(
+          JSON.stringify({
+            name,
+            args: sanitizeJsonValue(args),
+            content: content.slice(0, 300)
+          })
+        );
+        messages.push(new ToolMessage({ content, tool_call_id: callId, name }));
+        continue;
+      }
+
       const normalized = normalizeToolInvokeResult(result);
       const content = normalized.content;
       const logContent = normalized.contentForLog;

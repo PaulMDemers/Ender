@@ -83,7 +83,9 @@ export default function TaskList({
                 <span className="threadTimestamp mono">{formatTimestamp(task.finishedAt || task.startedAt)}</span>
               </div>
 
-              <div className={`threadTitle ${expanded ? "expanded" : "clamped"}`}>{task.goal}</div>
+              <div className={`threadTitle ${expanded ? "expanded" : "clamped"}`} title={task.goal}>
+                {task.goal}
+              </div>
             </button>
             <div className="threadCardFooter">
               <button

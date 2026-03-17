@@ -979,11 +979,14 @@ export default function App() {
                 >
                   Menu
                 </button>
-                <div>
+                <div className="headerTitleCopy">
                   <div className="headerEyebrow">
                     {selectedTask && composeMode === "thread" ? "Live transcript" : headerModeCopy.eyebrow}
                   </div>
-                  <div className="headerGoal">
+                  <div
+                    className={`headerGoal ${selectedTask && composeMode === "thread" ? "threadPrompt" : ""}`}
+                    title={selectedTask && composeMode === "thread" ? selectedTask.goal : headerModeCopy.title}
+                  >
                     {selectedTask && composeMode === "thread" ? selectedTask.goal : headerModeCopy.title}
                   </div>
                   {!selectedTask || composeMode !== "thread" ? <div className="headerMeta">{headerModeCopy.subtitle}</div> : null}

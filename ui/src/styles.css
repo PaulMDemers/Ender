@@ -254,6 +254,29 @@ body::before {
   gap: 12px;
 }
 
+.railSectionHeader,
+.connectionRow,
+.sectionHeading,
+.threadCardTop,
+.threadStatusRow {
+  min-width: 0;
+}
+
+.connectionRow,
+.railSectionHeader,
+.threadCardTop,
+.threadStatusRow {
+  flex-wrap: wrap;
+}
+
+.connectionRow > :first-child,
+.railSectionHeader > :first-child,
+.threadCardTop > :first-child,
+.threadStatusRow > :first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -426,6 +449,9 @@ body::before {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .summaryToggle {
@@ -505,7 +531,9 @@ body::before {
   font-size: 0.76rem;
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.04);
-  white-space: nowrap;
+  white-space: normal;
+  text-align: center;
+  max-width: 100%;
 }
 
 .connectionStatus.ready,
@@ -639,6 +667,7 @@ body::before {
   font-family: "IBM Plex Mono", monospace;
   color: var(--muted);
   font-size: 0.76rem;
+  min-width: 0;
 }
 
 .threadCollection {
@@ -652,6 +681,9 @@ body::before {
 .sectionHeading {
   color: var(--muted);
   font-size: 0.92rem;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
 }
 
 .taskList {
@@ -669,6 +701,7 @@ body::before {
   overflow: hidden;
   display: grid;
   flex: 0 0 auto;
+  min-width: 0;
 }
 
 .threadCard.selected {
@@ -682,20 +715,29 @@ body::before {
   padding: 14px 14px 12px;
   text-align: left;
   background: transparent;
+  min-width: 0;
 }
 
 .threadTitle {
   margin-top: 12px;
-  font-size: 1rem;
+  font-size: 0.92rem;
   line-height: 1.4;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.threadTitle.expanded {
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
 }
 
 .threadTitle.clamped {
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .threadCardMeta,
@@ -746,6 +788,7 @@ body::before {
   background: rgba(255, 255, 255, 0.06);
   color: var(--muted);
   font-size: 0.72rem;
+  max-width: 100%;
 }
 
 .threadTag.muted {
@@ -763,6 +806,8 @@ body::before {
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+  max-width: 100%;
+  text-align: center;
 }
 
 .statusPill.approval {
@@ -793,11 +838,14 @@ body::before {
   display: flex;
   justify-content: flex-end;
   padding: 0 14px 12px;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .threadEntryToggle {
   width: 30px;
   height: 30px;
+  flex: 0 0 auto;
 }
 
 .threadCardDetails {
@@ -866,6 +914,10 @@ body::before {
   justify-content: flex-start;
 }
 
+.headerTitleCopy {
+  min-width: 0;
+}
+
 .headerTopRow {
   align-items: flex-start;
 }
@@ -897,6 +949,22 @@ body::before {
   letter-spacing: -0.02em;
   line-height: 1.15;
   max-width: 26ch;
+  overflow-wrap: anywhere;
+}
+
+.headerGoal.threadPrompt {
+  font-size: clamp(0.98rem, 1.1vw, 1.14rem);
+  line-height: 1.3;
+  max-width: min(48ch, 100%);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.mainHeader.collapsed .headerGoal.threadPrompt {
+  display: none;
 }
 
 .headerMeta {
@@ -1705,6 +1773,44 @@ body::before {
     padding-right: 18px;
   }
 
+  .leftRailContent,
+  .serverSummary,
+  .railSection,
+  .threadCollection,
+  .taskList,
+  .threadCardMain,
+  .threadCardDetails,
+  .threadCardWorkspace {
+    min-width: 0;
+  }
+
+  .connectionRow,
+  .serverSummaryActions,
+  .railSectionHeader,
+  .threadCardTop,
+  .threadStatusRow {
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+
+  .serverSummaryActions,
+  .threadStatusRow {
+    justify-content: flex-start;
+  }
+
+  .threadTimestamp,
+  .sectionHeading,
+  .sectionCount,
+  .connectionStatus {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .threadTimestamp,
+  .sectionHeading {
+    overflow-wrap: anywhere;
+  }
+
   .railPrimaryActions,
   .launchGrid,
   .workflowGrid,
@@ -1753,6 +1859,10 @@ body::before {
 
   .threadCardMeta {
     grid-template-columns: 1fr;
+  }
+
+  .threadCardFooter {
+    justify-content: flex-start;
   }
 
   .metaValue {
