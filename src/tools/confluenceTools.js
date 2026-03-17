@@ -66,33 +66,62 @@ function escapeCqlText(value) {
   return String(value || "").replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
-const confluenceSchema = z.discriminatedUnion("action", [
-  z.object({
-    action: z.literal("search_pages"),
-    query: z.string().nullable().optional(),
-    cql: z.string().nullable().optional(),
-    limit: z.number().int().positive().max(100).nullable().optional(),
-    start: z.number().int().nonnegative().nullable().optional()
-  }),
-  z.object({
-    action: z.literal("get_page"),
-    pageId: z.union([z.string(), z.number()])
-  }),
-  z.object({
-    action: z.literal("create_page"),
-    spaceKey: z.string().min(1),
-    title: z.string().min(1),
-    content: z.string().min(1),
-    parentPageId: z.union([z.string(), z.number()]).nullable().optional()
-  }),
-  z.object({
-    action: z.literal("update_page"),
-    pageId: z.union([z.string(), z.number()]),
-    title: z.string().nullable().optional(),
-    content: z.string().min(1),
-    version: z.number().int().positive().nullable().optional()
-  })
-]);
+const confluenceIdSchema = z.union([z.string(), z.number()]);
+const confluenceSchema = z.object({
+  action: z.enum(["search_pages", "get_page", "create_page", "update_page"]),
+  query: z.string().nullable().optional(),
+  cql: z.string().nullable().optional(),
+  limit: z.number().int().positive().max(100).nullable().optional(),
+  start: z.number().int().nonnegative().nullable().optional(),
+  pageId: confluenceIdSchema.optional(),
+  spaceKey: z.string().min(1).optional(),
+  title: z.string().nullable().optional(),
+  content: z.string().min(1).optional(),
+  parentPageId: confluenceIdSchema.nullable().optional(),
+  version: z.number().int().positive().nullable().optional()
+}).superRefine((input, ctx) => {
+  if ((input.action === "get_page" || input.action === "update_page") && input.pageId == null) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["pageId"],
+      message: "pageId is required for this action"
+    });
+  }
+
+  if (input.action === "create_page") {
+    if (!input.spaceKey) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["spaceKey"],
+        message: "spaceKey is required for create_page"
+      });
+    }
+    if (input.title == null || String(input.title).trim() === "") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["title"],
+        message: "title is required for create_page"
+      });
+    }
+    if (!input.content) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["content"],
+        message: "content is required for create_page"
+      });
+    }
+  }
+
+  if (input.action === "update_page") {
+    if (!input.content) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["content"],
+        message: "content is required for update_page"
+      });
+    }
+  }
+});
 
 function createConfluenceTools(confluenceConfig, { requestApproval, onLog } = {}) {
   const confluence = tool(

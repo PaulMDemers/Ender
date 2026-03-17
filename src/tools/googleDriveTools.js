@@ -92,48 +92,67 @@ function isTextLikeContentType(contentType) {
     || contentType.includes("yaml");
 }
 
-const googleDriveSchema = z.discriminatedUnion("action", [
-  z.object({
-    action: z.literal("search_files"),
-    query: z.string().nullable().optional(),
-    nameContains: z.string().nullable().optional(),
-    folderId: z.string().nullable().optional(),
-    mimeType: z.string().nullable().optional(),
-    trashed: z.boolean().nullable().optional(),
-    pageSize: z.number().int().positive().max(100).nullable().optional(),
-    pageToken: z.string().nullable().optional()
-  }),
-  z.object({
-    action: z.literal("get_file"),
-    fileId: z.string().min(1),
-    fields: z.string().nullable().optional()
-  }),
-  z.object({
-    action: z.literal("read_text_file"),
-    fileId: z.string().min(1),
-    maxChars: z.number().int().positive().max(1000000).nullable().optional()
-  }),
-  z.object({
-    action: z.literal("export_file"),
-    fileId: z.string().min(1),
-    mimeType: z.string().nullable().optional(),
-    maxChars: z.number().int().positive().max(1000000).nullable().optional()
-  }),
-  z.object({
-    action: z.literal("upload_text_file"),
-    name: z.string().min(1),
-    content: z.string().min(1),
-    folderId: z.string().nullable().optional(),
-    mimeType: z.string().nullable().optional()
-  }),
-  z.object({
-    action: z.literal("update_text_file"),
-    fileId: z.string().min(1),
-    content: z.string().min(1),
-    name: z.string().nullable().optional(),
-    mimeType: z.string().nullable().optional()
-  })
-]);
+const googleDriveSchema = z.object({
+  action: z.enum([
+    "search_files",
+    "get_file",
+    "read_text_file",
+    "export_file",
+    "upload_text_file",
+    "update_text_file"
+  ]),
+  query: z.string().nullable().optional(),
+  nameContains: z.string().nullable().optional(),
+  folderId: z.string().nullable().optional(),
+  mimeType: z.string().nullable().optional(),
+  trashed: z.boolean().nullable().optional(),
+  pageSize: z.number().int().positive().max(100).nullable().optional(),
+  pageToken: z.string().nullable().optional(),
+  fileId: z.string().min(1).optional(),
+  fields: z.string().nullable().optional(),
+  maxChars: z.number().int().positive().max(1000000).nullable().optional(),
+  name: z.string().min(1).optional(),
+  content: z.string().min(1).optional()
+}).superRefine((input, ctx) => {
+  if (
+    (input.action === "get_file"
+      || input.action === "read_text_file"
+      || input.action === "export_file"
+      || input.action === "update_text_file")
+    && !input.fileId
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["fileId"],
+      message: "fileId is required for this action"
+    });
+  }
+
+  if (input.action === "upload_text_file") {
+    if (!input.name) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["name"],
+        message: "name is required for upload_text_file"
+      });
+    }
+    if (!input.content) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["content"],
+        message: "content is required for upload_text_file"
+      });
+    }
+  }
+
+  if (input.action === "update_text_file" && !input.content) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["content"],
+      message: "content is required for update_text_file"
+    });
+  }
+});
 
 function createGoogleDriveTools(googleDriveConfig, { requestApproval, onLog } = {}) {
   const google_drive = tool(
