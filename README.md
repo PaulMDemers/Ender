@@ -43,9 +43,10 @@ ender/
 
 ```bash
 npm install
-npm --prefix ui install
 cp .env.example .env
 ```
+
+Running `npm install` from the repository root now installs both the root project and the dependencies in [`ui/`](ui/) via the root `postinstall` hook.
 
 ### Configure
 
@@ -79,9 +80,10 @@ This starts:
 
 The desktop app lives in [`ui/`](ui/) and packages the same React UI with Electron.
 
+After the root install step above, the `ui` dependencies are already installed.
+
 ```bash
 cd ui
-npm install
 npm run electron:dev
 ```
 
