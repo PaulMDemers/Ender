@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 function getStatusLabel(status) {
   if (!status) return "idle";
@@ -9,6 +9,7 @@ function getStatusLabel(status) {
 
 export default function ThreadComposer({ disabled, onSend, workspace, taskId, status }) {
   const [text, setText] = useState("");
+  const textareaRef = useRef(null);
 
   const submit = async (event) => {
     event?.preventDefault?.();
@@ -16,6 +17,7 @@ export default function ThreadComposer({ disabled, onSend, workspace, taskId, st
     if (!next || disabled) return;
     await onSend?.(next);
     setText("");
+    textareaRef.current?.focus({ preventScroll: true });
   };
 
   return (
@@ -32,6 +34,7 @@ export default function ThreadComposer({ disabled, onSend, workspace, taskId, st
 
       <div className="composerInputRow">
         <textarea
+          ref={textareaRef}
           value={text}
           className="composerTextarea"
           rows={2}
@@ -44,8 +47,13 @@ export default function ThreadComposer({ disabled, onSend, workspace, taskId, st
             }
           }}
         />
-        <button className="primaryButton composerButton" disabled={disabled || !text.trim()}>
-          {disabled ? "Run active" : "Resume thread"}
+        <button
+          type="submit"
+          className="primaryButton composerButton"
+          disabled={disabled || !text.trim()}
+          onMouseDown={(event) => event.preventDefault()}
+        >
+          Send
         </button>
       </div>
     </form>

@@ -1066,7 +1066,13 @@ body::before {
   align-items: start;
 }
 
-.transcriptStack,
+.transcriptStack {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-height: 100%;
+}
+
 .sidePanelStack {
   display: grid;
   gap: 18px;
@@ -1314,9 +1320,15 @@ body::before {
 }
 
 .logConsole {
-  min-height: 620px;
+  min-height: 0;
+  height: 100%;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
+}
+
+.logConsoleHeader {
+  display: grid;
+  gap: 14px;
 }
 
 .logPanel {
@@ -1325,9 +1337,66 @@ body::before {
   padding: 18px 22px 22px;
 }
 
+.logRunDetails {
+  margin: 0 22px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+}
+
+.logRunDetailsSummary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.logRunDetailsSummary::-webkit-details-marker {
+  display: none;
+}
+
+.logRunDetailsLabel {
+  color: var(--muted);
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+}
+
+.logRunDetailsBody {
+  display: grid;
+  gap: 8px;
+  padding: 0 14px 14px;
+}
+
+.logRunDetailsRow {
+  display: grid;
+  gap: 4px;
+}
+
+.logRunDetailsKey {
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.logRunDetailsValue {
+  color: #d8d2e9;
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
 .logStream {
   display: grid;
   gap: 14px;
+}
+
+.logStreamEnd {
+  width: 100%;
+  height: 1px;
 }
 
 .logEmpty {
@@ -1339,13 +1408,12 @@ body::before {
 
 .logRow {
   display: grid;
-  grid-template-columns: 88px 2px minmax(0, 1fr);
+  grid-template-columns: 2px minmax(0, 1fr);
   gap: 14px;
   align-items: start;
 }
 
 .logTimestamp {
-  padding-top: 3px;
   color: #c5bada;
   font-size: 0.82rem;
 }
@@ -1360,6 +1428,7 @@ body::before {
 .logContent {
   display: grid;
   gap: 8px;
+  min-width: 0;
 }
 
 .logMetaBar {
@@ -1367,6 +1436,7 @@ body::before {
   gap: 8px;
   align-items: center;
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 .logMetaChip {
@@ -1411,6 +1481,214 @@ body::before {
   overflow-wrap: anywhere;
   line-height: 1.55;
   color: #f1edf9;
+}
+
+.logChatMessage {
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.logChatMessage.user {
+  background: rgba(255, 255, 255, 0.035);
+  border-color: rgba(255, 255, 255, 0.09);
+}
+
+.logRowGroupedTools .logContent {
+  gap: 6px;
+}
+
+.logToolGroup {
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.025);
+  overflow: hidden;
+}
+
+.logToolGroup[open] {
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.logToolGroupSummary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.logToolGroupSummary::-webkit-details-marker {
+  display: none;
+}
+
+.logToolGroupLabel {
+  min-width: 0;
+  color: #d8d2e9;
+  font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logToolGroupBody {
+  display: grid;
+  gap: 12px;
+  padding: 0 14px 14px;
+}
+
+.logToolEvent {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.logToolEvent.result {
+  background: rgba(108, 224, 180, 0.035);
+  border-color: rgba(108, 224, 180, 0.12);
+}
+
+.logToolEntry {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.025);
+  overflow: hidden;
+}
+
+.logToolEntry.result {
+  background: rgba(108, 224, 180, 0.035);
+  border-color: rgba(108, 224, 180, 0.12);
+}
+
+.logToolEntry.call {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.logToolSummary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.logToolSummary::-webkit-details-marker {
+  display: none;
+}
+
+.logToolLabel {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #f4efff;
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.logToolChevron {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-right: 2px solid rgba(255, 255, 255, 0.62);
+  border-bottom: 2px solid rgba(255, 255, 255, 0.62);
+  transform: rotate(45deg);
+  transition: transform 160ms ease;
+}
+
+.logToolEntry[open] .logToolChevron {
+  transform: rotate(225deg);
+}
+
+.logToolGroup[open] .logToolChevron {
+  transform: rotate(225deg);
+}
+
+.logRunDetails[open] .logToolChevron {
+  transform: rotate(225deg);
+}
+
+.logToolBody {
+  display: grid;
+  gap: 10px;
+  padding: 0 14px 14px;
+}
+
+.logCodeBlock {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(10, 12, 18, 0.78);
+  color: #eef3ff;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.logCodeMeta {
+  background: rgba(255, 255, 255, 0.035);
+  color: #d9d1ea;
+}
+
+.logProgressIndicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: #d8d2e9;
+}
+
+.logProgressLabel {
+  font-size: 0.9rem;
+}
+
+.logProgressDots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.logProgressDots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(209, 77, 243, 0.9);
+  animation: logPulse 1.1s ease-in-out infinite;
+}
+
+.logProgressDots span:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.logProgressDots span:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
+@keyframes logPulse {
+  0%,
+  80%,
+  100% {
+    opacity: 0.28;
+    transform: translateY(0);
+  }
+
+  40% {
+    opacity: 1;
+    transform: translateY(-1px);
+  }
 }
 
 .approvalCard {

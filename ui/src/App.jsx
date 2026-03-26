@@ -247,6 +247,7 @@ export default function App() {
   const [modeSectionCollapsed, setModeSectionCollapsed] = useState(true);
   const [railCollapsed, setRailCollapsed] = useState(() => loadRailCollapsed());
   const [railOpen, setRailOpen] = useState(false);
+  const [threadScrollToken, setThreadScrollToken] = useState(0);
 
   useEffect(() => {
     const saved = localStorage.getItem("ender_api_base");
@@ -702,10 +703,11 @@ export default function App() {
 
   const sendNextPrompt = async (prompt) => {
     if (!selectedTask) return;
+    setThreadScrollToken((value) => value + 1);
     await continueTask(selectedTask.id, prompt);
     setTasks((prev) =>
       prev.map((task) => (task.id === selectedTask.id
-        ? { ...task, status: "running", goal: prompt, runCount: (task.runCount || 0) + 1 }
+        ? { ...task, status: "running", runCount: (task.runCount || 0) + 1 }
         : task))
     );
     setTimeout(() => {
@@ -771,6 +773,7 @@ export default function App() {
             status={effectiveStatus}
             entryCount={entries.length}
             taskId={selectedTask.id}
+            scrollToBottomToken={threadScrollToken}
           />
         </div>
       );

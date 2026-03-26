@@ -1,6 +1,16 @@
 const { HumanMessage, SystemMessage, AIMessage, ToolMessage } = require("@langchain/core/messages");
 const { sanitizeJsonValue, sanitizeString } = require("../utils/jsonSafe");
 
+function toConversationMessage(entry) {
+  if (!entry || typeof entry !== "object") return null;
+  const role = String(entry.role || "").toLowerCase();
+  const content = sanitizeString(entry.content || "");
+  if (!content) return null;
+  if (role === "assistant") return new AIMessage(content);
+  if (role === "user" || role === "human") return new HumanMessage(content);
+  return null;
+}
+
 function normalizeToolInvokeResult(result) {
   if (result && typeof result === "object" && Array.isArray(result.toolMessageContent)) {
     const content = sanitizeJsonValue(result.toolMessageContent);
@@ -27,8 +37,11 @@ function normalizeToolInvokeResult(result) {
   };
 }
 
-async function runAgentLoop({ model, tools, systemPrompt, userPrompt, maxSteps = null, stallLimit = 4, onLog }) {
-  const messages = [new SystemMessage(sanitizeString(systemPrompt)), new HumanMessage(sanitizeString(userPrompt))];
+async function runAgentLoop({ model, tools, systemPrompt, userPrompt, thread = null, maxSteps = null, stallLimit = 4, onLog }) {
+  const conversation = Array.isArray(thread) && thread.length
+    ? thread.map(toConversationMessage).filter(Boolean)
+    : [new HumanMessage(sanitizeString(userPrompt))];
+  const messages = [new SystemMessage(sanitizeString(systemPrompt)), ...conversation];
   const toolsByName = Object.fromEntries(tools.map((t) => [t.name, t]));
   const bound = model.bindTools(tools);
   let step = 0;

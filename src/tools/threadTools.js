@@ -47,7 +47,7 @@ function createThreadTools(taskManager, { taskId, onLog } = {}) {
       description: "Start a child thread for parallel or delegated work. Returns the child thread id so you can either keep going and poll later, or await it like a join.",
       schema: z.object({
         prompt: z.string().min(1),
-        workspace: z.string().nullable().optional()
+        workspace: z.string().nullable().default(null)
       })
     }
   );
@@ -80,7 +80,7 @@ function createThreadTools(taskManager, { taskId, onLog } = {}) {
       description: "Check the current status of a child thread without blocking. This is the async polling option and returns immediately.",
       schema: z.object({
         threadId: z.string().min(1),
-        includeLogs: z.boolean().optional().default(false)
+        includeLogs: z.boolean().nullable().default(false)
       })
     }
   );
@@ -111,8 +111,8 @@ function createThreadTools(taskManager, { taskId, onLog } = {}) {
       description: "Wait for a child thread to finish. This is the blocking await/join option. If timeoutMs is omitted or null, wait until the child reaches a terminal status. If timeoutMs is 0, return immediately with the current snapshot and timedOut=true when the child is still running. Prefer thread_status for normal polling.",
       schema: z.object({
         threadId: z.string().min(1),
-        timeoutMs: z.number().int().nonnegative().nullable().optional(),
-        includeLogs: z.boolean().optional().default(false)
+        timeoutMs: z.number().int().nonnegative().nullable().default(null),
+        includeLogs: z.boolean().nullable().default(false)
       })
     }
   );

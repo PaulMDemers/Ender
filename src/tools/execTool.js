@@ -30,6 +30,8 @@ function inferApprovalReason(cmd) {
     { re: /\bgit\s+push\b/i, type: "shell_git_push", label: "push commits from a shell command" },
     { re: /(^|[;&|]\s*)(rm|rmdir)\b/i, type: "shell_delete", label: "delete files or directories" },
     { re: /\bfind\b[\s\S]*\s-delete\b/i, type: "shell_delete", label: "delete files via find -delete" },
+    { re: /(^|[;&|]\s*)(kill|pkill|killall)\b/i, type: "process_signal", label: "send signals to local processes" },
+    { re: /(^|[;&|]\s*)launchctl\b/i, type: "service_control", label: "control local launch services" },
     { re: /\bdd\b/i, type: "disk_write", label: "write raw data to a device or file with dd" },
     { re: /\bmkfs(\.\w+)?\b/i, type: "filesystem_format", label: "format a filesystem" },
     { re: /\b(shutdown|reboot|halt|poweroff)\b/i, type: "system_power", label: "change system power state" }

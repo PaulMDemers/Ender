@@ -8,7 +8,7 @@
   "scripts": {
     "postinstall": "npm --prefix ui install --no-audit --no-fund",
     "dev": "concurrently -k -n api,ui -c cyan,magenta \"npm:dev:api\" \"npm:dev:ui\"",
-    "dev:api": "node --watch src/server.js",
+    "dev:api": "node scripts/dev-api.js",
     "dev:ui": "npm --prefix ui run dev",
     "start": "node src/server.js",
     "build:ui": "npm --prefix ui run build",

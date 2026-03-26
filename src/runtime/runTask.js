@@ -17,7 +17,7 @@ const { createGoogleDriveTools } = require("../tools/googleDriveTools");
 const { runAgentLoop } = require("./runAgentLoop");
 const { SYSTEM_PROMPT } = require("../agents/systemPrompt");
 
-async function runTask({ goal, config, onLog, requestApproval, workspaceDir, taskId, scheduleManager, taskManager }) {
+async function runTask({ goal, thread, config, onLog, requestApproval, workspaceDir, taskId, scheduleManager, taskManager }) {
   const activeWorkdir = workspaceDir || config.workdir;
   await fs.mkdir(activeWorkdir, { recursive: true });
 
@@ -42,13 +42,13 @@ async function runTask({ goal, config, onLog, requestApproval, workspaceDir, tas
 
   onLog({ level: "info", data: `backend=${config.backend}` });
   onLog({ level: "info", data: `workspace=${activeWorkdir}` });
-  onLog({ level: "info", data: `goal=${goal}` });
 
   const result = await runAgentLoop({
     model,
     tools,
     systemPrompt: config.systemPrompt || SYSTEM_PROMPT,
     userPrompt: goal,
+    thread,
     maxSteps: config.maxSteps,
     stallLimit: config.stallLimit,
     onLog

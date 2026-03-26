@@ -3,6 +3,9 @@ const fsSync = require("node:fs");
 const path = require("node:path");
 const { randomUUID } = require("node:crypto");
 const { runTask } = require("./runTask");
+const { sanitizeJsonValue, sanitizeString } = require("../utils/jsonSafe");
+
+const THREAD_CONTEXT_LIMIT = 12;
 
 class TaskManager {
   constructor(config) {
@@ -202,6 +205,7 @@ class TaskManager {
 
     t.goal = clean;
     t.thread.push({ role: "user", content: clean });
+    this._push(t, { level: "info", data: { kind: "chat", role: "user", content: clean } });
     this._schedulePersist(t);
     this._runThread(t);
     return { ok: true, id: t.id };
@@ -352,6 +356,7 @@ class TaskManager {
       waiters: new Set()
     };
     this.tasks.set(id, task);
+    this._push(task, { level: "info", data: { kind: "chat", role: "user", content: cleanGoal } });
     if (task.parentTaskId) {
       const parent = this.tasks.get(task.parentTaskId);
       if (parent) {
@@ -495,17 +500,15 @@ class TaskManager {
     return this._isWorkspaceChildOfRoot(target);
   }
 
-  _renderPrompt(thread) {
-    const recent = thread.slice(-12);
-    const transcript = recent
-      .map((m) => `${m.role.toUpperCase()}: ${m.content}`)
-      .join("\n\n");
-    return [
-      "Continue this thread while preserving context.",
-      "If earlier context conflicts with latest user request, prioritize the latest user request.",
-      "",
-      transcript
-    ].join("\n");
+  _getRunThread(thread) {
+    if (!Array.isArray(thread)) return [];
+    return thread
+      .slice(-THREAD_CONTEXT_LIMIT)
+      .map((entry) => ({
+        role: String(entry?.role || ""),
+        content: sanitizeString(entry?.content || "")
+      }))
+      .filter((entry) => (entry.role === "user" || entry.role === "assistant") && entry.content);
   }
 
   _requestApproval(task, payload) {
@@ -549,12 +552,14 @@ class TaskManager {
     };
 
     const requestApproval = (payload) => this._requestApproval(task, payload);
-    const goal = this._renderPrompt(task.thread);
+    const goal = String(task.goal || "");
+    const thread = this._getRunThread(task.thread);
 
     (async () => {
       try {
         const { result } = await runTask({
           goal,
+          thread,
           config: this.config,
           onLog,
           requestApproval,
@@ -569,10 +574,11 @@ class TaskManager {
         task.status = "done";
         task.result = result;
         task.finishedAt = new Date().toISOString();
-        task.thread.push({ role: "assistant", content: String(result) });
-        const finalEntry = { level: "info", data: `final: ${String(result).slice(0, 2000)}` };
-        this._push(task, finalEntry);
-        this._broadcastLog(task, this._normalizeLog(finalEntry));
+        const assistantContent = String(result);
+        task.thread.push({ role: "assistant", content: assistantContent });
+        const assistantEntry = { level: "info", data: { kind: "chat", role: "assistant", content: assistantContent } };
+        this._push(task, assistantEntry);
+        this._broadcastLog(task, this._normalizeLog(assistantEntry));
         this._broadcastStatus(task);
         await this._persistTask(task);
         this._resolveWaiters(task);
@@ -595,10 +601,11 @@ class TaskManager {
   }
 
   _normalizeLog(entry) {
+    const data = Object.prototype.hasOwnProperty.call(entry || {}, "data") ? entry.data : "";
     return {
       t: Date.now(),
       level: entry.level || "info",
-      data: String(entry.data || "")
+      data: typeof data === "string" ? sanitizeString(data) : sanitizeJsonValue(data)
     };
   }
 

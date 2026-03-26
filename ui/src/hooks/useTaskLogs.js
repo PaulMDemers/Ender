@@ -1,8 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getLogs, getTask, streamLogs } from "../agentClient";
 
 function isTerminal(status) {
   return status === "done" || status === "error" || status === "canceled" || status === "terminated";
+}
+
+function getEntryKey(entry) {
+  return JSON.stringify([entry?.t || 0, entry?.level || "info", entry?.data ?? ""]);
 }
 
 export function useTaskLogs(taskId, apiBase, runToken) {
@@ -10,9 +14,15 @@ export function useTaskLogs(taskId, apiBase, runToken) {
   const [status, setStatus] = useState(null);
   const [completed, setCompleted] = useState(false);
   const [pendingApprovals, setPendingApprovals] = useState([]);
+  const seenKeysRef = useRef(new Set());
+  const previousTaskIdRef = useRef(null);
+  const previousApiBaseRef = useRef(null);
 
   useEffect(() => {
     let active = true;
+    const taskChanged = previousTaskIdRef.current !== taskId || previousApiBaseRef.current !== apiBase;
+    previousTaskIdRef.current = taskId;
+    previousApiBaseRef.current = apiBase;
 
     const syncSnapshot = async () => {
       if (!active || !taskId) return;
@@ -27,6 +37,7 @@ export function useTaskLogs(taskId, apiBase, runToken) {
           setPendingApprovals(task.pendingApprovals);
         }
         if (logs?.entries) {
+          seenKeysRef.current = new Set(logs.entries.map(getEntryKey));
           setEntries(logs.entries);
         }
       } catch {
@@ -34,14 +45,22 @@ export function useTaskLogs(taskId, apiBase, runToken) {
       }
     };
 
-    setEntries([]);
-    setStatus(null);
-    setCompleted(false);
-    setPendingApprovals([]);
+    if (taskChanged) {
+      seenKeysRef.current = new Set();
+      setEntries([]);
+      setStatus(null);
+      setCompleted(false);
+      setPendingApprovals([]);
+    }
     if (!taskId) return () => { active = false; };
 
     const es = streamLogs(taskId, {
-      onLog: (entry) => setEntries((prev) => [...prev, entry]),
+      onLog: (entry) => {
+        const key = getEntryKey(entry);
+        if (seenKeysRef.current.has(key)) return;
+        seenKeysRef.current.add(key);
+        setEntries((prev) => [...prev, entry]);
+      },
       onStatus: (s) => {
         setStatus(s.status);
         if (s.status === "running" || s.status === "awaiting_approval") {
@@ -65,10 +84,11 @@ export function useTaskLogs(taskId, apiBase, runToken) {
         await syncSnapshot();
       },
       onError: (e) => {
-        setEntries((prev) => [
-          ...prev,
-          { t: Date.now(), level: "error", data: e?.data || "stream error" }
-        ]);
+        const nextEntry = { t: Date.now(), level: "error", data: e?.data || "stream error" };
+        const key = getEntryKey(nextEntry);
+        if (seenKeysRef.current.has(key)) return;
+        seenKeysRef.current.add(key);
+        setEntries((prev) => [...prev, nextEntry]);
       },
       onClose: async () => {
         await syncSnapshot();
