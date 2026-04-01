@@ -15,6 +15,7 @@ const schema = z.object({
   AGENT_SELF_ROOT: z.string().optional(),
   AGENT_MAX_STEPS: z.string().optional(),
   AGENT_STALL_LIMIT: z.string().optional(),
+  AGENT_AUTO_RESTART_INTERRUPTED_THREADS: z.string().optional(),
   ENDER_SUPERVISOR_URL: z.string().optional(),
   ENDER_SUPERVISOR_TOKEN: z.string().optional(),
   AGENT_SELF_UPDATE_VERIFY: z.string().optional(),
@@ -85,6 +86,14 @@ function describeRuntimeOs() {
   return `${platformLabel} (${platform}, ${arch})`;
 }
 
+function parseBooleanEnv(value, defaultValue = false) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw) return defaultValue;
+  if (["1", "true", "yes", "y", "on"].includes(raw)) return true;
+  if (["0", "false", "no", "n", "off"].includes(raw)) return false;
+  throw new Error("Boolean env value must be one of true/false/1/0/yes/no/on/off when set");
+}
+
 function loadConfig(env = process.env) {
   const parsed = schema.parse(env);
   const runtimeOs = describeRuntimeOs();
@@ -126,6 +135,15 @@ function loadConfig(env = process.env) {
     selfUpdateTimeoutMs = Math.floor(n);
   }
 
+  let autoRestartInterruptedThreads = false;
+  try {
+    autoRestartInterruptedThreads = parseBooleanEnv(parsed.AGENT_AUTO_RESTART_INTERRUPTED_THREADS, false);
+  } catch {
+    throw new Error(
+      "AGENT_AUTO_RESTART_INTERRUPTED_THREADS must be one of true/false/1/0/yes/no/on/off when set"
+    );
+  }
+
   return {
     port: Number(parsed.PORT || 3000),
     maxSteps,
@@ -139,6 +157,7 @@ function loadConfig(env = process.env) {
     schedulesDir,
     workflowSessionsDir,
     selfRoot,
+    autoRestartInterruptedThreads,
     selfUpdate: {
       rootDir: selfRoot,
       supervisorUrl: parsed.ENDER_SUPERVISOR_URL ? String(parsed.ENDER_SUPERVISOR_URL).trim() : null,

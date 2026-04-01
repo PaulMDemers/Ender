@@ -360,7 +360,8 @@ class TaskManager {
       workspaceLabel,
       parentTaskId: options.parentTaskId ? String(options.parentTaskId) : null,
       childTaskIds: [],
-      waiters: new Set()
+      waiters: new Set(),
+      autoRestartOnInterruption: this._shouldAutoRestartWorkspace(workspace)
     };
     this.tasks.set(id, task);
     this._push(task, { level: "info", data: { kind: "chat", role: "user", content: cleanGoal } });
@@ -505,6 +506,13 @@ class TaskManager {
     if (target === workdir) return false;
     if (workspaceBase && target === workspaceBase) return false;
     return this._isWorkspaceChildOfRoot(target);
+  }
+
+  _shouldAutoRestartWorkspace(workspacePath) {
+    const target = path.resolve(workspacePath || this.config.workdir);
+    const selfRoot = path.resolve(this.config.selfRoot || process.cwd());
+    if (target === selfRoot) return true;
+    return Boolean(this.config.autoRestartInterruptedThreads);
   }
 
   _getRunThread(thread) {
@@ -733,6 +741,7 @@ class TaskManager {
       workspaceLabel: task.workspaceLabel || task.workspace,
       parentTaskId: task.parentTaskId || null,
       childTaskIds: Array.isArray(task.childTaskIds) ? task.childTaskIds : [],
+      autoRestartOnInterruption: Boolean(task.autoRestartOnInterruption),
       pendingApprovals: [...task.pendingApprovals.values()].map((approval) => ({
         id: approval.id,
         type: approval.type,
@@ -763,7 +772,10 @@ class TaskManager {
       workspaceLabel: String(data.workspaceLabel || data.workspace || this.config.workdir),
       parentTaskId: data.parentTaskId ? String(data.parentTaskId) : null,
       childTaskIds: Array.isArray(data.childTaskIds) ? data.childTaskIds.map((id) => String(id)) : [],
-      waiters: new Set()
+      waiters: new Set(),
+      autoRestartOnInterruption: typeof data.autoRestartOnInterruption === "boolean"
+        ? data.autoRestartOnInterruption
+        : this._shouldAutoRestartWorkspace(data.workspace || this.config.workdir)
     };
 
     const approvals = Array.isArray(data.pendingApprovals) ? data.pendingApprovals : [];
@@ -780,17 +792,20 @@ class TaskManager {
     }
 
     if (task.status === "running" || task.status === "awaiting_approval") {
-      task.status = "error";
-      task.finishedAt = new Date().toISOString();
+      const shouldRestart = Boolean(task.autoRestartOnInterruption);
       task.pendingApprovals.clear();
+      task.finishedAt = shouldRestart ? null : new Date().toISOString();
       const restartEntry = this._normalizeLog({
         level: "warn",
-        data: "Task interrupted by server restart before completion"
+        data: shouldRestart
+          ? "Task interrupted by server restart; auto-restarting thread"
+          : "Task interrupted by server restart before completion"
       });
       task.logs.push(restartEntry);
       if (task.logs.length > this.maxLogs) {
         task.logs.splice(0, task.logs.length - this.maxLogs);
       }
+      task.status = shouldRestart ? "running" : "error";
     }
 
     return task;
@@ -812,6 +827,9 @@ class TaskManager {
         const task = this._hydrateTask(data);
         this.tasks.set(task.id, task);
         await this._persistTask(task);
+        if (task.status === "running") {
+          this._runThread(task);
+        }
       } catch (err) {
         console.warn(`Failed to load persisted thread ${filePath}: ${err.message || String(err)}`);
       }

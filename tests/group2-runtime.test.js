@@ -152,7 +152,7 @@ test("ScheduleManager persists run status for prompt schedules", async (t) => {
   assert.equal(schedule.lastRunStatus, "ok");
 });
 
-test("TaskManager marks interrupted running tasks as error on restart", async (t) => {
+test("TaskManager marks interrupted running tasks as error on restart by default", async (t) => {
   const root = await makeTempDir();
   const threadsDir = path.join(root, "threads");
   t.after(async () => {
@@ -178,7 +178,8 @@ test("TaskManager marks interrupted running tasks as error on restart", async (t
   const manager = new TaskManager({
     workdir: root,
     workspaceBase: root,
-    threadsDir
+    threadsDir,
+    selfRoot: path.join(root, "ender-self")
   });
   await manager.init();
 
@@ -188,6 +189,106 @@ test("TaskManager marks interrupted running tasks as error on restart", async (t
 
   const logs = manager.getLogs(taskId, 0);
   assert.ok(logs.entries.some((entry) => String(entry.data).includes("server restart")));
+});
+
+test("TaskManager auto-restarts interrupted tasks when config opt-in is enabled", async (t) => {
+  const root = await makeTempDir();
+  const threadsDir = path.join(root, "threads");
+  t.after(async () => {
+    await fs.rm(root, { recursive: true, force: true });
+  });
+
+  await fs.mkdir(threadsDir, { recursive: true });
+  const taskId = "task-auto-restart";
+  await fs.writeFile(path.join(threadsDir, `${taskId}.json`), JSON.stringify({
+    id: taskId,
+    goal: "Resume me",
+    status: "running",
+    startedAt: new Date().toISOString(),
+    logs: [],
+    result: null,
+    runCount: 1,
+    thread: [{ role: "user", content: "Resume me" }],
+    workspace: root,
+    workspaceLabel: root,
+    pendingApprovals: []
+  }, null, 2));
+
+  const manager = new TaskManager({
+    workdir: root,
+    workspaceBase: root,
+    threadsDir,
+    selfRoot: path.join(root, "ender-self"),
+    autoRestartInterruptedThreads: true
+  });
+
+  const restarted = [];
+  manager._runThread = (task) => {
+    restarted.push(task.id);
+  };
+
+  await manager.init();
+
+  const task = manager.get(taskId);
+  assert.ok(task);
+  assert.equal(task.status, "running");
+  assert.deepEqual(restarted, [taskId]);
+
+  const logs = manager.getLogs(taskId, 0);
+  assert.ok(logs.entries.some((entry) => String(entry.data).includes("auto-restarting thread")));
+});
+
+test("TaskManager auto-restarts interrupted tasks in self root by default", async (t) => {
+  const root = await makeTempDir();
+  const selfRoot = path.join(root, "ender-self");
+  const threadsDir = path.join(root, "threads");
+  t.after(async () => {
+    await fs.rm(root, { recursive: true, force: true });
+  });
+
+  await fs.mkdir(threadsDir, { recursive: true });
+  await fs.mkdir(selfRoot, { recursive: true });
+  const taskId = "task-self-root-restart";
+  await fs.writeFile(path.join(threadsDir, `${taskId}.json`), JSON.stringify({
+    id: taskId,
+    goal: "Resume me",
+    status: "awaiting_approval",
+    startedAt: new Date().toISOString(),
+    logs: [],
+    result: null,
+    runCount: 1,
+    thread: [{ role: "user", content: "Resume me" }],
+    workspace: selfRoot,
+    workspaceLabel: selfRoot,
+    pendingApprovals: [{
+      id: "approval-1",
+      type: "generic",
+      title: "Approval required",
+      description: "Please confirm",
+      details: {},
+      requestedAt: new Date().toISOString()
+    }]
+  }, null, 2));
+
+  const manager = new TaskManager({
+    workdir: root,
+    workspaceBase: root,
+    threadsDir,
+    selfRoot
+  });
+
+  const restarted = [];
+  manager._runThread = (task) => {
+    restarted.push(task.id);
+  };
+
+  await manager.init();
+
+  const task = manager.tasks.get(taskId);
+  assert.ok(task);
+  assert.equal(task.status, "running");
+  assert.equal(task.pendingApprovals.size, 0);
+  assert.deepEqual(restarted, [taskId]);
 });
 
 test("TaskManager approval flow resumes the task after approval", async (t) => {
