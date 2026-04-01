@@ -88,7 +88,7 @@ function createJiraTools(jiraConfig, { requestApproval, onLog } = {}) {
     },
     {
       name: "jira_get_board_issues",
-      description: "Get issues on a Jira board",
+      description: "Purpose: Get issues on a Jira board. When to use: To inspect board work items. Side effects: no. Requires explicit user intent: no. Pagination: startAt/maxResults. Output: issue list.",
       schema: z.object({
         boardId: z.union([z.string(), z.number()]),
         startAt: z.number().int().nonnegative().nullable(),
@@ -108,7 +108,7 @@ function createJiraTools(jiraConfig, { requestApproval, onLog } = {}) {
     },
     {
       name: "jira_get_issue",
-      description: "Get details for a Jira issue",
+      description: "Purpose: Get details for a Jira issue. When to use: To inspect a specific issue. Side effects: no. Requires explicit user intent: no. Output: issue details.",
       schema: z.object({
         issueKey: z.string().min(1),
         fields: z.array(z.string()).nullable()
@@ -151,7 +151,7 @@ function createJiraTools(jiraConfig, { requestApproval, onLog } = {}) {
     },
     {
       name: "jira_transition_issue",
-      description: "Update Jira issue status by transition name or ID",
+      description: "Purpose: Update Jira issue status by transition name or ID. When to use: Only when requested or clearly implied. Side effects: yes. Requires explicit user intent: yes. Output: transition result.",
       schema: z.object({
         issueKey: z.string().min(1),
         transition: z.string().min(1)
@@ -162,6 +162,18 @@ function createJiraTools(jiraConfig, { requestApproval, onLog } = {}) {
   const jira_comment_issue = tool(
     async ({ issueKey, comment }) => {
       const finalComment = ensureEnderPrefix(comment);
+      onLog?.({ level: "warn", data: `jira comment approval required: ${issueKey}` });
+      const approved = await requestApproval?.({
+        type: "jira_comment_issue",
+        title: "Approve Jira comment",
+        description: `Allow Ender to comment on Jira issue ${issueKey}?`,
+        details: { issueKey, commentPreview: finalComment.slice(0, 500) }
+      });
+
+      if (!approved) {
+        return JSON.stringify({ ok: false, error: "approval_denied", message: "jira comment denied by user" });
+      }
+
       const response = await requestJira(jiraConfig, `rest/api/3/issue/${encodeURIComponent(issueKey)}/comment`, {
         method: "POST",
         body: JSON.stringify({
@@ -181,7 +193,7 @@ function createJiraTools(jiraConfig, { requestApproval, onLog } = {}) {
     },
     {
       name: "jira_comment_issue",
-      description: "Add a comment to a Jira issue",
+      description: "Purpose: Add a comment to a Jira issue. When to use: When requested or clearly implied. Side effects: yes. Requires explicit user intent: usually. Output: comment result.",
       schema: z.object({
         issueKey: z.string().min(1),
         comment: z.string().min(1)

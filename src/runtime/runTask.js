@@ -29,8 +29,8 @@ async function runTask({ goal, thread, config, onLog, requestApproval, workspace
     ...createFileTools(activeWorkdir),
     ...createWebTools(activeWorkdir),
     ...createGitTools(activeWorkdir, { requestApproval, onLog, githubConfig: config.github }),
-    ...createGitLabTools(config.gitlab),
-    ...createGitHubTools(config.github),
+    ...createGitLabTools(config.gitlab, { requestApproval, onLog }),
+    ...createGitHubTools(config.github, { requestApproval, onLog }),
     ...createJiraTools(config.jira, { requestApproval, onLog }),
     ...createConfluenceTools(config.confluence, { requestApproval, onLog }),
     ...createGoogleDriveTools(config.googleDrive, { requestApproval, onLog }),
@@ -63,10 +63,10 @@ async function runTask({ goal, thread, config, onLog, requestApproval, workspace
   onLog({ level: "info", data: `loop stop reason=${result.stopReason}` });
 
   if (!ledger.progress.done && !String(finalText).startsWith("DONE:")) {
-    const fallback = ledger.task.facts.length
-      ? `DONE:\n${ledger.task.facts.map((f) => `- ${f}`).join("\n")}`
-      : `DONE:\n- ${finalText}`;
-    return { result: fallback, ledger };
+    const fallbackBody = ledger.task.facts.length
+      ? ledger.task.facts.map((f) => `- ${f}`).join("\n")
+      : `- ${finalText}`;
+    return { result: `DONE:\n${fallbackBody}`, ledger };
   }
 
   return { result: finalText, ledger };

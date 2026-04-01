@@ -183,7 +183,7 @@ function createWebTools(workdir) {
     },
     {
       name: "http_get",
-      description: "Fetch raw HTTP response text with paging via offset/maxBytes",
+      description: "Purpose: Fetch raw HTTP response text. When to use: For APIs, raw files, machine-readable content, or exact response inspection. Constraints: Use paging via offset and maxBytes for large responses. Side effects: no. Requires explicit user intent: no. Output: raw response text.",
       schema: z.object({
         url: z.string().min(1),
         maxBytes: z.number().int().positive().max(MAX_RAW_MAX_BYTES).nullable(),
@@ -205,7 +205,7 @@ function createWebTools(workdir) {
     },
     {
       name: "web_search",
-      description: "Search the web and return top links",
+      description: "Purpose: Search the web and return top links. When to use: For discovery when the target source is not yet known. Constraints: Use follow-up tools to inspect results. Side effects: no. Requires explicit user intent: no. Output: search results with links.",
       schema: z.object({ query: z.string().min(1) })
     }
   );
@@ -237,7 +237,7 @@ function createWebTools(workdir) {
     },
     {
       name: "web_page_read",
-      description: "Fetch a webpage, extract readable text, and page through the content",
+      description: "Purpose: Fetch a webpage and extract readable text. When to use: For human-readable webpage content. Constraints: Use offset and maxChars for paging; prefer over http_get for article-like pages. Side effects: no. Requires explicit user intent: no. Output: extracted readable text and optional links.",
       schema: z.object({
         url: z.string().min(1),
         maxChars: z.number().int().positive().max(MAX_PAGE_MAX_CHARS).nullable(),
@@ -316,7 +316,7 @@ function createWebTools(workdir) {
     },
     {
       name: "image_ingest",
-      description: "Load an image file or image URL and attach it so the model can inspect pixels",
+      description: "Purpose: Load an image for direct visual inspection. When to use: When pixel-level or visual image analysis is needed. Constraints: Accepts local path or URL. Side effects: no. Requires explicit user intent: no. Output: attached image for analysis.",
       schema: z.object({
         pathOrUrl: z.string().min(1)
       })
@@ -403,7 +403,7 @@ function createWebTools(workdir) {
     },
     {
       name: "browser_snapshot_page",
-      description: "Use headless Chromium to capture a full-page snapshot and attach it for model analysis",
+      description: "Purpose: Capture a rendered full-page snapshot with headless Chromium. When to use: When layout, rendering, or visual state matters. Constraints: Use width, height, waitMs, and quality as needed. Side effects: no. Requires explicit user intent: no. Output: attached page snapshot.",
       schema: z.object({
         url: z.string().min(1),
         width: z.number().int().positive().max(2000).nullable(),

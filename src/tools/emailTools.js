@@ -101,7 +101,7 @@ function createEmailTools(emailConfig, { requestApproval, onLog } = {}) {
     },
     {
       name: "email_send",
-      description: "Send an email via SMTP",
+      description: "Purpose: Send an email via SMTP. When to use: Only when the user requests or clearly implies sending email. Side effects: yes. Requires explicit user intent: yes. Output: send result.",
       schema: z.object({
         to: z.string().min(1),
         subject: z.string().min(1),
@@ -161,7 +161,7 @@ function createEmailTools(emailConfig, { requestApproval, onLog } = {}) {
     },
     {
       name: "email_list",
-      description: "List recent emails from a mailbox",
+      description: "Purpose: List recent emails from a mailbox. When to use: When email inspection is relevant to the task. Side effects: no. Requires explicit user intent: usually. Output: email summaries.",
       schema: z.object({
         mailbox: z.string().nullable(),
         limit: z.number().int().positive().max(100).nullable(),
@@ -219,7 +219,7 @@ function createEmailTools(emailConfig, { requestApproval, onLog } = {}) {
     },
     {
       name: "email_read",
-      description: "Read a specific email by IMAP UID",
+      description: "Purpose: Read a specific email by IMAP UID. When to use: When a specific message is relevant to the task. Side effects: no. Requires explicit user intent: usually. Output: email content.",
       schema: z.object({
         uid: z.number().int().positive(),
         mailbox: z.string().nullable()

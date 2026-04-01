@@ -54,7 +54,7 @@ async function requestGitHub({ baseUrl, token }, pathname, init = {}) {
   };
 }
 
-function createGitHubTools(githubConfig) {
+function createGitHubTools(githubConfig, { requestApproval, onLog } = {}) {
   const github_list_repos = tool(
     async ({ visibility, affiliation, type, sort, perPage, page }) => {
       const params = new URLSearchParams();
@@ -70,7 +70,7 @@ function createGitHubTools(githubConfig) {
     },
     {
       name: "github_list_repos",
-      description: "List accessible GitHub repositories for the authenticated user",
+      description: "Purpose: List accessible GitHub repositories for the authenticated user. When to use: To discover relevant repositories. Side effects: no. Requires explicit user intent: no. Pagination: page/perPage. Output: repository list.",
       schema: z.object({
         visibility: z.enum(["all", "public", "private"]).nullable(),
         affiliation: z.string().nullable(),
@@ -96,7 +96,7 @@ function createGitHubTools(githubConfig) {
     },
     {
       name: "github_list_pull_requests",
-      description: "List pull requests for a GitHub repository",
+      description: "Purpose: List pull requests for a GitHub repository. When to use: To inspect PR state and history. Side effects: no. Requires explicit user intent: no. Pagination: page/perPage. Output: pull request list.",
       schema: z.object({
         owner: z.string().min(1),
         repo: z.string().min(1),
@@ -111,6 +111,18 @@ function createGitHubTools(githubConfig) {
 
   const github_create_pull_request = tool(
     async ({ owner, repo, title, head, base, body, draft, maintainerCanModify }) => {
+      onLog?.({ level: "warn", data: `github pull request approval required: ${owner}/${repo} ${head}->${base}` });
+      const approved = await requestApproval?.({
+        type: "github_create_pull_request",
+        title: "Approve GitHub pull request creation",
+        description: `Allow Ender to create pull request \"${title}\" in ${owner}/${repo}?`,
+        details: { owner, repo, title, head, base, draft: Boolean(draft) }
+      });
+
+      if (!approved) {
+        return JSON.stringify({ ok: false, error: "approval_denied", message: "github pull request creation denied by user" });
+      }
+
       const response = await requestGitHub(githubConfig, `repos/${owner}/${repo}/pulls`, {
         method: "POST",
         body: JSON.stringify({
@@ -126,7 +138,7 @@ function createGitHubTools(githubConfig) {
     },
     {
       name: "github_create_pull_request",
-      description: "Create a pull request in GitHub",
+      description: "Purpose: Create a pull request in GitHub. When to use: When the user requests or clearly implies PR creation. Side effects: yes. Requires explicit user intent: yes. Output: created PR details.",
       schema: z.object({
         owner: z.string().min(1),
         repo: z.string().min(1),
@@ -142,6 +154,18 @@ function createGitHubTools(githubConfig) {
 
   const github_comment_pull_request = tool(
     async ({ owner, repo, pullNumber, body }) => {
+      onLog?.({ level: "warn", data: `github pull request comment approval required: ${owner}/${repo}#${pullNumber}` });
+      const approved = await requestApproval?.({
+        type: "github_comment_pull_request",
+        title: "Approve GitHub pull request comment",
+        description: `Allow Ender to comment on pull request ${owner}/${repo}#${pullNumber}?`,
+        details: { owner, repo, pullNumber, bodyPreview: String(body).slice(0, 500) }
+      });
+
+      if (!approved) {
+        return JSON.stringify({ ok: false, error: "approval_denied", message: "github pull request comment denied by user" });
+      }
+
       const response = await requestGitHub(githubConfig, `repos/${owner}/${repo}/issues/${pullNumber}/comments`, {
         method: "POST",
         body: JSON.stringify({ body })
@@ -150,7 +174,7 @@ function createGitHubTools(githubConfig) {
     },
     {
       name: "github_comment_pull_request",
-      description: "Add a comment to a GitHub pull request",
+      description: "Purpose: Add a comment to a GitHub pull request. When to use: When requested or clearly implied. Side effects: yes. Requires explicit user intent: usually. Output: comment result.",
       schema: z.object({
         owner: z.string().min(1),
         repo: z.string().min(1),

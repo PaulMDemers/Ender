@@ -262,7 +262,7 @@ function createConfluenceTools(confluenceConfig, { requestApproval, onLog } = {}
     },
     {
       name: "confluence",
-      description: "Search Confluence pages, read a page, create a page, or update an existing page in Confluence. Use action=search_pages for discovery, action=get_page to read a page including storage body, action=create_page to publish documentation, and action=update_page to overwrite page content.",
+      description: "Purpose: Search, read, create, or update Confluence pages. When to use: For documentation discovery or publication. Constraints: action determines behavior; update_page should use the correct current version increment. Side effects: search/get: no; create/update: yes. Requires explicit user intent: search/get: no; create/update: yes or clearly implied. Pagination: start/limit for search. Output: search results, page content, or write result.",
       schema: confluenceSchema
     }
   );

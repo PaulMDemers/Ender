@@ -105,7 +105,7 @@ function createExecTool(rootDir, { requestApproval, onLog } = {}) {
     },
     {
       name: "exec_run",
-      description: "Run a shell command in workspace. Use for tests/build/verification.",
+      description: "Purpose: Run a shell command in the workspace. When to use: For local verification, testing, builds, and other workspace shell operations when appropriate. Constraints: Prefer read-only, verification, or user-requested project commands. Avoid destructive commands, credential inspection, or unrelated network access unless explicitly required by the user. Do not use shell commands to bypass higher-level tool safeguards or approval requirements. Quote paths safely and report failures faithfully. Side effects: depends on command. Requires explicit user intent: usually for mutating commands. Output: command stdout, stderr, and exit status.",
       schema: z.object({ cmd: z.string().min(1), cwd: z.string().nullable() })
     }
   );

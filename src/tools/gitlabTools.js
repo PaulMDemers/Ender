@@ -39,7 +39,7 @@ async function requestGitLab({ baseUrl, token }, pathname, init = {}) {
   };
 }
 
-function createGitLabTools(gitlabConfig) {
+function createGitLabTools(gitlabConfig, { requestApproval, onLog } = {}) {
   const gitlab_list_projects = tool(
     async ({ membership, owned, search, perPage, page }) => {
       const params = new URLSearchParams();
@@ -54,7 +54,7 @@ function createGitLabTools(gitlabConfig) {
     },
     {
       name: "gitlab_list_projects",
-      description: "List accessible GitLab projects",
+      description: "Purpose: List accessible GitLab projects. When to use: To discover relevant GitLab projects. Side effects: no. Requires explicit user intent: no. Pagination: page/perPage. Output: project list.",
       schema: z.object({
         membership: z.boolean().nullable(),
         owned: z.boolean().nullable(),
@@ -80,7 +80,7 @@ function createGitLabTools(gitlabConfig) {
     },
     {
       name: "gitlab_list_merge_requests",
-      description: "List merge requests for a GitLab project",
+      description: "Purpose: List merge requests for a GitLab project. When to use: To inspect MR state and history. Side effects: no. Requires explicit user intent: no. Pagination: page/perPage. Output: merge request list.",
       schema: z.object({
         projectId: z.union([z.string(), z.number()]),
         state: z.enum(["opened", "closed", "locked", "merged", "all"]).nullable(),
@@ -94,6 +94,18 @@ function createGitLabTools(gitlabConfig) {
 
   const gitlab_create_merge_request = tool(
     async ({ projectId, sourceBranch, targetBranch, title, description, draft, removeSourceBranch }) => {
+      onLog?.({ level: "warn", data: `gitlab merge request approval required: ${projectId} ${sourceBranch}->${targetBranch}` });
+      const approved = await requestApproval?.({
+        type: "gitlab_create_merge_request",
+        title: "Approve GitLab merge request creation",
+        description: `Allow Ender to create merge request \"${title}\"?`,
+        details: { projectId: String(projectId), sourceBranch, targetBranch, title, draft: Boolean(draft) }
+      });
+
+      if (!approved) {
+        return JSON.stringify({ ok: false, error: "approval_denied", message: "gitlab merge request creation denied by user" });
+      }
+
       const encodedProject = encodeURIComponent(String(projectId));
       const payload = {
         source_branch: sourceBranch,
@@ -112,7 +124,7 @@ function createGitLabTools(gitlabConfig) {
     },
     {
       name: "gitlab_create_merge_request",
-      description: "Create a merge request in GitLab",
+      description: "Purpose: Create a merge request in GitLab. When to use: When the user requests or clearly implies MR creation. Side effects: yes. Requires explicit user intent: yes. Output: created MR details.",
       schema: z.object({
         projectId: z.union([z.string(), z.number()]),
         sourceBranch: z.string().min(1),
@@ -127,6 +139,18 @@ function createGitLabTools(gitlabConfig) {
 
   const gitlab_comment_merge_request = tool(
     async ({ projectId, mergeRequestIid, body }) => {
+      onLog?.({ level: "warn", data: `gitlab merge request comment approval required: ${projectId}!${mergeRequestIid}` });
+      const approved = await requestApproval?.({
+        type: "gitlab_comment_merge_request",
+        title: "Approve GitLab merge request comment",
+        description: `Allow Ender to comment on merge request ${projectId}!${mergeRequestIid}?`,
+        details: { projectId: String(projectId), mergeRequestIid: String(mergeRequestIid), bodyPreview: String(body).slice(0, 500) }
+      });
+
+      if (!approved) {
+        return JSON.stringify({ ok: false, error: "approval_denied", message: "gitlab merge request comment denied by user" });
+      }
+
       const encodedProject = encodeURIComponent(String(projectId));
       const response = await requestGitLab(
         gitlabConfig,
@@ -140,7 +164,7 @@ function createGitLabTools(gitlabConfig) {
     },
     {
       name: "gitlab_comment_merge_request",
-      description: "Comment on a GitLab merge request",
+      description: "Purpose: Comment on a GitLab merge request. When to use: When requested or clearly implied. Side effects: yes. Requires explicit user intent: usually. Output: comment result.",
       schema: z.object({
         projectId: z.union([z.string(), z.number()]),
         mergeRequestIid: z.union([z.string(), z.number()]),
@@ -157,4 +181,4 @@ function createGitLabTools(gitlabConfig) {
   ];
 }
 
-module.exports = { createGitLabTools };
+module.exports = { createGitLabTools, requestGitLab };

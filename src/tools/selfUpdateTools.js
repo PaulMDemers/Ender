@@ -29,7 +29,7 @@ function createSelfUpdateTools(selfUpdateManager, { requestApproval, onLog, acti
     async () => JSON.stringify(sanitizeJsonValue(await selfUpdateManager.status())),
     {
       name: "self_update_status",
-      description: "Inspect whether the external Ender supervisor is available and view recent self-update state.",
+      description: "Purpose: Inspect supervisor availability and recent self-update state. When to use: Only when working with Ender self-update flows. Side effects: no. Requires explicit user intent: no. Output: status information.",
       schema: z.object({})
     }
   );
@@ -43,7 +43,7 @@ function createSelfUpdateTools(selfUpdateManager, { requestApproval, onLog, acti
     },
     {
       name: "self_update_checkpoint_create",
-      description: "Create a rollback checkpoint before editing Ender's own source. Call this before modifying the self workspace.",
+      description: "Purpose: Create a rollback checkpoint before editing Ender's own source. When to use: Before modifying Ender's own repository under supervisor control. Side effects: yes. Requires explicit user intent: usually. Output: checkpoint id.",
       schema: z.object({
         label: z.string().nullable().default(null)
       })
@@ -86,7 +86,7 @@ function createSelfUpdateTools(selfUpdateManager, { requestApproval, onLog, acti
     },
     {
       name: "self_update_apply",
-      description: "Ask the external supervisor to verify the current Ender source tree, restart the parent process, and roll back to a checkpoint on failure. This is asynchronous because the current server process may be restarted.",
+      description: "Purpose: Ask the supervisor to verify and restart with rollback on failure. When to use: After modifying Ender's own source under supervisor control. Side effects: yes. Requires explicit user intent: yes. Output: operation details.",
       schema: z.object({
         checkpointId: z.string().min(1),
         reason: z.string().nullable().default(null),
@@ -105,7 +105,7 @@ function createSelfUpdateTools(selfUpdateManager, { requestApproval, onLog, acti
     },
     {
       name: "self_update_operations",
-      description: "List recent self-update operations or inspect one specific operation by id after a restart attempt.",
+      description: "Purpose: Inspect recent self-update operations. When to use: To monitor or verify self-update attempts. Side effects: no. Requires explicit user intent: no. Output: operation history or details.",
       schema: z.object({
         operationId: z.string().nullable().default(null)
       })

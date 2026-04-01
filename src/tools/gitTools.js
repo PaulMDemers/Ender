@@ -94,7 +94,7 @@ function createGitTools(rootDir, { requestApproval, onLog, githubConfig }) {
     },
     {
       name: "git_clone",
-      description: "Clone a git repository into workspace",
+      description: "Purpose: Clone a git repository into the workspace. When to use: To bring a repository into the workspace for inspection or modification. Constraints: Requires a valid repository URL. Side effects: yes. Requires explicit user intent: usually. Output: clone result and target directory.",
       schema: z.object({
         repoUrl: z.string().url(),
         directory: z.string().nullable()
@@ -114,7 +114,7 @@ function createGitTools(rootDir, { requestApproval, onLog, githubConfig }) {
     },
     {
       name: "git_fetch",
-      description: "Fetch updates from remote",
+      description: "Purpose: Fetch updates from a remote repository. When to use: To refresh remote refs without modifying the working tree. Constraints: repoPath null means workspace root if it is a git repo. Side effects: yes, repository metadata changes. Requires explicit user intent: usually. Output: fetch result.",
       schema: z.object({
         repoPath: z.string().nullable(),
         remote: z.string().nullable(),
@@ -133,7 +133,7 @@ function createGitTools(rootDir, { requestApproval, onLog, githubConfig }) {
     },
     {
       name: "git_status",
-      description: "Read git status",
+      description: "Purpose: Read repository status. When to use: To inspect working tree and staging state. Constraints: repoPath null means workspace root if it is a git repo. Side effects: no. Requires explicit user intent: no. Output: repository status.",
       schema: z.object({
         repoPath: z.string().nullable(),
         short: z.boolean().nullable()
@@ -155,7 +155,7 @@ function createGitTools(rootDir, { requestApproval, onLog, githubConfig }) {
     },
     {
       name: "git_add",
-      description: "Stage file changes",
+      description: "Purpose: Stage file changes. When to use: During a requested git workflow. Constraints: repoPath null means workspace root if it is a git repo. Side effects: yes. Requires explicit user intent: usually. Output: staging result.",
       schema: z.object({
         repoPath: z.string().nullable(),
         paths: z.array(z.string()).nullable(),
@@ -174,7 +174,7 @@ function createGitTools(rootDir, { requestApproval, onLog, githubConfig }) {
     },
     {
       name: "git_commit",
-      description: "Commit staged changes",
+      description: "Purpose: Create a git commit from staged changes. When to use: During a requested git workflow after reviewing changes. Constraints: repoPath null means workspace root if it is a git repo. Side effects: yes. Requires explicit user intent: usually. Output: commit result.",
       schema: z.object({
         repoPath: z.string().nullable(),
         message: z.string().min(1),
@@ -196,7 +196,7 @@ function createGitTools(rootDir, { requestApproval, onLog, githubConfig }) {
     },
     {
       name: "git_pull",
-      description: "Pull changes from remote",
+      description: "Purpose: Pull changes from a remote branch. When to use: To update a local branch from remote. Constraints: May modify working tree and history depending on options. Side effects: yes. Requires explicit user intent: usually. Output: pull result.",
       schema: z.object({
         repoPath: z.string().nullable(),
         remote: z.string().nullable(),
@@ -234,7 +234,7 @@ function createGitTools(rootDir, { requestApproval, onLog, githubConfig }) {
     },
     {
       name: "git_push",
-      description: "Push commits to remote. Requires explicit UI approval.",
+      description: "Purpose: Push commits to a remote branch. When to use: Only when the task requires publishing commits. Constraints: Requires explicit UI approval. Side effects: yes. Requires explicit user intent: yes. Output: push result.",
       schema: z.object({
         repoPath: z.string().nullable(),
         remote: z.string().nullable(),

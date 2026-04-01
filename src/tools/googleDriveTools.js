@@ -310,7 +310,7 @@ function createGoogleDriveTools(googleDriveConfig, { requestApproval, onLog } = 
     },
     {
       name: "google_drive",
-      description: "Search Google Drive files, inspect metadata, read text files, export Google Workspace files, upload plain text files, or update existing plain text files in Drive.",
+      description: "Purpose: Search, inspect, read, export, upload, or update Drive files. When to use: When Drive content is relevant to the task. Constraints: action determines behavior. Side effects: search/get/read/export: no; upload/update: yes. Requires explicit user intent: read actions: no; upload/update: yes or clearly implied. Pagination: pageToken/pageSize for search. Output: file metadata, text content, export content, or write result.",
       schema: googleDriveSchema
     }
   );

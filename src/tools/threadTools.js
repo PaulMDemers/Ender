@@ -44,7 +44,7 @@ function createThreadTools(taskManager, { taskId, onLog } = {}) {
     },
     {
       name: "thread_spawn",
-      description: "Start a child thread for parallel or delegated work. Returns the child thread id so you can either keep going and poll later, or await it like a join.",
+      description: "Purpose: Start a child thread for delegated work. When to use: Only for independent subtasks where concurrency is beneficial. Side effects: yes, creates background work. Requires explicit user intent: no. Output: child thread id.",
       schema: z.object({
         prompt: z.string().min(1),
         workspace: z.string().nullable().default(null)
@@ -77,7 +77,7 @@ function createThreadTools(taskManager, { taskId, onLog } = {}) {
     },
     {
       name: "thread_status",
-      description: "Check the current status of a child thread without blocking. This is the async polling option and returns immediately.",
+      description: "Purpose: Check child thread status without blocking. When to use: For non-blocking polling. Side effects: no. Requires explicit user intent: no. Output: current status snapshot.",
       schema: z.object({
         threadId: z.string().min(1),
         includeLogs: z.boolean().nullable().default(false)
@@ -108,7 +108,7 @@ function createThreadTools(taskManager, { taskId, onLog } = {}) {
     },
     {
       name: "thread_await",
-      description: "Wait for a child thread to finish. This is the blocking await/join option. If timeoutMs is omitted or null, wait until the child reaches a terminal status. If timeoutMs is 0, return immediately with the current snapshot and timedOut=true when the child is still running. Prefer thread_status for normal polling.",
+      description: "Purpose: Wait for a child thread to finish. When to use: For blocking join behavior. Constraints: timeoutMs 0 returns an immediate snapshot. Side effects: no. Requires explicit user intent: no. Output: final or current status snapshot.",
       schema: z.object({
         threadId: z.string().min(1),
         timeoutMs: z.number().int().nonnegative().nullable().default(null),

@@ -142,7 +142,7 @@ function createFileTools(rootDir) {
     },
     {
       name: "file_write",
-      description: "Write a UTF-8 text file within workspace root",
+      description: "Purpose: Write a UTF-8 text file within the workspace root. When to use: To create or update a text file in the workspace when the task requires it. Constraints: Path must remain within workspace root; parent traversal outside workspace is rejected; content is UTF-8 text only. Side effects: yes. Requires explicit user intent: usually. Output: confirmation of write result.",
       schema: z.object({ path: z.string().min(1), content: z.string().min(1) })
     }
   );
@@ -162,7 +162,7 @@ function createFileTools(rootDir) {
     },
     {
       name: "file_read",
-      description: "Read a UTF-8 text file within workspace root",
+      description: "Purpose: Read a UTF-8 text file within the workspace root. When to use: To inspect text files in the workspace. Constraints: Path must remain within workspace root; UTF-8 text only. Use other tools for binary or image inspection. Side effects: no. Requires explicit user intent: no. Output: file contents.",
       schema: z.object({ path: z.string().min(1) })
     }
   );
@@ -190,7 +190,7 @@ function createFileTools(rootDir) {
     },
     {
       name: "file_list",
-      description: "List directory entries within workspace root. Set recursive=true to list nested files/dirs (ignores node_modules).",
+      description: "Purpose: List directory entries within the workspace root. When to use: To inspect workspace structure. Constraints: Path must remain within workspace root; recursive listing ignores node_modules. Side effects: no. Requires explicit user intent: no. Output: directory entries.",
       schema: z.object({
         path: z.string().nullable(),
         recursive: z.boolean().nullable(),
@@ -214,7 +214,7 @@ function createFileTools(rootDir) {
     },
     {
       name: "file_exists",
-      description: "Check whether a file or directory exists within workspace root",
+      description: "Purpose: Check whether a file or directory exists within the workspace root. When to use: To verify workspace paths before reading or writing. Constraints: Path must remain within workspace root. Side effects: no. Requires explicit user intent: no. Output: existence boolean.",
       schema: z.object({ path: z.string().min(1) })
     }
   );

@@ -26,7 +26,7 @@ function createCronTools(scheduleManager, { taskId, requestApproval, onLog } = {
     async () => JSON.stringify({ ok: true, now: getTimeSnapshot() }),
     {
       name: "time_now",
-      description: "Get current server time (UTC + local timezone) for relative scheduling calculations",
+      description: "Purpose: Get current server time. When to use: Before relative scheduling calculations. Side effects: no. Requires explicit user intent: no. Output: current UTC and local time.",
       schema: z.object({})
     }
   );
@@ -55,6 +55,18 @@ function createCronTools(scheduleManager, { taskId, requestApproval, onLog } = {
         };
       })();
 
+      onLog?.({ level: "warn", data: `schedule create approval required: ${name} (${targetKind})` });
+      const approved = await requestApproval?.({
+        type: "cron_schedule",
+        title: "Approve schedule creation",
+        description: `Allow Ender to create schedule \"${name}\"?`,
+        details: { name, cron, timezone: timezone || null, targetKind, target }
+      });
+
+      if (!approved) {
+        return JSON.stringify({ ok: false, error: "approval_denied", message: "schedule creation denied by user" });
+      }
+
       const result = await scheduleManager.create({
         name,
         cron,
@@ -66,7 +78,7 @@ function createCronTools(scheduleManager, { taskId, requestApproval, onLog } = {
     },
     {
       name: "cron_schedule",
-      description: "Create a cron schedule for a prompt, thread continuation, or workflow run",
+      description: "Purpose: Create a recurring schedule. When to use: When the user requests automation or recurring execution. Side effects: yes. Requires explicit user intent: yes. Output: schedule details.",
       schema: z.object({
         name: z.string().min(1),
         cron: z.string().min(1),
@@ -85,7 +97,7 @@ function createCronTools(scheduleManager, { taskId, requestApproval, onLog } = {
     async () => JSON.stringify({ ok: true, items: scheduleManager.list() }),
     {
       name: "cron_list",
-      description: "List all schedules",
+      description: "Purpose: List schedules. When to use: To inspect existing automation. Side effects: no. Requires explicit user intent: no. Output: schedule list.",
       schema: z.object({})
     }
   );
@@ -112,7 +124,7 @@ function createCronTools(scheduleManager, { taskId, requestApproval, onLog } = {
     },
     {
       name: "cron_delete",
-      description: "Delete a schedule by id",
+      description: "Purpose: Delete a schedule. When to use: When requested to remove automation. Side effects: yes. Requires explicit user intent: yes. Output: deletion result.",
       schema: z.object({ id: z.string().min(1) })
     }
   );
