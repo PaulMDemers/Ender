@@ -25,7 +25,9 @@ class WorkflowManager {
   async createSession(workflowId, options = {}) {
     const workflow = this.definitions.get(workflowId);
     if (!workflow) return { ok: false, error: "not_found" };
-    const mode = options?.mode === "schedule_config" ? "schedule_config" : "interactive";
+    const allowedModes = new Set(["interactive", "schedule_config", "scheduled_run"]);
+    const requestedMode = String(options?.mode || "interactive");
+    const mode = allowedModes.has(requestedMode) ? requestedMode : "interactive";
 
     const session = {
       id: randomUUID(),
@@ -75,7 +77,7 @@ class WorkflowManager {
   }
 
   async runScheduled(workflowId, inputs = []) {
-    const created = await this.createSession(workflowId);
+    const created = await this.createSession(workflowId, { mode: "scheduled_run" });
     if (!created.ok) return created;
     const sessionId = created.session.id;
     const steps = Array.isArray(inputs) ? inputs : [];

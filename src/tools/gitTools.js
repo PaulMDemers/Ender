@@ -76,15 +76,21 @@ async function withGitHubAuth(args, cwd, githubConfig, repoUrlHint, remoteNameHi
   return ["-c", extraHeader, ...args];
 }
 
+async function cloneRepository({ rootDir, repoUrl, directory, githubConfig, runGitImpl = runGit }) {
+  const safeJoin = createSafeJoin(rootDir);
+  const targetDir = safeJoin(directory || path.basename(repoUrl, ".git"));
+  const args = await withGitHubAuth(["clone", repoUrl, targetDir], rootDir, githubConfig, repoUrl);
+  const result = await runGitImpl(args, rootDir);
+  return { ...result, path: targetDir };
+}
+
 function createGitTools(rootDir, { requestApproval, onLog, githubConfig }) {
   const safeJoin = createSafeJoin(rootDir);
 
   const git_clone = tool(
     async ({ repoUrl, directory }) => {
-      const targetDir = safeJoin(directory || path.basename(repoUrl, ".git"));
-      const args = await withGitHubAuth(["clone", repoUrl, targetDir], rootDir, githubConfig, repoUrl);
-      const result = await runGit(args, rootDir);
-      return JSON.stringify({ ...result, path: targetDir });
+      const result = await cloneRepository({ rootDir, repoUrl, directory, githubConfig });
+      return JSON.stringify(result);
     },
     {
       name: "git_clone",
@@ -242,4 +248,4 @@ function createGitTools(rootDir, { requestApproval, onLog, githubConfig }) {
   return [git_clone, git_fetch, git_status, git_add, git_commit, git_pull, git_push];
 }
 
-module.exports = { createGitTools, runGit, withGitHubAuth };
+module.exports = { createGitTools, runGit, withGitHubAuth, cloneRepository };

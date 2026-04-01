@@ -2,7 +2,6 @@ const fs = require("node:fs/promises");
 const fsSync = require("node:fs");
 const path = require("node:path");
 const { randomUUID } = require("node:crypto");
-const { runTask } = require("./runTask");
 const { sanitizeJsonValue, sanitizeString } = require("../utils/jsonSafe");
 
 const THREAD_CONTEXT_LIMIT = 12;
@@ -188,7 +187,8 @@ class TaskManager {
   rerun(id) {
     const t = this.tasks.get(id);
     if (!t) return { ok: false, error: "not_found" };
-    const started = this.start(t.goal, t.workspaceLabel || t.workspace);
+    const rerunGoal = String(t.initialGoal || t.goal || "").trim();
+    const started = this.start(rerunGoal, t.workspaceLabel || t.workspace);
     if (!started.ok) return started;
     return { ok: true, id: started.id };
   }
@@ -203,7 +203,7 @@ class TaskManager {
     const clean = String(prompt || "").trim();
     if (!clean) return { ok: false, error: "prompt_required" };
 
-    t.goal = clean;
+    t.latestPrompt = clean;
     t.thread.push({ role: "user", content: clean });
     this._push(t, { level: "info", data: { kind: "chat", role: "user", content: clean } });
     this._schedulePersist(t);
@@ -340,6 +340,8 @@ class TaskManager {
     const task = {
       id,
       goal: cleanGoal,
+      initialGoal: cleanGoal,
+      latestPrompt: cleanGoal,
       status: "running",
       startedAt: new Date().toISOString(),
       finishedAt: null,
@@ -557,6 +559,7 @@ class TaskManager {
 
     (async () => {
       try {
+        const { runTask } = require("./runTask");
         const { result } = await runTask({
           goal,
           thread,
@@ -716,6 +719,8 @@ class TaskManager {
       finishedAt: task.finishedAt || null,
       logs: Array.isArray(task.logs) ? task.logs : [],
       result: task.result ?? null,
+      initialGoal: task.initialGoal || task.goal,
+      latestPrompt: task.latestPrompt || task.goal,
       runCount: Number.isFinite(task.runCount) ? task.runCount : 0,
       thread: Array.isArray(task.thread) ? task.thread : [],
       workspace: task.workspace,
@@ -743,6 +748,8 @@ class TaskManager {
       logs: Array.isArray(data.logs) ? data.logs.slice(-this.maxLogs) : [],
       subs: new Set(),
       result: data.result ?? null,
+      initialGoal: String(data.initialGoal || data.goal || ""),
+      latestPrompt: String(data.latestPrompt || data.goal || ""),
       runCount: Number.isFinite(data.runCount) ? data.runCount : 0,
       thread: Array.isArray(data.thread) ? data.thread : [],
       pendingApprovals: new Map(),

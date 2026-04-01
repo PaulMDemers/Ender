@@ -1,6 +1,8 @@
+const fs = require("node:fs/promises");
 const path = require("node:path");
 const { requestJira } = require("../tools/jiraTools");
-const { runGit } = require("../tools/gitTools");
+const { cloneRepository } = require("../tools/gitTools");
+const { createSafeJoin } = require("../utils/safePath");
 
 function summarizeBody(body) {
   if (body == null) return null;
@@ -50,6 +52,103 @@ function formatBoardSummary(board) {
 
 function quoteJqlString(value) {
   return `"${String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+function defaultCloneDirectory(repoUrl, directoryInput) {
+  const requested = String(directoryInput || "").trim();
+  if (requested) return requested;
+
+  const rawBase = path.basename(String(repoUrl || "").trim(), ".git").trim();
+  return rawBase || "repo";
+}
+
+function buildCollisionErrorMessage(directory) {
+  return `Target directory '${directory}' already exists and is not empty. Choose a new target directory or clear it first.`;
+}
+
+async function inspectCloneTarget(rootDir, directory) {
+  const safeJoin = createSafeJoin(rootDir);
+  const repoPath = safeJoin(directory);
+
+  try {
+    const stat = await fs.stat(repoPath);
+    if (!stat.isDirectory()) {
+      return {
+        ok: false,
+        error: `Target path '${directory}' already exists and is not a directory.`
+      };
+    }
+
+    const items = await fs.readdir(repoPath);
+    return {
+      ok: true,
+      exists: true,
+      empty: items.length === 0,
+      repoPath
+    };
+  } catch (err) {
+    if (err?.code === "ENOENT") {
+      return {
+        ok: true,
+        exists: false,
+        empty: false,
+        repoPath
+      };
+    }
+    throw err;
+  }
+}
+
+function buildUniqueCloneDirectory(directory, stamp, attempt = 0) {
+  const parsed = path.parse(directory);
+  const suffix = attempt === 0 ? stamp : `${stamp}-${attempt + 1}`;
+  return path.join(parsed.dir, `${parsed.base}-${suffix}`);
+}
+
+async function resolveCloneTarget(rootDir, directory, options = {}) {
+  const mode = String(options.mode || "interactive");
+  const timestamp = String(options.timestamp || new Date().toISOString())
+    .replace(/[-:]/g, "")
+    .replace(/\..+$/, "")
+    .replace("T", "-");
+  const inspected = await inspectCloneTarget(rootDir, directory);
+  if (!inspected.ok) return inspected;
+
+  if (!inspected.exists || inspected.empty) {
+    return {
+      ok: true,
+      directory,
+      repoPath: inspected.repoPath,
+      autoRenamed: false
+    };
+  }
+
+  if (mode !== "scheduled_run") {
+    return {
+      ok: false,
+      error: buildCollisionErrorMessage(directory)
+    };
+  }
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const candidateDirectory = buildUniqueCloneDirectory(directory, timestamp, attempt);
+    const candidate = await inspectCloneTarget(rootDir, candidateDirectory);
+    if (!candidate.ok) return candidate;
+    if (!candidate.exists) {
+      return {
+        ok: true,
+        directory: candidateDirectory,
+        repoPath: candidate.repoPath,
+        autoRenamed: true,
+        requestedDirectory: directory
+      };
+    }
+  }
+
+  return {
+    ok: false,
+    error: `Unable to find an available clone target derived from '${directory}'.`
+  };
 }
 
 async function loadProjects(config) {
@@ -350,7 +449,7 @@ function getCurrentStep(session) {
   };
 }
 
-async function advance(session, input, { config, taskManager }) {
+async function advance(session, input, { config, taskManager, cloneRepositoryImpl } = {}) {
   const stage = session.state.stage || "project";
 
   if (stage === "project") {
@@ -480,22 +579,71 @@ async function advance(session, input, { config, taskManager }) {
       return { ok: false, error: "Repository URL is required" };
     }
 
-    const directory = String(input.directory || "").trim() || path.basename(repoUrl, ".git");
-    const cloneResult = await runGit(["clone", repoUrl, directory], config.workdir);
+    const directory = defaultCloneDirectory(repoUrl, input.directory);
+    const safeJoin = createSafeJoin(config.workdir);
+    const previewRepoPath = safeJoin(directory);
+
+    if (session.mode === "schedule_config") {
+      session.state.repo = {
+        repoUrl,
+        directory,
+        repoPath: previewRepoPath,
+        deferredClone: true
+      };
+      pushDebug(session, {
+        step: "cloneRepoDeferred",
+        repoUrl,
+        directory,
+        mode: session.mode
+      });
+      session.state.stage = "delivery";
+      return { ok: true };
+    }
+
+    const cloneTarget = await resolveCloneTarget(config.workdir, directory, { mode: session.mode });
+    pushDebug(session, {
+      step: "resolveCloneTarget",
+      repoUrl,
+      directory,
+      mode: session.mode || "interactive",
+      ok: cloneTarget.ok,
+      autoRenamed: cloneTarget.autoRenamed || false,
+      resolvedDirectory: cloneTarget.directory || null,
+      error: cloneTarget.error || null
+    });
+    if (!cloneTarget.ok) {
+      return { ok: false, error: cloneTarget.error };
+    }
+
+    const cloneRepo = cloneRepositoryImpl || cloneRepository;
+    const cloneResult = await cloneRepo({
+      rootDir: config.workdir,
+      repoUrl,
+      directory: cloneTarget.directory,
+      githubConfig: config.github
+    });
     pushDebug(session, {
       step: "cloneRepo",
       repoUrl,
-      directory,
+      directory: cloneTarget.directory,
       ok: cloneResult.ok,
       code: cloneResult.code,
+      autoRenamed: cloneTarget.autoRenamed || false,
+      requestedDirectory: cloneTarget.requestedDirectory || directory,
       stderr: cloneResult.stderr ? String(cloneResult.stderr).slice(0, 500) : ""
     });
     if (!cloneResult.ok) {
       return { ok: false, error: cloneResult.stderr || "Clone failed" };
     }
 
-    const repoPath = path.resolve(config.workdir, directory);
-    session.state.repo = { repoUrl, directory, repoPath };
+    const repoPath = cloneTarget.repoPath;
+    session.state.repo = {
+      repoUrl,
+      directory: cloneTarget.directory,
+      requestedDirectory: directory,
+      repoPath,
+      autoRenamed: cloneTarget.autoRenamed || false
+    };
     session.state.stage = "delivery";
     return { ok: true };
   }
@@ -599,4 +747,10 @@ const jiraToRepoWorkflow = {
   advance
 };
 
-module.exports = { jiraToRepoWorkflow };
+module.exports = {
+  jiraToRepoWorkflow,
+  advance,
+  resolveCloneTarget,
+  defaultCloneDirectory,
+  buildCollisionErrorMessage
+};
