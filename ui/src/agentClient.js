@@ -157,9 +157,16 @@ export function getLogs(id, from = 0) {
   return request(`/tasks/${id}/logs?from=${from}`);
 }
 
-export function streamLogs(id, { onLog, onStatus, onComplete, onApprovalRequired, onError, onClose }) {
+export function streamLogs(
+  id,
+  { onOpen, onLog, onStatus, onComplete, onApprovalRequired, onError, onClose }
+) {
   const es = new EventSource(`${currentApiBase}/tasks/${id}/stream`);
   let completed = false;
+
+  es.onopen = () => {
+    onOpen?.();
+  };
 
   es.addEventListener("log", (ev) => {
     try {

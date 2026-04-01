@@ -1,5 +1,25 @@
 import { useEffect, useRef, useState } from "react";
-import { listDirectories, startTask } from "../agentClient";
+import { getHealth, listDirectories, startTask } from "../agentClient";
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getBackoffDelay(attempt) {
+  const base = 600;
+  const max = 6000;
+  const exp = Math.min(max, base * 2 ** Math.max(0, attempt));
+  const jitter = exp * (0.2 * Math.random());
+  return Math.round(exp + jitter);
+}
+
+function getStartErrorHint(health) {
+  const missing = health?.services?.llm?.missing;
+  if (Array.isArray(missing) && missing.length) {
+    return `LLM is not configured on the server. Add ${missing.join(", ")} to .env and restart the Ender server.`;
+  }
+  return "";
+}
 
 export default function NewTaskForm({
   onStarted,
@@ -46,24 +66,52 @@ export default function NewTaskForm({
   useEffect(() => {
     if (!pickerOpen) return;
     loadDirs(workspace || "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pickerOpen]);
 
   const submit = async (event) => {
     event?.preventDefault?.();
     const nextGoal = goal.trim();
     if (!nextGoal || busy) return;
+
     setBusy(true);
     setError("");
-    try {
-      const { id } = await startTask(nextGoal, workspace.trim() || undefined);
-      onStarted?.({ id, goal: nextGoal, workspace: workspace.trim() || undefined });
-      setGoal("");
-      if (taRef.current) taRef.current.style.height = "";
-    } catch (err) {
-      setError(err.message || "Unable to start task");
-    } finally {
-      setBusy(false);
+
+    const maxAttempts = 4;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      try {
+        if (attempt > 0) {
+          setError(`Start failed. Retrying (${attempt + 1}/${maxAttempts})...`);
+          await sleep(getBackoffDelay(attempt - 1));
+        }
+
+        const { id } = await startTask(nextGoal, workspace.trim() || undefined);
+        onStarted?.({ id, goal: nextGoal, workspace: workspace.trim() || undefined });
+        setGoal("");
+        if (taRef.current) taRef.current.style.height = "";
+        setError("");
+        setBusy(false);
+        return;
+      } catch (err) {
+        // If the server is reachable but not ready (common: missing env), surface a helpful hint and stop retrying.
+        try {
+          const health = await getHealth();
+          const hint = getStartErrorHint(health);
+          if (hint) {
+            setError(hint);
+            break;
+          }
+        } catch {
+          // ignore health fetch failures; we'll retry below
+        }
+
+        if (attempt === maxAttempts - 1) {
+          setError(err.message || "Unable to start task");
+        }
+      }
     }
+
+    setBusy(false);
   };
 
   return (

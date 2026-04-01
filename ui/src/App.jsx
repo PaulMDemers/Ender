@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   advanceWorkflowSession,
   continueTask,
@@ -281,6 +281,9 @@ export default function App() {
   const [railCollapsed, setRailCollapsed] = useState(() => loadRailCollapsed());
   const [railOpen, setRailOpen] = useState(false);
   const [threadScrollToken, setThreadScrollToken] = useState(0);
+  const [reconnectNotice, setReconnectNotice] = useState("");
+
+  const wasOnlineRef = useRef(null);
 
   useEffect(() => {
     const saved = localStorage.getItem("ender_api_base");
@@ -403,6 +406,26 @@ export default function App() {
       clearInterval(intervalId);
     };
   }, [serverUrl]);
+
+  useEffect(() => {
+    const isOnline = Boolean(health?.ok);
+    const wasOnline = wasOnlineRef.current;
+    wasOnlineRef.current = isOnline;
+
+    if (wasOnline === null) return;
+
+    if (wasOnline && !isOnline) {
+      setReconnectNotice("Server disconnected. Waiting to reconnect...");
+    }
+
+    if (!wasOnline && isOnline) {
+      setReconnectNotice("Reconnected. Refreshing...");
+      refresh().finally(() => {
+        setTimeout(() => setReconnectNotice(""), 1500);
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [health?.ok]);
 
   useEffect(() => {
     let live = true;
@@ -851,16 +874,16 @@ export default function App() {
     }
 
     return (
-          <NewTaskForm
-            onStarted={onStarted}
-            serverName={currentServer?.name || "Direct connection"}
-            serverUrl={serverUrl}
-            readinessChecks={readinessChecks}
-            selfWorkspacePath={selfWorkspacePath}
-            selfUpdateReady={selfUpdateReady}
-            selfUpdateHint={selfUpdateHint}
-          />
-        );
+      <NewTaskForm
+        onStarted={onStarted}
+        serverName={currentServer?.name || "Direct connection"}
+        serverUrl={serverUrl}
+        readinessChecks={readinessChecks}
+        selfWorkspacePath={selfWorkspacePath}
+        selfUpdateReady={selfUpdateReady}
+        selfUpdateHint={selfUpdateHint}
+      />
+    );
   };
 
   return (
@@ -919,105 +942,127 @@ export default function App() {
                     className="summaryToggle"
                     aria-label={serverSummaryCollapsed ? "Expand server details" : "Collapse server details"}
                     title={serverSummaryCollapsed ? "Expand server details" : "Collapse server details"}
-                    onClick={() => setServerSummaryCollapsed((prev) => !prev)}
+                    onClick={() => setServerSummaryCollapsed((value) => !value)}
                   >
-                    <span
-                      className={`summaryToggleIcon ${serverSummaryCollapsed ? "collapsed" : "expanded"}`}
-                      aria-hidden="true"
-                    />
+                    <span className={`chevronIcon ${serverSummaryCollapsed ? "down" : "up"}`} aria-hidden="true" />
                   </button>
                 </div>
               </div>
+
+              {reconnectNotice ? <div className="panelNote">{reconnectNotice}</div> : null}
+
               {!serverSummaryCollapsed ? (
-                <>
-                  <div className="serverEndpointDisplay mono">{serverUrl}</div>
-                  {selfWorkspacePath ? (
-                    <div className="readinessMeta">
-                      Self workspace: {formatPathTail(selfWorkspacePath, 5)} {selfUpdateReady ? "· supervisor ready" : "· supervisor unavailable"}
+                <div className="serverSummaryDetails">
+                  <div className="serverEndpoint mono">{serverUrl}</div>
+                  <div className="serverMetaGrid">
+                    <div>
+                      <div className="sectionLabel">Last activity</div>
+                      <div className="serverMetaValue">{formatRelative(selectedTaskUpdatedAt)}</div>
                     </div>
-                  ) : null}
-                  <div className="readinessGrid">
+                    <div>
+                      <div className="sectionLabel">Selected workspace</div>
+                      <div className="serverMetaValue">{formatPathTail(selectedTask?.workspace)}</div>
+                    </div>
+                  </div>
+
+                  <div className="readinessList">
                     {readinessChecks.map((item) => (
-                      <div key={item.label} className={`readinessChip ${item.ready ? "ready" : "notReady"}`}>
-                        <span>{item.label}</span>
+                      <div key={item.label} className="readinessRow">
+                        <div className={`readinessIndicator ${item.ready ? "ready" : "notReady"}`}>
+                          <span className="statusDot" />
+                        </div>
+                        <div>
+                          <div className="readinessLabel">{item.label}</div>
+                          {item.detail ? <div className="readinessDetail">{item.detail}</div> : null}
+                        </div>
                       </div>
                     ))}
                   </div>
-                  {readinessChecks.some((item) => item.detail) ? (
-                    <div className="readinessMeta">
-                      {readinessChecks
-                        .filter((item) => item.detail)
-                        .map((item) => `${item.label}: ${item.detail}`)
-                        .join(" ")}
-                    </div>
-                  ) : null}
-                </>
+
+                  <div className="serverSummaryFooter">
+                    <button type="button" className="secondaryButton" onClick={() => setServerModalOpen(true)}>
+                      Switch server
+                    </button>
+                  </div>
+                </div>
               ) : null}
             </section>
 
-            {loadError ? <div className="errorBanner">{loadError}</div> : null}
-
-            <section className="railSection">
-              <div className="railSectionHeader">
-                <div className="sectionHeading">
-                  <span>Launch modes</span>
+            <section className="modeSection">
+              <div className="modeHeader">
+                <div>
+                  <div className="sectionLabel">Console mode</div>
+                  <div className="modeTitle">{headerModeCopy.title}</div>
                 </div>
                 <button
                   type="button"
                   className="summaryToggle"
-                  aria-label={modeSectionCollapsed ? "Expand launch modes" : "Collapse launch modes"}
-                  title={modeSectionCollapsed ? "Expand launch modes" : "Collapse launch modes"}
-                  onClick={() => setModeSectionCollapsed((prev) => !prev)}
+                  aria-label={modeSectionCollapsed ? "Expand mode details" : "Collapse mode details"}
+                  title={modeSectionCollapsed ? "Expand mode details" : "Collapse mode details"}
+                  onClick={() => setModeSectionCollapsed((value) => !value)}
                 >
-                  <span className={`summaryToggleIcon ${modeSectionCollapsed ? "collapsed" : "expanded"}`} aria-hidden="true" />
+                  <span className={`chevronIcon ${modeSectionCollapsed ? "down" : "up"}`} aria-hidden="true" />
                 </button>
               </div>
-              {!modeSectionCollapsed ? (
-                <div className="railPrimaryActions">
-                  <button
-                    type="button"
-                    className={`modeButton ${activeMode === "new" ? "active" : ""}`}
-                    onClick={() => openMode("new")}
-                  >
-                    <span className="modeButtonLabel">New Thread</span>
-                    <span className="modeButtonMeta">Launch task</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`modeButton ${activeMode === "workflow" ? "active" : ""}`}
-                    onClick={() => openMode("workflow")}
-                  >
-                    <span className="modeButtonLabel">Workflows</span>
-                    <span className="modeButtonMeta">Guided setup</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`modeButton ${activeMode === "schedule" ? "active" : ""}`}
-                    onClick={() => openMode("schedule")}
-                  >
-                    <span className="modeButtonLabel">Schedules</span>
-                    <span className="modeButtonMeta">Recurring runs</span>
-                  </button>
-                </div>
-              ) : null}
+
+              {!modeSectionCollapsed ? <p className="modeSubtitle">{headerModeCopy.subtitle}</p> : null}
+
+              <div className="modeActions">
+                <button
+                  type="button"
+                  className={`modeButton ${activeMode === "new" ? "active" : ""}`}
+                  onClick={() => openMode("new")}
+                >
+                  New task
+                </button>
+                <button
+                  type="button"
+                  className={`modeButton ${activeMode === "thread" ? "active" : ""}`}
+                  onClick={() => openMode("thread")}
+                >
+                  Threads
+                </button>
+                <button
+                  type="button"
+                  className={`modeButton ${activeMode === "workflow" ? "active" : ""}`}
+                  onClick={() => openMode("workflow")}
+                >
+                  Workflows
+                </button>
+                <button
+                  type="button"
+                  className={`modeButton ${activeMode === "schedule" ? "active" : ""}`}
+                  onClick={() => openMode("schedule")}
+                >
+                  Schedules
+                </button>
+              </div>
             </section>
 
-            <section className="railSection threadCollection">
-              <div className="railSectionHeader">
-                <div className="sectionHeading">
-                  <span>{showArchived ? "Archived threads" : "Thread ledger"}</span>
-                  <span className="sectionCount mono">
-                    {showArchived ? archivedTasks.length : activeTasks.length}
-                  </span>
+            <section className="threadSection">
+              <div className="threadSectionHeader">
+                <div>
+                  <div className="sectionLabel">Threads</div>
+                  <div className="threadSectionMeta">
+                    {loading ? "Loading..." : `${activeTasks.length} active`}
+                    {archivedTasks.length ? ` • ${archivedTasks.length} archived` : ""}
+                  </div>
+                </div>
+                <div className="threadSectionActions">
+                  <button type="button" className="miniButton" onClick={() => refresh()}>
+                    Refresh
+                  </button>
+                  <button type="button" className="miniButton" onClick={() => setServerModalOpen(true)}>
+                    Server
+                  </button>
                 </div>
               </div>
+
+              {loadError ? <div className="errorBanner">{loadError}</div> : null}
+
               <TaskList
-                items={visibleTasks}
+                tasks={visibleTasks}
                 selectedId={selectedId}
-                taskState={taskStateForServer}
-                hasMore={(showArchived ? archivedTasks : activeTasks).length > visibleTasks.length}
-                loadMoreLabel={`Load more ${showArchived ? "archived" : "threads"}`}
-                emptyLabel={showArchived ? "No archived threads" : "No threads on this server yet"}
                 onSelect={(id) => {
                   setSelectedId(id);
                   setComposeMode("thread");
@@ -1025,152 +1070,115 @@ export default function App() {
                 }}
                 onTogglePinned={togglePinned}
                 onToggleArchived={toggleArchived}
-                onLoadMore={() => setTaskVisibleCount((count) => count + TASK_PAGE_SIZE)}
-                onTerminate={onTerminate}
                 onDelete={onDelete}
                 onRerun={onRerun}
+                showArchived={showArchived}
               />
-            </section>
 
-            <div className="railFooter">
-              <button
-                type="button"
-                className={`modeButton modeButtonSecondary ${showArchived ? "active" : ""}`}
-                onClick={() => {
-                  setShowArchived((prev) => !prev);
-                  setSelectedId(null);
-                }}
-              >
-                <span className="modeButtonLabel">
-                  {showArchived ? `Show Active (${activeTasks.length})` : `Show Archived (${archivedTasks.length})`}
-                </span>
-                <span className="modeButtonMeta">Toggle archive scope</span>
-              </button>
-              <div className="railFootnote mono">
-                v0.1.0 · {loading ? "syncing" : "ready"} · {tasks.length} total threads
+              <div className="threadSectionFooter">
+                <button
+                  type="button"
+                  className="secondaryButton"
+                  onClick={() => setShowArchived((value) => !value)}
+                >
+                  {showArchived ? "Show active" : "Show archived"}
+                </button>
+                <button
+                  type="button"
+                  className="secondaryButton"
+                  disabled={taskVisibleCount >= (showArchived ? archivedTasks.length : activeTasks.length)}
+                  onClick={() => setTaskVisibleCount((value) => value + TASK_PAGE_SIZE)}
+                >
+                  Load more
+                </button>
               </div>
-            </div>
+            </section>
           </div>
         </aside>
 
-        <main className="mainPane">
-          <header className={`mainHeader ${headerCollapsed ? "collapsed" : ""}`}>
-            <div className="headerTopRow">
-              <div className="headerTitleGroup">
+        <main className="mainContent">
+          <div className={`mainHeader ${headerCollapsed ? "collapsed" : ""}`}>
+            <div className="mainHeaderTop">
+              <div>
+                <div className="mainEyebrow mono">{headerModeCopy.eyebrow}</div>
+                <h2 className="mainTitle">{headerModeCopy.title}</h2>
+                <p className="mainSubtitle">{headerModeCopy.subtitle}</p>
+              </div>
+              <div className="mainHeaderActions">
+                <button type="button" className="secondaryButton" onClick={() => setServerModalOpen(true)}>
+                  {currentServer?.name || "Server"}
+                </button>
                 <button
                   type="button"
-                  className="mobileRailButton"
-                  onClick={() => setRailOpen((prev) => !prev)}
+                  className="secondaryButton"
+                  onClick={() => setHeaderCollapsed((value) => !value)}
                 >
-                  Menu
+                  {headerCollapsed ? "Show details" : "Hide details"}
                 </button>
-                <div className="headerTitleCopy">
-                  <div className="headerEyebrow">
-                    {selectedTask && composeMode === "thread" ? "Live transcript" : headerModeCopy.eyebrow}
-                  </div>
-                  <div
-                    className={`headerGoal ${selectedTask && composeMode === "thread" ? "threadPrompt" : ""}`}
-                    title={selectedTask && composeMode === "thread" ? selectedTask.goal : headerModeCopy.title}
-                  >
-                    {selectedTask && composeMode === "thread" ? selectedTask.goal : headerModeCopy.title}
-                  </div>
-                  {!selectedTask || composeMode !== "thread" ? <div className="headerMeta">{headerModeCopy.subtitle}</div> : null}
-                </div>
-              </div>
-              <div className="headerActionColumn">
-                <div className="headerActions">
-                  <div className={`connectionStatus ${health?.ok ? "ready" : "notReady"}`}>
-                    <span className="statusDot" />
-                    {health?.ok ? "Server ready" : "Connection issue"}
-                  </div>
-                  <button type="button" className="iconButton" onClick={() => setServerModalOpen(true)}>
-                    Switch Server
-                  </button>
-                  <button
-                    type="button"
-                    className="summaryToggle headerToggleButton"
-                    aria-label={headerCollapsed ? "Expand header" : "Collapse header"}
-                    title={headerCollapsed ? "Expand header" : "Collapse header"}
-                    onClick={() => setHeaderCollapsed((prev) => !prev)}
-                  >
-                    <span
-                      className={`summaryToggleIcon ${headerCollapsed ? "collapsed" : "expanded"}`}
-                      aria-hidden="true"
-                    />
-                  </button>
-                </div>
-                {selectedTask && composeMode === "thread" ? (
-                  <div className="headerThreadMeta mono">
-                    {`Thread ${String(selectedTask.id).slice(0, 8)} · ${formatRelative(selectedTaskUpdatedAt)}`}
-                  </div>
-                ) : null}
               </div>
             </div>
 
-            {!headerCollapsed ? (
-              <div
-                className={`headerChipRow ${
-                  selectedTask && composeMode === "thread" ? "threadHeaderChipRow" : "overviewHeaderChipRow"
-                }`}
-              >
-                <div className="headerChip">
-                  <span className="headerChipLabel">Server</span>
-                  <span className="headerChipValue mono">{currentServer?.name || serverUrl}</span>
+            {activeMode === "thread" && selectedTask ? (
+              <div className="threadHeader">
+                <div className="threadHeaderMain">
+                  <div className="threadHeaderTitleRow">
+                    <div className="threadHeaderTitle">{selectedTask.goal}</div>
+                    <div className={`threadStatusBadge ${getStatusTone(effectiveStatus)}`}>
+                      {getStatusLabel(effectiveStatus)}
+                    </div>
+                  </div>
+                  <div className="threadHeaderMeta">
+                    <span className="mono">{selectedTask.id}</span>
+                    <span>•</span>
+                    <span>{formatTimestamp(selectedTask.startedAt)}</span>
+                    {selectedTask.workspace ? (
+                      <>
+                        <span>•</span>
+                        <span className="mono">{formatPathTail(selectedTask.workspace, 6)}</span>
+                      </>
+                    ) : null}
+                  </div>
                 </div>
-                {selectedTask && composeMode === "thread" ? (
-                  <>
-                    <div className="headerChip">
-                      <span className="headerChipLabel">Status</span>
-                      <span className={`statusPill headerStatusPill ${getStatusTone(effectiveStatus)}`}>
-                        {getStatusLabel(effectiveStatus)}
-                      </span>
-                    </div>
-                    <div className="headerChip">
-                      <span className="headerChipLabel">Workspace</span>
-                      <span className="headerChipValue headerPathValue mono" title={selectedTask.workspace || "none"}>
-                        {formatPathTail(selectedTask.workspace, 3)}
-                      </span>
-                    </div>
-                    <div className="headerChip">
-                      <span className="headerChipLabel">Updated</span>
-                      <span className="headerChipValue mono">{formatTimestamp(selectedTaskUpdatedAt)}</span>
-                    </div>
-                    <div className="headerChip">
-                      <span className="headerChipLabel">Approvals</span>
-                      <span className="headerChipValue mono">{pendingApprovals.length}</span>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="headerChip">
-                      <span className="headerChipLabel">Threads</span>
-                      <span className="headerChipValue mono">{activeTasks.length}</span>
-                    </div>
-                    <div className="headerChip">
-                      <span className="headerChipLabel">Archived</span>
-                      <span className="headerChipValue mono">{archivedTasks.length}</span>
-                    </div>
-                    <div className="headerChip">
-                      <span className="headerChipLabel">Timezone</span>
-                      <span className="headerChipValue mono">{Intl.DateTimeFormat().resolvedOptions().timeZone}</span>
-                    </div>
-                  </>
-                )}
+
+                <div className="threadHeaderActions">
+                  <button type="button" className="secondaryButton" onClick={() => refresh()}>
+                    Refresh
+                  </button>
+                  <button
+                    type="button"
+                    className="secondaryButton"
+                    disabled={sendLocked}
+                    onClick={() => {
+                      setComposeMode("new");
+                      setSelectedId(null);
+                    }}
+                  >
+                    New task
+                  </button>
+                  <button
+                    type="button"
+                    className="secondaryButton danger"
+                    disabled={!selectedTask || isThreadIdle(effectiveStatus)}
+                    onClick={() => selectedTask && onTerminate(selectedTask.id)}
+                  >
+                    Terminate
+                  </button>
+                </div>
               </div>
             ) : null}
-          </header>
+          </div>
 
-          <section className="mainBody">{renderMainContent()}</section>
+          <div className="mainBody">
+            {renderMainContent()}
 
-          {selectedTask && composeMode === "thread" ? (
-            <ThreadComposer
-              disabled={sendLocked}
-              onSend={sendNextPrompt}
-              workspace={selectedTask.workspace}
-              taskId={selectedTask.id}
-              status={effectiveStatus}
-            />
-          ) : null}
+            {activeMode === "thread" && selectedTask ? (
+              <ThreadComposer
+                disabled={sendLocked}
+                status={effectiveStatus}
+                onSend={sendNextPrompt}
+              />
+            ) : null}
+          </div>
         </main>
       </div>
     </>
