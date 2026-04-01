@@ -13,7 +13,7 @@ It is designed for operator-driven work: launch a task against a workspace, watc
 - Runs an iterative tool-calling loop until the task is completed, stalled, canceled, or reaches a configured step cap.
 - Exposes a local API for threads, live logs, approvals, workflows, schedules, health, and workspace browsing.
 - Ships a React UI and an Electron desktop app built from the same frontend.
-- Persists threads and schedules to JSON on disk so they survive server restarts.
+- Persists threads, schedules, and workflow sessions to JSON on disk so they survive server restarts.
 - Supports guided workflows that gather structured inputs before starting work.
 - Supports recurring automation for three targets: start a new prompt, continue an existing thread, or run a workflow on a cron cadence.
 - Works with multiple LLM backends: OpenAI, AWS Bedrock, Azure OpenAI, and Ollama.
@@ -26,6 +26,7 @@ ender/
 ├── src/        # API server, runtime loop, managers, tools, workflows
 ├── ui/         # React UI + Electron packaging
 ├── docs/       # Tutorials, references, architecture notes
+├── knowledge/  # Fast onboarding docs for future threads
 ├── threads/    # Persisted task snapshots
 ├── schedules/  # Persisted cron schedules
 ├── workflow-sessions/ # Persisted interactive workflow sessions
@@ -76,6 +77,16 @@ This starts:
 
 - API: [http://localhost:3000](http://localhost:3000)
 - UI: [http://localhost:5173](http://localhost:5173)
+
+## Knowledge Base for Future Threads
+
+Start here for fast repo onboarding:
+
+- [knowledge/README.md](knowledge/README.md)
+- [knowledge/quick-start-for-agents.md](knowledge/quick-start-for-agents.md)
+- [knowledge/change-playbooks.md](knowledge/change-playbooks.md)
+- [knowledge/glossary.md](knowledge/glossary.md)
+- [knowledge/troubleshooting.md](knowledge/troubleshooting.md)
 
 ### Supervised Self-Update Mode
 
@@ -147,7 +158,7 @@ The compose stack includes:
 
 - `Dockerfile.api` for the API/runtime
 - [`ui/Dockerfile`](ui/Dockerfile) for the frontend
-- bind mounts for `./threads`, `./workspace`, and `./schedules`
+- bind mounts for `./threads`, `./workspace`, `./schedules`, and `./workflow-sessions`
 
 Published ports:
 
@@ -325,9 +336,17 @@ Schedules:
 - `POST /schedules/:id/run`
 - `DELETE /schedules/:id`
 
+Self-update:
+
+- `GET /self-update/status`
+- `GET /self-update/operations`
+- `GET /self-update/operations/:id`
+
 ## Operational Notes
 
-- Thread snapshots are persisted to disk. Workflow sessions are not; they are held in memory by `WorkflowManager`.
+- Thread snapshots are persisted to disk in `threads/`.
+- Workflow sessions are persisted to disk in `workflow-sessions/` unless created in `scheduled_run` mode.
+- On server restart, tasks that were `running` or `awaiting_approval` are reloaded as `error` and annotated as interrupted.
 - `DELETE /tasks/:id` can optionally delete the task workspace if it is an eligible child workspace and not in use by another thread.
 - `git_push` and schedule deletion are approval-gated through the UI.
 - `browser_snapshot_page` requires Playwright plus a Chromium binary in the runtime environment.
@@ -338,6 +357,7 @@ Schedules:
 Start here:
 
 - [Documentation index](docs/README.md)
+- [Knowledge base index](knowledge/README.md)
 - [First task tutorial](docs/tutorials/first-task.md)
 - [Jira workflow tutorial](docs/tutorials/jira-workflow.md)
 - [Schedules tutorial](docs/tutorials/schedules.md)
@@ -362,7 +382,7 @@ Before publishing publicly, confirm:
 
 - `.env` is not committed
 - provider credentials are removed from local examples
-- `threads/`, `schedules/`, and `workspace/` do not contain sensitive data
+- `threads/`, `schedules/`, `workflow-sessions/`, and `workspace/` do not contain sensitive data
 - desktop packaging assets are the intended release icons
 
 ---
