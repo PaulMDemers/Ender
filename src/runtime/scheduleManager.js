@@ -2,6 +2,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { randomUUID } = require("node:crypto");
 const cron = require("node-cron");
+const { contractDefinitions, scheduleInputSchema } = require("../shared/contracts");
 
 class ScheduleManager {
   constructor({ config, taskManager, workflowManager }) {
@@ -195,75 +196,61 @@ class ScheduleManager {
     const cronExpr = String(input?.cron || "").trim();
     const timezone = String(input?.timezone || "").trim();
     const enabled = input?.enabled !== false;
-    const createdByTaskId = input?.createdByTaskId ? String(input.createdByTaskId) : null;
-    const target = input?.target;
+    const createdByTaskId = input?.createdByTaskId ? String(input.createdByTaskId).trim() : null;
+    const target = input?.target && typeof input.target === "object" ? input.target : null;
 
     if (!name) return { ok: false, error: "name_required", message: "name is required" };
     if (!cronExpr) return { ok: false, error: "cron_required", message: "cron is required" };
     if (!cron.validate(cronExpr)) {
       return { ok: false, error: "invalid_cron", message: "cron expression is invalid" };
     }
-    if (!target || typeof target !== "object") {
+    if (!target) {
       return { ok: false, error: "target_required", message: "target is required" };
     }
 
-    const kind = String(target.kind || "").trim();
+    const normalized = {
+      name,
+      cron: cronExpr,
+      timezone: timezone || null,
+      enabled,
+      createdByTaskId,
+      target: {
+        kind: String(target.kind || "").trim(),
+        prompt: target.prompt ? String(target.prompt).trim() : undefined,
+        workspace: target.workspace ? String(target.workspace).trim() : null,
+        threadId: target.threadId ? String(target.threadId).trim() : undefined,
+        workflowId: target.workflowId ? String(target.workflowId).trim() : undefined,
+        inputs: Array.isArray(target.inputs) ? target.inputs : []
+      }
+    };
+
+    const parsed = scheduleInputSchema.safeParse(normalized);
+    if (parsed.success) {
+      return { ok: true, value: parsed.data };
+    }
+
+    const kind = normalized.target.kind;
+    if (!contractDefinitions.scheduleTargetKinds.includes(kind)) {
+      return {
+        ok: false,
+        error: "invalid_target_kind",
+        message: `target.kind must be ${contractDefinitions.scheduleTargetKinds.join(", ")}`
+      };
+    }
     if (kind === "prompt") {
-      const prompt = String(target.prompt || "").trim();
-      if (!prompt) return { ok: false, error: "prompt_required", message: "target.prompt is required" };
-      return {
-        ok: true,
-        value: {
-          name,
-          cron: cronExpr,
-          timezone: timezone || null,
-          enabled,
-          createdByTaskId,
-          target: {
-            kind,
-            prompt,
-            workspace: target.workspace ? String(target.workspace).trim() : null
-          }
-        }
-      };
+      return { ok: false, error: "prompt_required", message: "target.prompt is required" };
     }
-
     if (kind === "thread") {
-      const threadId = String(target.threadId || "").trim();
-      const prompt = String(target.prompt || "").trim();
-      if (!threadId) return { ok: false, error: "thread_id_required", message: "target.threadId is required" };
-      if (!prompt) return { ok: false, error: "prompt_required", message: "target.prompt is required" };
-      return {
-        ok: true,
-        value: {
-          name,
-          cron: cronExpr,
-          timezone: timezone || null,
-          enabled,
-          createdByTaskId,
-          target: { kind, threadId, prompt }
-        }
-      };
+      if (!normalized.target.threadId) {
+        return { ok: false, error: "thread_id_required", message: "target.threadId is required" };
+      }
+      return { ok: false, error: "prompt_required", message: "target.prompt is required" };
     }
-
     if (kind === "workflow") {
-      const workflowId = String(target.workflowId || "").trim();
-      if (!workflowId) return { ok: false, error: "workflow_id_required", message: "target.workflowId is required" };
-      const inputs = Array.isArray(target.inputs) ? target.inputs : [];
-      return {
-        ok: true,
-        value: {
-          name,
-          cron: cronExpr,
-          timezone: timezone || null,
-          enabled,
-          createdByTaskId,
-          target: { kind, workflowId, inputs }
-        }
-      };
+      return { ok: false, error: "workflow_id_required", message: "target.workflowId is required" };
     }
 
-    return { ok: false, error: "invalid_target_kind", message: "target.kind must be prompt, thread, or workflow" };
+    return { ok: false, error: "target_invalid", message: "target is invalid" };
   }
 
   _serialize(schedule) {

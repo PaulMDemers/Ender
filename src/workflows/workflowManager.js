@@ -1,13 +1,19 @@
+// @ts-check
+
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { randomUUID } = require("node:crypto");
 const { getWorkflowDefinitions } = require("./index");
+const { workflowModeValues, workflowSessionSchema } = require("../shared/contracts");
 
 function cloneState(state) {
   return JSON.parse(JSON.stringify(state || {}));
 }
 
 class WorkflowManager {
+  /**
+   * @param {{ config?: { workflowSessionsDir?: string }, taskManager?: unknown, definitions?: Array<any> }} [options]
+   */
   constructor({ config, taskManager, definitions } = {}) {
     this.config = config;
     this.taskManager = taskManager;
@@ -37,7 +43,7 @@ class WorkflowManager {
   async createSession(workflowId, options = {}) {
     const workflow = this.definitions.get(workflowId);
     if (!workflow) return { ok: false, error: "not_found" };
-    const allowedModes = new Set(["interactive", "schedule_config", "scheduled_run"]);
+    const allowedModes = new Set(workflowModeValues);
     const requestedMode = String(options?.mode || "interactive");
     const mode = allowedModes.has(requestedMode) ? requestedMode : "interactive";
 
@@ -146,7 +152,7 @@ class WorkflowManager {
   }
 
   _serialize(session, workflow) {
-    return {
+    return workflowSessionSchema.parse({
       id: session.id,
       workflowId: workflow.id,
       workflowName: workflow.name,
@@ -160,7 +166,7 @@ class WorkflowManager {
       bootstrapError: session.state.bootstrapError || null,
       debug: Array.isArray(session.state.debug) ? session.state.debug : [],
       currentStep: workflow.getCurrentStep(session)
-    };
+    });
   }
 
   _sessionFile(sessionId) {

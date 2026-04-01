@@ -1,16 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { advanceWorkflowSession, createWorkflowSession, retreatWorkflowSession } from "../agentClient";
 import WorkflowStepRenderer from "./WorkflowStepRenderer";
+import contractDefinitions from "../../../shared/contracts.json";
+
+const [PROMPT_TARGET, THREAD_TARGET, WORKFLOW_TARGET] = contractDefinitions.scheduleTargetKinds;
 
 function buildTargetFromForm(kind, form, workflowInputs) {
-  if (kind === "prompt") {
+  if (kind === PROMPT_TARGET) {
     return {
       kind,
       prompt: String(form.prompt || "").trim(),
       workspace: String(form.workspace || "").trim() || null
     };
   }
-  if (kind === "thread") {
+  if (kind === THREAD_TARGET) {
     return {
       kind,
       threadId: String(form.threadId || "").trim(),
@@ -18,7 +21,7 @@ function buildTargetFromForm(kind, form, workflowInputs) {
     };
   }
   return {
-    kind: "workflow",
+    kind: WORKFLOW_TARGET,
     workflowId: String(form.workflowId || "").trim(),
     inputs: Array.isArray(workflowInputs) ? workflowInputs : []
   };
@@ -26,13 +29,13 @@ function buildTargetFromForm(kind, form, workflowInputs) {
 
 function targetSummary(schedule) {
   const target = schedule?.target || {};
-  if (target.kind === "prompt") {
+  if (target.kind === PROMPT_TARGET) {
     return `Start prompt${target.workspace ? ` @ ${target.workspace}` : ""}`;
   }
-  if (target.kind === "thread") {
+  if (target.kind === THREAD_TARGET) {
     return `Continue thread ${String(target.threadId || "").slice(0, 8)}`;
   }
-  if (target.kind === "workflow") {
+  if (target.kind === WORKFLOW_TARGET) {
     const inputCount = Array.isArray(target.inputs) ? target.inputs.length : 0;
     return `Run workflow ${target.workflowId}${inputCount ? ` · ${inputCount} inputs` : ""}`;
   }
@@ -74,7 +77,7 @@ export default function SchedulePanel({
   const [cronExpr, setCronExpr] = useState("0 9 * * 1-5");
   const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone || "");
   const [enabled, setEnabled] = useState(true);
-  const [targetKind, setTargetKind] = useState("prompt");
+  const [targetKind, setTargetKind] = useState(PROMPT_TARGET);
   const [prompt, setPrompt] = useState("");
   const [workspace, setWorkspace] = useState("");
   const [threadId, setThreadId] = useState("");
@@ -121,7 +124,7 @@ export default function SchedulePanel({
     setCronExpr("0 9 * * 1-5");
     setTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone || "");
     setEnabled(true);
-    setTargetKind("prompt");
+    setTargetKind(PROMPT_TARGET);
     setPrompt("");
     setWorkspace("");
     setThreadId("");
@@ -136,7 +139,7 @@ export default function SchedulePanel({
   useEffect(() => {
     let live = true;
 
-    if (targetKind !== "workflow" || !workflowId) {
+    if (targetKind !== WORKFLOW_TARGET || !workflowId) {
       setWorkflowSession(null);
       setWorkflowInputs([]);
       setWorkflowConfigError("");
@@ -184,13 +187,13 @@ export default function SchedulePanel({
     setTimezone(schedule.timezone || "");
     setEnabled(schedule.enabled !== false);
     const target = schedule.target || {};
-    setTargetKind(target.kind || "prompt");
+    setTargetKind(target.kind || PROMPT_TARGET);
     setPrompt(target.prompt || "");
     setWorkspace(target.workspace || "");
     setThreadId(target.threadId || "");
     setWorkflowId(target.workflowId || "");
     setWorkflowConfigError("");
-    if (target.kind === "workflow" && target.workflowId) {
+    if (target.kind === WORKFLOW_TARGET && target.workflowId) {
       queueWorkflowBootstrap(target.inputs || []);
     } else {
       resetWorkflowConfigState();
@@ -235,7 +238,7 @@ export default function SchedulePanel({
   const submit = async (event) => {
     event?.preventDefault?.();
 
-    if (targetKind === "workflow") {
+    if (targetKind === WORKFLOW_TARGET) {
       if (!workflowId) {
         setWorkflowConfigError("Choose a workflow to continue");
         return;
@@ -317,19 +320,19 @@ export default function SchedulePanel({
                   onChange={(event) => {
                     const nextKind = event.target.value;
                     setTargetKind(nextKind);
-                    if (nextKind !== "workflow") {
+                    if (nextKind !== WORKFLOW_TARGET) {
                       resetWorkflowConfigState();
                     }
                   }}
                 >
-                  <option value="prompt">Start new prompt</option>
-                  <option value="thread">Continue existing thread</option>
-                  <option value="workflow">Run workflow</option>
+                  <option value={PROMPT_TARGET}>Start new prompt</option>
+                  <option value={THREAD_TARGET}>Continue existing thread</option>
+                  <option value={WORKFLOW_TARGET}>Run workflow</option>
                 </select>
               </label>
             </div>
 
-            {targetKind === "prompt" ? (
+            {targetKind === PROMPT_TARGET ? (
               <>
                 <label className="workflowField">
                   <span className="workflowFieldLabel">Prompt</span>
@@ -342,7 +345,7 @@ export default function SchedulePanel({
               </>
             ) : null}
 
-            {targetKind === "thread" ? (
+            {targetKind === THREAD_TARGET ? (
               <>
                 <label className="workflowField">
                   <span className="workflowFieldLabel">Thread</span>
@@ -360,7 +363,7 @@ export default function SchedulePanel({
               </>
             ) : null}
 
-            {targetKind === "workflow" ? (
+            {targetKind === WORKFLOW_TARGET ? (
               <>
                 <label className="workflowField">
                   <span className="workflowFieldLabel">Workflow</span>

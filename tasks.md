@@ -18,7 +18,7 @@
 
 ## Group 3: Upgrades
 
-- [ ] 8. Share core API and workflow schemas between backend and UI.
-- [ ] 9. Improve package/tooling quality gates and package layout ergonomics.
-- [ ] 10. Begin a targeted TypeScript migration for the runtime surface.
-- [ ] Verify the group and create a checkpoint commit.
+- [x] 8. Share core API and workflow schemas between backend and UI.
+- [x] 9. Improve package/tooling quality gates and package layout ergonomics.
+- [x] 10. Begin a targeted TypeScript migration for the runtime surface.
+- [x] Verify the group and create a checkpoint commit.

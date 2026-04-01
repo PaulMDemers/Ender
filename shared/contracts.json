@@ -1,0 +1,5 @@
+{
+  "scheduleTargetKinds": ["prompt", "thread", "workflow"],
+  "workflowModes": ["interactive", "schedule_config", "scheduled_run"],
+  "workflowStepTypes": ["form", "select", "complete"]
+}

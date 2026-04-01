@@ -1,4 +1,7 @@
 import { useEffect, useState } from "react";
+import contractDefinitions from "../../../shared/contracts.json";
+
+const [FORM_STEP, SELECT_STEP, COMPLETE_STEP] = contractDefinitions.workflowStepTypes;
 
 function normalizeOptions(rawOptions) {
   if (!Array.isArray(rawOptions)) return [];
@@ -217,15 +220,15 @@ function StepSelect({ step, onSubmit, busy }) {
 }
 
 export default function WorkflowStepRenderer({ step, onSubmit, busy, submitLabel }) {
-  if (step?.type === "form") {
+  if (step?.type === FORM_STEP) {
     return <StepForm step={step} onSubmit={onSubmit} busy={busy} submitLabel={submitLabel} />;
   }
 
-  if (step?.type === "select") {
+  if (step?.type === SELECT_STEP) {
     return <StepSelect step={step} onSubmit={onSubmit} busy={busy} />;
   }
 
-  if (step?.type === "complete") {
+  if (step?.type === COMPLETE_STEP) {
     return <div className="emptyState">Workflow configuration complete.</div>;
   }
 

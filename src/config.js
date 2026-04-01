@@ -1,3 +1,5 @@
+// @ts-check
+
 const path = require("node:path");
 const os = require("node:os");
 const { z } = require("zod");

@@ -47,7 +47,7 @@ npm install
 cp .env.example .env
 ```
 
-Running `npm install` from the repository root now installs both the root project and the dependencies in [`ui/`](ui/) via the root `postinstall` hook.
+Running `npm install` from the repository root installs both the API/runtime and [`ui/`](ui/) through npm workspaces.
 
 ### Configure
 
@@ -76,6 +76,18 @@ This starts:
 
 - API: [http://localhost:3000](http://localhost:3000)
 - UI: [http://localhost:5173](http://localhost:5173)
+
+### Quality Gates
+
+```bash
+npm test
+npm run typecheck
+npm run verify
+```
+
+- `npm test` runs the backend regression suite.
+- `npm run typecheck` runs the targeted TypeScript check for the migrated runtime slice.
+- `npm run verify` runs tests, typecheck, backend syntax checks, and the UI production build.
 
 ## Desktop App
 
@@ -132,6 +144,12 @@ Published ports:
 - `AGENT_WORKFLOW_SESSIONS_DIR`: workflow session persistence directory. Default `./workflow-sessions`.
 - `AGENT_MAX_STEPS`: optional hard limit on model/tool loop iterations.
 - `AGENT_STALL_LIMIT`: repeated-iteration cutoff. Default `4`. Set `0` to disable.
+
+### Shared Contracts
+
+- Shared schedule/workflow contract enums live in [`shared/contracts.json`](shared/contracts.json).
+- Backend schema wrappers live in [`src/shared/contracts.js`](src/shared/contracts.js).
+- The UI imports the same contract definitions for workflow step and schedule target handling.
 
 ### Readiness Tips
 
