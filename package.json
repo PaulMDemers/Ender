@@ -14,12 +14,17 @@
     "dev:ui": "npm --workspace ui run dev",
     "start": "node src/server.js",
     "start:supervised": "node scripts/ender-supervisor.js",
+    "start:test:api": "node src/server.js",
+    "start:test:ui": "npm --workspace ui run dev -- --host 127.0.0.1 --port 4173",
     "build": "npm run build:ui",
     "build:ui": "npm --workspace ui run build",
     "test": "node --test tests/*.test.js",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:visual:update": "playwright test --update-snapshots",
     "typecheck": "tsc --project tsconfig.json",
     "check": "node --check src/server.js && node --check src/runtime/scheduleManager.js && node --check src/workflows/workflowManager.js && node --check src/shared/contracts.js && node --check src/selfUpdate/checkpoints.js && node --check src/selfUpdate/runner.js && node --check src/selfUpdate/manager.js && node --check src/tools/selfUpdateTools.js && node --check scripts/ender-supervisor.js",
-    "verify": "npm run test && npm run typecheck && npm run check && npm run build"
+    "verify": "npm run test && npm run typecheck && npm run check && npm run build && npm run test:e2e"
   },
   "engines": {
     "node": ">=20"
@@ -39,6 +44,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.0",
     "@types/node": "^24.6.1",
     "@vitejs/plugin-react": "^5.1.4",
     "typescript": "^5.9.2",

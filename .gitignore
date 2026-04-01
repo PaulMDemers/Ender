@@ -142,3 +142,6 @@ vite.config.ts.timestamp-*
 /threads
 /workspace
 .ender-supervisor/
+playwright-report/
+test-results/
+blob-report/
