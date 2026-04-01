@@ -10,6 +10,7 @@ class TaskManager {
   constructor(config) {
     this.config = config;
     this.scheduleManager = null;
+    this.selfUpdateManager = null;
     this.tasks = new Map();
     this.maxLogs = 5000;
     this.threadsDir = path.resolve(this.config.threadsDir || path.resolve(process.cwd(), "threads"));
@@ -27,6 +28,10 @@ class TaskManager {
 
   setScheduleManager(scheduleManager) {
     this.scheduleManager = scheduleManager || null;
+  }
+
+  setSelfUpdateManager(selfUpdateManager) {
+    this.selfUpdateManager = selfUpdateManager || null;
   }
 
   async listWorkspaces() {
@@ -569,7 +574,8 @@ class TaskManager {
           workspaceDir: task.workspace,
           taskId: task.id,
           scheduleManager: this.scheduleManager,
-          taskManager: this
+          taskManager: this,
+          selfUpdateManager: this.selfUpdateManager
         });
 
         if (task.deleted || task.status === "canceled" || task.status === "terminated") return;

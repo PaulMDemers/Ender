@@ -5,6 +5,7 @@ const { TaskManager } = require("./runtime/taskManager");
 const { ScheduleManager } = require("./runtime/scheduleManager");
 const { createApp } = require("./api/app");
 const { WorkflowManager } = require("./workflows/workflowManager");
+const { SelfUpdateManager } = require("./selfUpdate/manager");
 
 async function main() {
   const config = loadConfig(process.env);
@@ -13,9 +14,11 @@ async function main() {
   const workflowManager = new WorkflowManager({ config, taskManager });
   await workflowManager.init();
   const scheduleManager = new ScheduleManager({ config, taskManager, workflowManager });
+  const selfUpdateManager = new SelfUpdateManager(config);
   await scheduleManager.init();
   taskManager.setScheduleManager(scheduleManager);
-  const app = createApp(taskManager, workflowManager, scheduleManager, config);
+  taskManager.setSelfUpdateManager(selfUpdateManager);
+  const app = createApp(taskManager, workflowManager, scheduleManager, config, selfUpdateManager);
 
   app.listen(config.port, () => {
     console.log(`Ender server listening on http://localhost:${config.port}`);

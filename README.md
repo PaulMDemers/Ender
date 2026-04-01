@@ -77,6 +77,28 @@ This starts:
 - API: [http://localhost:3000](http://localhost:3000)
 - UI: [http://localhost:5173](http://localhost:5173)
 
+### Supervised Self-Update Mode
+
+To let Ender edit and safely restart its own repo, start the API under the external supervisor:
+
+```bash
+npm run start:supervised
+```
+
+This mode:
+
+- injects `ENDER_SUPERVISOR_URL` and `ENDER_SUPERVISOR_TOKEN` into the child server
+- enables self-update tools for tasks running against the Ender repo root
+- supports rollback checkpoints plus verification before promotion
+
+Recommended self-update flow:
+
+1. Launch a task with the Ender repo as the workspace.
+2. Call `self_update_checkpoint_create` before editing.
+3. Make the code changes.
+4. Call `self_update_apply` to run `npm run verify`, restart under supervision, and roll back on failure.
+5. After reconnect, inspect the result with `self_update_operations` or `GET /self-update/operations`.
+
 ### Quality Gates
 
 ```bash
@@ -142,8 +164,13 @@ Published ports:
 - `AGENT_THREADS_DIR`: thread persistence directory. Default `./threads`.
 - `AGENT_SCHEDULES_DIR`: schedule persistence directory. Default `./schedules`.
 - `AGENT_WORKFLOW_SESSIONS_DIR`: workflow session persistence directory. Default `./workflow-sessions`.
+- `AGENT_SELF_ROOT`: repo root allowed for self-update tools. Default current working directory.
 - `AGENT_MAX_STEPS`: optional hard limit on model/tool loop iterations.
 - `AGENT_STALL_LIMIT`: repeated-iteration cutoff. Default `4`. Set `0` to disable.
+- `AGENT_SELF_UPDATE_VERIFY`: verification command run by the supervisor before restart. Default `npm run verify`.
+- `AGENT_SELF_UPDATE_TIMEOUT_MS`: health-wait timeout after restart or rollback. Default `90000`.
+- `ENDER_SUPERVISOR_URL`: supervisor control URL injected when using `npm run start:supervised`.
+- `ENDER_SUPERVISOR_TOKEN`: supervisor auth token injected when using `npm run start:supervised`.
 
 ### Shared Contracts
 

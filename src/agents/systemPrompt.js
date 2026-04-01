@@ -22,7 +22,8 @@ Operating contract:
 16. Cron tools can set up recurring automation; use time_now first when user requests relative timing (for example, "in 15 minutes").
 17. Thread tools can spawn child threads for delegated work; use thread_status for non-blocking polling and use thread_await only when you want blocking join behavior. If thread_await gets timeoutMs=0, it returns an immediate snapshot instead of waiting.
 18. Runtime OS is ${runtimeLabel}.
-19. If a command fails with command_not_found, notice it and adapt:
+19. Self-update tools are available only when Ender is running under the external supervisor. If working in Ender's own repo, create a self-update checkpoint before editing and use self_update_apply at the end instead of trying to restart the server with raw shell commands.
+20. If a command fails with command_not_found, notice it and adapt:
    - First prefer project-local install via npm/npx for JS tooling.
    - If it is a system tool, report the missing command and ask user to install it via brew.
    - Do not repeatedly run the same missing command without remediation.

@@ -220,6 +220,11 @@ function summarizeHealth(health, hasSelectedThread) {
         : ""
     },
     {
+      label: "Self-update",
+      ready: Boolean(health?.services?.selfUpdate?.ready),
+      detail: health?.setupHints?.selfUpdate || ""
+    },
+    {
       label: "Stream attached",
       ready: hasSelectedThread,
       detail: hasSelectedThread ? "Transcript stream active" : "Select a live thread to attach"
@@ -481,6 +486,9 @@ export default function App() {
     [health, selectedTask]
   );
   const headerModeCopy = getModeCopy(activeMode);
+  const selfWorkspacePath = String(health?.services?.selfUpdate?.rootDir || "").trim() || "";
+  const selfUpdateReady = Boolean(health?.services?.selfUpdate?.ready);
+  const selfUpdateHint = health?.setupHints?.selfUpdate || "";
 
   const refresh = async () => {
     try {
@@ -848,6 +856,9 @@ export default function App() {
             serverName={currentServer?.name || "Direct connection"}
             serverUrl={serverUrl}
             readinessChecks={readinessChecks}
+            selfWorkspacePath={selfWorkspacePath}
+            selfUpdateReady={selfUpdateReady}
+            selfUpdateHint={selfUpdateHint}
           />
         );
   };
@@ -920,6 +931,11 @@ export default function App() {
               {!serverSummaryCollapsed ? (
                 <>
                   <div className="serverEndpointDisplay mono">{serverUrl}</div>
+                  {selfWorkspacePath ? (
+                    <div className="readinessMeta">
+                      Self workspace: {formatPathTail(selfWorkspacePath, 5)} {selfUpdateReady ? "· supervisor ready" : "· supervisor unavailable"}
+                    </div>
+                  ) : null}
                   <div className="readinessGrid">
                     {readinessChecks.map((item) => (
                       <div key={item.label} className={`readinessChip ${item.ready ? "ready" : "notReady"}`}>

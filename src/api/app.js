@@ -2,7 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const { getReadiness } = require("../health/readiness");
 
-function createApp(taskManager, workflowManager, scheduleManager, config) {
+function createApp(taskManager, workflowManager, scheduleManager, config, selfUpdateManager = null) {
   const app = express();
   app.use(cors());
   app.use(express.json());
@@ -39,6 +39,42 @@ function createApp(taskManager, workflowManager, scheduleManager, config) {
 
   app.get("/schedules", (_req, res) => {
     res.json({ items: scheduleManager.list() });
+  });
+
+  app.get("/self-update/status", async (_req, res) => {
+    if (!selfUpdateManager) {
+      return res.status(503).json({
+        ok: false,
+        error: "self_update_not_configured",
+        message: "Self-update supervisor is not configured."
+      });
+    }
+    const result = await selfUpdateManager.status();
+    return res.status(result.ok ? 200 : 503).json(result);
+  });
+
+  app.get("/self-update/operations", async (_req, res) => {
+    if (!selfUpdateManager) {
+      return res.status(503).json({
+        ok: false,
+        error: "self_update_not_configured",
+        message: "Self-update supervisor is not configured."
+      });
+    }
+    const result = await selfUpdateManager.listOperations();
+    return res.status(result.ok ? 200 : 503).json(result);
+  });
+
+  app.get("/self-update/operations/:id", async (req, res) => {
+    if (!selfUpdateManager) {
+      return res.status(503).json({
+        ok: false,
+        error: "self_update_not_configured",
+        message: "Self-update supervisor is not configured."
+      });
+    }
+    const result = await selfUpdateManager.getOperation(req.params.id);
+    return res.status(result.ok ? 200 : 404).json(result);
   });
 
   app.post("/schedules", async (req, res) => {

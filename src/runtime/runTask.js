@@ -14,10 +14,11 @@ const { createCronTools } = require("../tools/cronTools");
 const { createThreadTools } = require("../tools/threadTools");
 const { createConfluenceTools } = require("../tools/confluenceTools");
 const { createGoogleDriveTools } = require("../tools/googleDriveTools");
+const { createSelfUpdateTools } = require("../tools/selfUpdateTools");
 const { runAgentLoop } = require("./runAgentLoop");
 const { SYSTEM_PROMPT } = require("../agents/systemPrompt");
 
-async function runTask({ goal, thread, config, onLog, requestApproval, workspaceDir, taskId, scheduleManager, taskManager }) {
+async function runTask({ goal, thread, config, onLog, requestApproval, workspaceDir, taskId, scheduleManager, taskManager, selfUpdateManager }) {
   const activeWorkdir = workspaceDir || config.workdir;
   await fs.mkdir(activeWorkdir, { recursive: true });
 
@@ -36,6 +37,7 @@ async function runTask({ goal, thread, config, onLog, requestApproval, workspace
     ...createEmailTools(config.email, { requestApproval, onLog }),
     ...(scheduleManager ? createCronTools(scheduleManager, { taskId, requestApproval, onLog }) : []),
     ...(taskManager ? createThreadTools(taskManager, { taskId, onLog }) : []),
+    ...(selfUpdateManager ? createSelfUpdateTools(selfUpdateManager, { requestApproval, onLog, activeWorkdir }) : []),
     createExecTool(activeWorkdir, { requestApproval, onLog }),
     ...createLedgerTools(ledger)
   ];

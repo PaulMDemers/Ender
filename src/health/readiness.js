@@ -151,6 +151,20 @@ function getEmailReadiness(config) {
   };
 }
 
+function getSelfUpdateReadiness(config) {
+  const missing = [];
+  if (!config.selfUpdate?.rootDir) missing.push("AGENT_SELF_ROOT");
+  if (!config.selfUpdate?.supervisorUrl) missing.push("ENDER_SUPERVISOR_URL");
+  if (!config.selfUpdate?.supervisorToken) missing.push("ENDER_SUPERVISOR_TOKEN");
+
+  return {
+    ready: missing.length === 0,
+    missing,
+    rootDir: config.selfUpdate?.rootDir || null,
+    supervisorUrl: config.selfUpdate?.supervisorUrl || null
+  };
+}
+
 function getReadiness(config) {
   const llm = getBackendReadiness(config);
   const jira = getJiraReadiness(config);
@@ -159,6 +173,7 @@ function getReadiness(config) {
   const googleDrive = getGoogleDriveReadiness(config);
   const browserCapture = getBrowserCaptureReadiness();
   const email = getEmailReadiness(config);
+  const selfUpdate = getSelfUpdateReadiness(config);
 
   return {
     ok: true,
@@ -176,7 +191,8 @@ function getReadiness(config) {
       confluence,
       googleDrive,
       browserCapture,
-      email
+      email,
+      selfUpdate
     },
     workflows: {
       jira_to_repo_task: {
@@ -191,7 +207,8 @@ function getReadiness(config) {
       llm: llm.ready ? "" : "Add the missing backend variables to .env and restart the server.",
       github: github.ready ? "" : "Set GITHUB_TOKEN to enable private GitHub access and PR features.",
       jira: jira.ready ? "" : "Set JIRA_BASE_URL, JIRA_EMAIL, and JIRA_API_TOKEN to enable Jira workflows.",
-      browserCapture: browserCapture.ready ? "" : browserCapture.detail
+      browserCapture: browserCapture.ready ? "" : browserCapture.detail,
+      selfUpdate: selfUpdate.ready ? "" : "Run Ender under scripts/ender-supervisor.js to enable rollback-safe self updates."
     }
   };
 }

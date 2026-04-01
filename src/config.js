@@ -12,8 +12,13 @@ const schema = z.object({
   AGENT_THREADS_DIR: z.string().optional(),
   AGENT_SCHEDULES_DIR: z.string().optional(),
   AGENT_WORKFLOW_SESSIONS_DIR: z.string().optional(),
+  AGENT_SELF_ROOT: z.string().optional(),
   AGENT_MAX_STEPS: z.string().optional(),
   AGENT_STALL_LIMIT: z.string().optional(),
+  ENDER_SUPERVISOR_URL: z.string().optional(),
+  ENDER_SUPERVISOR_TOKEN: z.string().optional(),
+  AGENT_SELF_UPDATE_VERIFY: z.string().optional(),
+  AGENT_SELF_UPDATE_TIMEOUT_MS: z.string().optional(),
   LLM_BACKEND: z.enum(["openai", "bedrock", "azure", "ollama"]).default("openai"),
 
   OPENAI_API_KEY: z.string().optional(),
@@ -90,6 +95,7 @@ function loadConfig(env = process.env) {
   const workflowSessionsDir = path.resolve(
     parsed.AGENT_WORKFLOW_SESSIONS_DIR || path.resolve(process.cwd(), "workflow-sessions")
   );
+  const selfRoot = path.resolve(parsed.AGENT_SELF_ROOT || process.cwd());
   const maxStepsRaw = String(parsed.AGENT_MAX_STEPS || "").trim();
   let maxSteps = null;
   if (maxStepsRaw) {
@@ -110,6 +116,16 @@ function loadConfig(env = process.env) {
     stallLimit = Math.floor(n);
   }
 
+  const selfUpdateTimeoutRaw = String(parsed.AGENT_SELF_UPDATE_TIMEOUT_MS || "").trim();
+  let selfUpdateTimeoutMs = 90_000;
+  if (selfUpdateTimeoutRaw) {
+    const n = Number(selfUpdateTimeoutRaw);
+    if (!Number.isFinite(n) || n <= 0) {
+      throw new Error("AGENT_SELF_UPDATE_TIMEOUT_MS must be a positive number when set");
+    }
+    selfUpdateTimeoutMs = Math.floor(n);
+  }
+
   return {
     port: Number(parsed.PORT || 3000),
     maxSteps,
@@ -122,6 +138,14 @@ function loadConfig(env = process.env) {
     threadsDir,
     schedulesDir,
     workflowSessionsDir,
+    selfRoot,
+    selfUpdate: {
+      rootDir: selfRoot,
+      supervisorUrl: parsed.ENDER_SUPERVISOR_URL ? String(parsed.ENDER_SUPERVISOR_URL).trim() : null,
+      supervisorToken: parsed.ENDER_SUPERVISOR_TOKEN ? String(parsed.ENDER_SUPERVISOR_TOKEN).trim() : null,
+      verifyCommand: String(parsed.AGENT_SELF_UPDATE_VERIFY || "npm run verify").trim(),
+      timeoutMs: selfUpdateTimeoutMs
+    },
 
     openai: {
       apiKey: parsed.OPENAI_API_KEY,

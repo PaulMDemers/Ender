@@ -1,7 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { listDirectories, startTask } from "../agentClient";
 
-export default function NewTaskForm({ onStarted, serverName, serverUrl, readinessChecks }) {
+export default function NewTaskForm({
+  onStarted,
+  serverName,
+  serverUrl,
+  readinessChecks,
+  selfWorkspacePath,
+  selfUpdateReady,
+  selfUpdateHint
+}) {
   const [goal, setGoal] = useState("");
   const [workspace, setWorkspace] = useState("");
   const [busy, setBusy] = useState(false);
@@ -112,6 +120,24 @@ export default function NewTaskForm({ onStarted, serverName, serverUrl, readines
                   {pickerOpen ? "Close picker" : "Browse"}
                 </button>
               </div>
+              {selfWorkspacePath ? (
+                <div className="workflowActionBar">
+                  <button
+                    type="button"
+                    className="secondaryButton"
+                    onClick={() => setWorkspace(selfWorkspacePath)}
+                  >
+                    Use Ender repo
+                  </button>
+                </div>
+              ) : null}
+              {selfWorkspacePath ? (
+                <div className="panelNote">
+                  {selfUpdateReady
+                    ? "Supervised self-update is available for tasks launched against the Ender repo workspace."
+                    : selfUpdateHint || "The Ender repo workspace is available, but supervised self-update is not ready on this server."}
+                </div>
+              ) : null}
             </label>
 
             <div className="launchField">
