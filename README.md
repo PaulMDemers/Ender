@@ -88,6 +88,8 @@ Start here for fast repo onboarding:
 - [knowledge/glossary.md](knowledge/glossary.md)
 - [knowledge/troubleshooting.md](knowledge/troubleshooting.md)
 
+Ender’s system prompt also instructs future threads to check repo-local guidance early, especially `knowledge/` and common files like `README.md`, `docs/README.md`, `tasks.md`, `TASKS.md`, `soul.md`, `SOUL.md`, `AGENTS.md`, `agent.md`, `instructions.md`, `notes.md`, and `context.md` when relevant.
+
 ### Supervised Self-Update Mode
 
 To let Ender edit and safely restart its own repo, start the API under the external supervisor:
@@ -178,6 +180,8 @@ Published ports:
 - `AGENT_SELF_ROOT`: repo root allowed for self-update tools. Default current working directory.
 - `AGENT_MAX_STEPS`: optional hard limit on model/tool loop iterations.
 - `AGENT_STALL_LIMIT`: repeated-iteration cutoff. Default `4`. Set `0` to disable.
+- `AGENT_AUTO_RESTART_INTERRUPTED_THREADS`: when `true`, interrupted `running` or `awaiting_approval` threads auto-restart after server boot for all workspaces. Default `false`.
+- Ender self-root threads opt into interrupted-thread auto-restart by default even when `AGENT_AUTO_RESTART_INTERRUPTED_THREADS` is unset or `false`.
 - `AGENT_SELF_UPDATE_VERIFY`: verification command run by the supervisor before restart. Default `npm run verify`.
 - `AGENT_SELF_UPDATE_TIMEOUT_MS`: health-wait timeout after restart or rollback. Default `90000`.
 - `ENDER_SUPERVISOR_URL`: supervisor control URL injected when using `npm run start:supervised`.
@@ -346,7 +350,8 @@ Self-update:
 
 - Thread snapshots are persisted to disk in `threads/`.
 - Workflow sessions are persisted to disk in `workflow-sessions/` unless created in `scheduled_run` mode.
-- On server restart, tasks that were `running` or `awaiting_approval` are reloaded as `error` and annotated as interrupted.
+- On server restart, tasks that were `running` or `awaiting_approval` are either reloaded as `error` and annotated as interrupted, or auto-restarted if the task or config opted into restart behavior.
+- Ender self-root threads auto-restart on interruption by default.
 - `DELETE /tasks/:id` can optionally delete the task workspace if it is an eligible child workspace and not in use by another thread.
 - `git_push` and schedule deletion are approval-gated through the UI.
 - `browser_snapshot_page` requires Playwright plus a Chromium binary in the runtime environment.
