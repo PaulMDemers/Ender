@@ -137,6 +137,10 @@ export function createWorkflowSession(id, options = {}) {
   });
 }
 
+export function getWorkflowSession(id) {
+  return request(`/workflow-sessions/${id}`);
+}
+
 export function advanceWorkflowSession(id, input) {
   return request(`/workflow-sessions/${id}/advance`, {
     method: "POST",

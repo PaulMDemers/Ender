@@ -87,7 +87,6 @@ This is why schedulable workflows need to behave well in both modes:
 
 ## Current limitations
 
-- Workflow sessions are in-memory only
 - Built-in workflows are registered statically in `src/workflows/index.js`
+- Scheduled workflow runs intentionally stay ephemeral even though interactive sessions persist to disk
 - The workflow renderer supports a narrow, intentionally simple UI schema
-

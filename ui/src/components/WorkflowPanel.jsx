@@ -63,6 +63,9 @@ export default function WorkflowPanel({
             </div>
           </div>
         ) : null}
+        {session?.resumedFromDisk ? (
+          <div className="emptyState">Resumed a saved workflow session from disk after reconnecting to the server.</div>
+        ) : null}
       </section>
 
       <section className="consolePanel workflowConsole">

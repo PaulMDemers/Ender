@@ -1,0 +1,224 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs/promises");
+const os = require("node:os");
+const path = require("node:path");
+
+const { WorkflowManager } = require("../src/workflows/workflowManager");
+const { ScheduleManager } = require("../src/runtime/scheduleManager");
+const { TaskManager } = require("../src/runtime/taskManager");
+
+async function makeTempDir() {
+  return fs.mkdtemp(path.join(os.tmpdir(), "ender-group2-"));
+}
+
+function createTestWorkflow() {
+  return {
+    id: "test_workflow",
+    name: "Test Workflow",
+    description: "A workflow used for persistence coverage.",
+    async createInitialState() {
+      return {
+        stage: "form",
+        values: {},
+        debug: []
+      };
+    },
+    getCurrentStep(session) {
+      if (session.state.stage === "complete") {
+        return {
+          id: "complete",
+          type: "complete",
+          title: "Complete",
+          description: "Workflow complete"
+        };
+      }
+
+      return {
+        id: "form",
+        type: "form",
+        title: "Enter value",
+        description: "Provide a test value",
+        fields: [
+          {
+            id: "value",
+            label: "Value",
+            type: "text",
+            required: true
+          }
+        ]
+      };
+    },
+    async advance(session, input) {
+      session.state.values = {
+        ...(session.state.values || {}),
+        value: String(input.value || "").trim()
+      };
+      session.state.stage = "complete";
+      session.status = "completed";
+      return { ok: true };
+    }
+  };
+}
+
+test("WorkflowManager persists interactive sessions and reloads them after restart", async (t) => {
+  const root = await makeTempDir();
+  t.after(async () => {
+    await fs.rm(root, { recursive: true, force: true });
+  });
+
+  const config = { workflowSessionsDir: path.join(root, "workflow-sessions") };
+  const definitions = [createTestWorkflow()];
+
+  const manager = new WorkflowManager({ config, taskManager: {}, definitions });
+  await manager.init();
+  const created = await manager.createSession("test_workflow");
+  assert.equal(created.ok, true);
+
+  const advanced = await manager.advanceSession(created.session.id, { value: "saved progress" });
+  assert.equal(advanced.ok, true);
+
+  const reloaded = new WorkflowManager({ config, taskManager: {}, definitions });
+  await reloaded.init();
+  const session = reloaded.getSession(created.session.id);
+
+  assert.ok(session);
+  assert.equal(session.resumedFromDisk, true);
+  assert.equal(session.currentStep.type, "complete");
+});
+
+test("WorkflowManager does not persist scheduled_run sessions", async (t) => {
+  const root = await makeTempDir();
+  t.after(async () => {
+    await fs.rm(root, { recursive: true, force: true });
+  });
+
+  const config = { workflowSessionsDir: path.join(root, "workflow-sessions") };
+  const definitions = [createTestWorkflow()];
+
+  const manager = new WorkflowManager({ config, taskManager: {}, definitions });
+  await manager.init();
+  const created = await manager.createSession("test_workflow", { mode: "scheduled_run" });
+  assert.equal(created.ok, true);
+
+  const files = await fs.readdir(config.workflowSessionsDir);
+  assert.deepEqual(files, []);
+});
+
+test("ScheduleManager persists run status for prompt schedules", async (t) => {
+  const root = await makeTempDir();
+  t.after(async () => {
+    await fs.rm(root, { recursive: true, force: true });
+  });
+
+  const started = [];
+  const manager = new ScheduleManager({
+    config: { schedulesDir: path.join(root, "schedules") },
+    taskManager: {
+      start(prompt, workspace) {
+        started.push({ prompt, workspace });
+        return { ok: true, id: "task-1" };
+      }
+    },
+    workflowManager: {}
+  });
+
+  await manager.init();
+  const created = await manager.create({
+    name: "Morning prompt",
+    cron: "0 9 * * *",
+    enabled: false,
+    target: {
+      kind: "prompt",
+      prompt: "Run the daily summary",
+      workspace: "/tmp/example"
+    }
+  });
+  assert.equal(created.ok, true);
+
+  const runNow = await manager.runNow(created.schedule.id);
+  assert.equal(runNow.ok, true);
+  assert.equal(started.length, 1);
+  assert.equal(started[0].prompt, "Run the daily summary");
+
+  const reloaded = new ScheduleManager({
+    config: { schedulesDir: path.join(root, "schedules") },
+    taskManager: { start() { return { ok: true, id: "task-1" }; } },
+    workflowManager: {}
+  });
+  await reloaded.init();
+  const schedule = reloaded.get(created.schedule.id);
+  assert.ok(schedule);
+  assert.equal(schedule.lastRunStatus, "ok");
+});
+
+test("TaskManager marks interrupted running tasks as error on restart", async (t) => {
+  const root = await makeTempDir();
+  const threadsDir = path.join(root, "threads");
+  t.after(async () => {
+    await fs.rm(root, { recursive: true, force: true });
+  });
+
+  await fs.mkdir(threadsDir, { recursive: true });
+  const taskId = "task-restart";
+  await fs.writeFile(path.join(threadsDir, `${taskId}.json`), JSON.stringify({
+    id: taskId,
+    goal: "Resume me",
+    status: "running",
+    startedAt: new Date().toISOString(),
+    logs: [],
+    result: null,
+    runCount: 1,
+    thread: [{ role: "user", content: "Resume me" }],
+    workspace: root,
+    workspaceLabel: root,
+    pendingApprovals: []
+  }, null, 2));
+
+  const manager = new TaskManager({
+    workdir: root,
+    workspaceBase: root,
+    threadsDir
+  });
+  await manager.init();
+
+  const task = manager.get(taskId);
+  assert.ok(task);
+  assert.equal(task.status, "error");
+
+  const logs = manager.getLogs(taskId, 0);
+  assert.ok(logs.entries.some((entry) => String(entry.data).includes("server restart")));
+});
+
+test("TaskManager approval flow resumes the task after approval", async (t) => {
+  const root = await makeTempDir();
+  t.after(async () => {
+    await fs.rm(root, { recursive: true, force: true });
+  });
+
+  const manager = new TaskManager({
+    workdir: root,
+    workspaceBase: root,
+    threadsDir: path.join(root, "threads")
+  });
+  manager._runThread = () => {};
+
+  const started = manager.start("Need approval");
+  assert.equal(started.ok, true);
+  const task = manager.tasks.get(started.id);
+
+  const approvalPromise = manager._requestApproval(task, {
+    type: "test",
+    title: "Approve test action",
+    description: "Approve?"
+  });
+  const [approvalId] = [...task.pendingApprovals.keys()];
+
+  assert.equal(task.status, "awaiting_approval");
+  assert.ok(approvalId);
+
+  const resolved = manager.resolveApproval(task.id, approvalId, true);
+  assert.equal(resolved.ok, true);
+  assert.equal(await approvalPromise, true);
+  assert.equal(task.status, "running");
+});

@@ -11,10 +11,10 @@
 
 ## Group 2: Recommendations
 
-- [ ] 5. Add broader automated regression coverage for task, workflow, schedule, approval, and restart flows.
-- [ ] 6. Persist workflow sessions across restarts and surface resumed state cleanly.
-- [ ] 7. Tighten readiness and setup guidance in the API, UI, and docs.
-- [ ] Verify the group and create a checkpoint commit.
+- [x] 5. Add broader automated regression coverage for task, workflow, schedule, approval, and restart flows.
+- [x] 6. Persist workflow sessions across restarts and surface resumed state cleanly.
+- [x] 7. Tighten readiness and setup guidance in the API, UI, and docs.
+- [x] Verify the group and create a checkpoint commit.
 
 ## Group 3: Upgrades
 

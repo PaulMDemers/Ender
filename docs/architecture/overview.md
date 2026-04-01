@@ -80,10 +80,10 @@ Persisted:
 
 - threads
 - schedules
+- workflow sessions
 
 In-memory only:
 
-- workflow sessions
 - live SSE subscribers
 - active approval resolvers
 
@@ -91,4 +91,3 @@ In-memory only:
 
 - [Runtime loop and execution lifecycle](runtime-loop.md)
 - [Workflows and schedules](workflows-and-schedules.md)
-

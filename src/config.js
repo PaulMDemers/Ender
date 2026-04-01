@@ -9,6 +9,7 @@ const schema = z.object({
   AGENT_WORKSPACE_BASE: z.string().optional(),
   AGENT_THREADS_DIR: z.string().optional(),
   AGENT_SCHEDULES_DIR: z.string().optional(),
+  AGENT_WORKFLOW_SESSIONS_DIR: z.string().optional(),
   AGENT_MAX_STEPS: z.string().optional(),
   AGENT_STALL_LIMIT: z.string().optional(),
   LLM_BACKEND: z.enum(["openai", "bedrock", "azure", "ollama"]).default("openai"),
@@ -84,6 +85,9 @@ function loadConfig(env = process.env) {
   const workspaceBase = path.resolve(parsed.AGENT_WORKSPACE_BASE || path.resolve(process.cwd(), ".."));
   const threadsDir = path.resolve(parsed.AGENT_THREADS_DIR || path.resolve(process.cwd(), "threads"));
   const schedulesDir = path.resolve(parsed.AGENT_SCHEDULES_DIR || path.resolve(process.cwd(), "schedules"));
+  const workflowSessionsDir = path.resolve(
+    parsed.AGENT_WORKFLOW_SESSIONS_DIR || path.resolve(process.cwd(), "workflow-sessions")
+  );
   const maxStepsRaw = String(parsed.AGENT_MAX_STEPS || "").trim();
   let maxSteps = null;
   if (maxStepsRaw) {
@@ -115,6 +119,7 @@ function loadConfig(env = process.env) {
     workspaceBase,
     threadsDir,
     schedulesDir,
+    workflowSessionsDir,
 
     openai: {
       apiKey: parsed.OPENAI_API_KEY,

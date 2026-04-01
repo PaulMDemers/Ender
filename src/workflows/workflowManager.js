@@ -1,3 +1,5 @@
+const fs = require("node:fs/promises");
+const path = require("node:path");
 const { randomUUID } = require("node:crypto");
 const { getWorkflowDefinitions } = require("./index");
 
@@ -6,11 +8,21 @@ function cloneState(state) {
 }
 
 class WorkflowManager {
-  constructor({ config, taskManager }) {
+  constructor({ config, taskManager, definitions } = {}) {
     this.config = config;
     this.taskManager = taskManager;
-    this.definitions = new Map(getWorkflowDefinitions().map((workflow) => [workflow.id, workflow]));
+    const sourceDefinitions = Array.isArray(definitions) && definitions.length ? definitions : getWorkflowDefinitions();
+    this.definitions = new Map(sourceDefinitions.map((workflow) => [workflow.id, workflow]));
     this.sessions = new Map();
+    this.sessionsDir = path.resolve(
+      this.config?.workflowSessionsDir || path.resolve(process.cwd(), "workflow-sessions")
+    );
+    this._persistQueue = Promise.resolve();
+  }
+
+  async init() {
+    await fs.mkdir(this.sessionsDir, { recursive: true });
+    await this._loadPersistedSessions();
   }
 
   list() {
@@ -34,12 +46,15 @@ class WorkflowManager {
       workflowId,
       mode,
       status: "active",
+      shouldPersist: mode !== "scheduled_run",
+      resumedFromDisk: false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       history: [],
       state: await workflow.createInitialState({}, { config: this.config, taskManager: this.taskManager })
     };
     this.sessions.set(session.id, session);
+    await this._persistSession(session);
     return { ok: true, session: this._serialize(session, workflow) };
   }
 
@@ -69,6 +84,7 @@ class WorkflowManager {
 
     session.history.push(previousState);
     session.updatedAt = new Date().toISOString();
+    await this._persistSession(session);
     return {
       ok: true,
       session: this._serialize(session, workflow),
@@ -125,6 +141,7 @@ class WorkflowManager {
 
     session.state = session.history.pop();
     session.updatedAt = new Date().toISOString();
+    this._persistSession(session).catch(() => {});
     return { ok: true, session: this._serialize(session, workflow) };
   }
 
@@ -138,11 +155,81 @@ class WorkflowManager {
       updatedAt: session.updatedAt,
       startedTaskId: session.state.startedTaskId || null,
       mode: session.mode || "interactive",
+      resumedFromDisk: Boolean(session.resumedFromDisk),
       canGoBack: !session.state.startedTaskId && session.history.length > 0,
       bootstrapError: session.state.bootstrapError || null,
       debug: Array.isArray(session.state.debug) ? session.state.debug : [],
       currentStep: workflow.getCurrentStep(session)
     };
+  }
+
+  _sessionFile(sessionId) {
+    return path.join(this.sessionsDir, `${sessionId}.json`);
+  }
+
+  _serializeForDisk(session) {
+    return {
+      id: session.id,
+      workflowId: session.workflowId,
+      mode: session.mode || "interactive",
+      status: session.status || "active",
+      shouldPersist: session.shouldPersist !== false,
+      createdAt: session.createdAt,
+      updatedAt: session.updatedAt,
+      history: Array.isArray(session.history) ? session.history : [],
+      state: session.state || {}
+    };
+  }
+
+  _hydrateSession(data) {
+    return {
+      id: String(data.id),
+      workflowId: String(data.workflowId),
+      mode: String(data.mode || "interactive"),
+      status: String(data.status || "active"),
+      shouldPersist: data.shouldPersist !== false,
+      resumedFromDisk: true,
+      createdAt: data.createdAt || new Date().toISOString(),
+      updatedAt: data.updatedAt || new Date().toISOString(),
+      history: Array.isArray(data.history) ? data.history : [],
+      state: data.state && typeof data.state === "object" ? data.state : {}
+    };
+  }
+
+  async _loadPersistedSessions() {
+    const entries = await fs.readdir(this.sessionsDir, { withFileTypes: true });
+    const files = entries.filter((entry) => entry.isFile() && entry.name.endsWith(".json"));
+
+    for (const file of files) {
+      const target = path.join(this.sessionsDir, file.name);
+      try {
+        const raw = await fs.readFile(target, "utf8");
+        const data = JSON.parse(raw);
+        if (!data?.id || !data?.workflowId) continue;
+        if (!this.definitions.has(String(data.workflowId))) continue;
+        const session = this._hydrateSession(data);
+        this.sessions.set(session.id, session);
+      } catch (err) {
+        console.warn(`Failed to load workflow session ${target}: ${err.message || String(err)}`);
+      }
+    }
+  }
+
+  async _persistSession(session) {
+    if (!session?.shouldPersist) return;
+
+    const snapshot = JSON.stringify(this._serializeForDisk(session), null, 2);
+    const target = this._sessionFile(session.id);
+    const temp = `${target}.tmp`;
+
+    const writeSession = async () => {
+      await fs.mkdir(this.sessionsDir, { recursive: true });
+      await fs.writeFile(temp, snapshot, "utf8");
+      await fs.rename(temp, target);
+    };
+
+    this._persistQueue = this._persistQueue.catch(() => {}).then(writeSession);
+    return this._persistQueue;
   }
 }
 

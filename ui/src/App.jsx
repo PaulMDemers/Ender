@@ -8,6 +8,7 @@ import {
   deleteTaskWithOptions,
   getApiBase,
   getHealth,
+  getWorkflowSession,
   listSchedules,
   listTasks,
   listWorkflows,
@@ -34,6 +35,7 @@ const logoIcon = "/icons/icon-rounded-master.png";
 const SAVED_SERVERS_KEY = "ender_saved_servers";
 const TASK_UI_STATE_KEY = "ender_task_ui_state";
 const RAIL_COLLAPSED_KEY = "ender_rail_collapsed";
+const WORKFLOW_SESSION_KEY = "ender_workflow_sessions";
 const TASK_PAGE_SIZE = 12;
 
 function compareTasksByNewest(a, b) {
@@ -82,6 +84,26 @@ function loadRailCollapsed() {
   } catch {
     return false;
   }
+}
+
+function loadWorkflowSessionIds() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(WORKFLOW_SESSION_KEY) || "{}");
+    return raw && typeof raw === "object" ? raw : {};
+  } catch {
+    return {};
+  }
+}
+
+function getSavedWorkflowSessionId(serverUrl) {
+  return String(loadWorkflowSessionIds()[serverUrl] || "").trim();
+}
+
+function saveWorkflowSessionId(serverUrl, sessionId) {
+  const next = loadWorkflowSessionIds();
+  if (sessionId) next[serverUrl] = sessionId;
+  else delete next[serverUrl];
+  localStorage.setItem(WORKFLOW_SESSION_KEY, JSON.stringify(next));
 }
 
 function isThreadIdle(status) {
@@ -172,24 +194,30 @@ function summarizeHealth(health, hasSelectedThread) {
     {
       label: "LLM ready",
       ready: Boolean(health?.services?.llm?.ready),
-      detail: health?.services?.llm?.missing?.length ? `Missing ${health.services.llm.missing.join(", ")}` : ""
+      detail: health?.services?.llm?.missing?.length
+        ? `Add ${health.services.llm.missing.join(", ")} to .env and restart the Ender server.`
+        : ""
     },
     {
       label: "Workflow ready",
       ready: Boolean(health?.workflows?.jira_to_repo_task?.ready),
       detail: health?.workflows?.jira_to_repo_task?.missing?.length
-        ? `Needs ${health.workflows.jira_to_repo_task.missing.join(", ")}`
+        ? `Configure ${health.workflows.jira_to_repo_task.missing.join(", ")} to enable the Jira workflow.`
         : ""
     },
     {
       label: "Browser capture",
       ready: Boolean(health?.services?.browserCapture?.ready),
-      detail: health?.services?.browserCapture?.detail || ""
+      detail: !health?.services?.browserCapture?.ready
+        ? `${health?.services?.browserCapture?.detail || "Install Playwright with Chromium to enable browser capture."}`
+        : ""
     },
     {
       label: "GitHub token",
       ready: Boolean(health?.services?.github?.ready),
-      detail: health?.services?.github?.missing?.length ? `Needs ${health.services.github.missing.join(", ")}` : ""
+      detail: health?.services?.github?.missing?.length
+        ? `Set ${health.services.github.missing.join(", ")} for private GitHub access and PR workflows.`
+        : ""
     },
     {
       label: "Stream attached",
@@ -290,6 +318,40 @@ export default function App() {
       live = false;
     };
   }, [composeMode, serverUrl]);
+
+  useEffect(() => {
+    if (composeMode !== "workflow" || workflowSession) return;
+    const savedSessionId = getSavedWorkflowSessionId(serverUrl);
+    if (!savedSessionId) return;
+
+    let live = true;
+    setWorkflowLoading(true);
+    getWorkflowSession(savedSessionId)
+      .then((session) => {
+        if (!live) return;
+        setWorkflowSession(session);
+        setWorkflowError("");
+      })
+      .catch(() => {
+        if (!live) return;
+        saveWorkflowSessionId(serverUrl, "");
+      })
+      .finally(() => {
+        if (live) setWorkflowLoading(false);
+      });
+
+    return () => {
+      live = false;
+    };
+  }, [composeMode, serverUrl, workflowSession]);
+
+  useEffect(() => {
+    if (workflowSession && workflowSession.mode === "interactive" && !workflowSession.startedTaskId) {
+      saveWorkflowSessionId(serverUrl, workflowSession.id);
+      return;
+    }
+    saveWorkflowSessionId(serverUrl, "");
+  }, [serverUrl, workflowSession]);
 
   useEffect(() => {
     if (composeMode !== "schedule") return;
@@ -402,6 +464,11 @@ export default function App() {
     [savedServers, serverUrl]
   );
 
+  const discardWorkflowSession = () => {
+    setWorkflowSession(null);
+    saveWorkflowSessionId(serverUrl, "");
+  };
+
   const effectiveStatus = selectedTask ? status || selectedTask.status : null;
   const activeMode = composeMode === "thread" && !selectedTask ? "new" : composeMode;
   const sendLocked = !selectedTask || !isThreadIdle(effectiveStatus);
@@ -486,9 +553,6 @@ export default function App() {
       setSelectedId(null);
     }
     setWorkflowError("");
-    if (nextMode !== "workflow") {
-      setWorkflowSession(null);
-    }
     setRailOpen(false);
   };
 
@@ -505,7 +569,6 @@ export default function App() {
     }]);
     setSelectedId(id);
     setComposeMode("thread");
-    setWorkflowSession(null);
     setRailOpen(false);
   };
 
@@ -533,7 +596,7 @@ export default function App() {
         await refresh();
         setSelectedId(result.startedTaskId);
         setComposeMode("thread");
-        setWorkflowSession(null);
+        discardWorkflowSession();
       }
     } catch (err) {
       setWorkflowError(err.message || "Workflow step failed");
@@ -735,7 +798,7 @@ export default function App() {
           onAdvance={advanceWorkflow}
           onBack={retreatWorkflow}
           onReset={() => {
-            setWorkflowSession(null);
+            discardWorkflowSession();
             setWorkflowError("");
           }}
         />
@@ -866,7 +929,10 @@ export default function App() {
                   </div>
                   {readinessChecks.some((item) => item.detail) ? (
                     <div className="readinessMeta">
-                      {readinessChecks.find((item) => item.detail)?.detail}
+                      {readinessChecks
+                        .filter((item) => item.detail)
+                        .map((item) => `${item.label}: ${item.detail}`)
+                        .join(" ")}
                     </div>
                   ) : null}
                 </>

@@ -11,6 +11,7 @@ async function main() {
   const taskManager = new TaskManager(config);
   await taskManager.init();
   const workflowManager = new WorkflowManager({ config, taskManager });
+  await workflowManager.init();
   const scheduleManager = new ScheduleManager({ config, taskManager, workflowManager });
   await scheduleManager.init();
   taskManager.setScheduleManager(scheduleManager);

@@ -164,7 +164,10 @@ function getReadiness(config) {
     ok: true,
     backend: config.backend,
     paths: {
-      workspaceRoot: config.workdir
+      workspaceRoot: config.workdir,
+      threadsDir: config.threadsDir,
+      schedulesDir: config.schedulesDir,
+      workflowSessionsDir: config.workflowSessionsDir
     },
     services: {
       llm,
@@ -178,8 +181,17 @@ function getReadiness(config) {
     workflows: {
       jira_to_repo_task: {
         ready: llm.ready && jira.ready,
-        missing: [...llm.missing, ...jira.missing]
+        missing: [...llm.missing, ...jira.missing],
+        setupHint: llm.ready && jira.ready
+          ? ""
+          : "Configure the selected LLM backend plus Jira credentials, then restart the Ender server."
       }
+    },
+    setupHints: {
+      llm: llm.ready ? "" : "Add the missing backend variables to .env and restart the server.",
+      github: github.ready ? "" : "Set GITHUB_TOKEN to enable private GitHub access and PR features.",
+      jira: jira.ready ? "" : "Set JIRA_BASE_URL, JIRA_EMAIL, and JIRA_API_TOKEN to enable Jira workflows.",
+      browserCapture: browserCapture.ready ? "" : browserCapture.detail
     }
   };
 }

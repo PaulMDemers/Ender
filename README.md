@@ -28,6 +28,7 @@ ender/
 ├── docs/       # Tutorials, references, architecture notes
 ├── threads/    # Persisted task snapshots
 ├── schedules/  # Persisted cron schedules
+├── workflow-sessions/ # Persisted interactive workflow sessions
 └── workspace/  # Default working directory for cloned/generated work
 ```
 
@@ -128,8 +129,15 @@ Published ports:
 - `AGENT_WORKSPACE_BASE`: root used by the workspace picker. Default `..`.
 - `AGENT_THREADS_DIR`: thread persistence directory. Default `./threads`.
 - `AGENT_SCHEDULES_DIR`: schedule persistence directory. Default `./schedules`.
+- `AGENT_WORKFLOW_SESSIONS_DIR`: workflow session persistence directory. Default `./workflow-sessions`.
 - `AGENT_MAX_STEPS`: optional hard limit on model/tool loop iterations.
 - `AGENT_STALL_LIMIT`: repeated-iteration cutoff. Default `4`. Set `0` to disable.
+
+### Readiness Tips
+
+- `GET /health` reports missing configuration for LLM, Jira, GitHub, browser capture, email, and workflow prerequisites.
+- The UI server summary now surfaces setup hints directly from that readiness payload.
+- Interactive workflow sessions are persisted to disk and can be resumed after a server restart from the workflow panel.
 
 ### LLM Backends
 
