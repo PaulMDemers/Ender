@@ -96,7 +96,7 @@ function createGitTools(rootDir, { requestApproval, onLog, githubConfig }) {
       name: "git_clone",
       description: "Purpose: Clone a git repository into the workspace. When to use: To bring a repository into the workspace for inspection or modification. Constraints: Requires a valid repository URL. Side effects: yes. Requires explicit user intent: usually. Output: clone result and target directory.",
       schema: z.object({
-        repoUrl: z.string().url(),
+        repoUrl: z.string().min(1),
         directory: z.string().nullable()
       })
     }

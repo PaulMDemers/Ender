@@ -45,7 +45,7 @@ function createSelfUpdateTools(selfUpdateManager, { requestApproval, onLog, acti
       name: "self_update_checkpoint_create",
       description: "Purpose: Create a rollback checkpoint before editing Ender's own source. When to use: Before modifying Ender's own repository under supervisor control. Side effects: yes. Requires explicit user intent: usually. Output: checkpoint id.",
       schema: z.object({
-        label: z.string().nullable().default(null)
+        label: z.string().nullable()
       })
     }
   );
@@ -89,9 +89,9 @@ function createSelfUpdateTools(selfUpdateManager, { requestApproval, onLog, acti
       description: "Purpose: Ask the supervisor to verify and restart with rollback on failure. When to use: After modifying Ender's own source under supervisor control. Side effects: yes. Requires explicit user intent: yes. Output: operation details.",
       schema: z.object({
         checkpointId: z.string().min(1),
-        reason: z.string().nullable().default(null),
-        verifyCommand: z.string().nullable().default(null),
-        timeoutMs: z.number().int().positive().nullable().default(null)
+        reason: z.string().nullable(),
+        verifyCommand: z.string().nullable(),
+        timeoutMs: z.number().int().positive().nullable()
       })
     }
   );
@@ -107,7 +107,7 @@ function createSelfUpdateTools(selfUpdateManager, { requestApproval, onLog, acti
       name: "self_update_operations",
       description: "Purpose: Inspect recent self-update operations. When to use: To monitor or verify self-update attempts. Side effects: no. Requires explicit user intent: no. Output: operation history or details.",
       schema: z.object({
-        operationId: z.string().nullable().default(null)
+        operationId: z.string().nullable()
       })
     }
   );

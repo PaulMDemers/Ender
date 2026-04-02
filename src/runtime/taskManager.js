@@ -5,6 +5,112 @@ const { randomUUID } = require("node:crypto");
 const { sanitizeJsonValue, sanitizeString } = require("../utils/jsonSafe");
 
 const THREAD_CONTEXT_LIMIT = 12;
+const ALLOWED_IMAGE_DETAILS = new Set(["auto", "low", "high"]);
+
+function sanitizeThreadContent(value) {
+  if (Array.isArray(value)) {
+    return sanitizeJsonValue(value);
+  }
+  return sanitizeString(value || "");
+}
+
+function hasThreadContent(value) {
+  if (Array.isArray(value)) return value.length > 0;
+  return Boolean(String(value || "").trim());
+}
+
+function normalizeUserContentBlocks(content) {
+  if (!Array.isArray(content)) return [];
+
+  const blocks = [];
+  for (const item of content) {
+    if (!item || typeof item !== "object") continue;
+
+    if (item.type === "text") {
+      const text = sanitizeString(item.text || "").trim();
+      if (text) blocks.push({ type: "text", text });
+      continue;
+    }
+
+    if (item.type === "image_url") {
+      const rawImageUrl = typeof item.image_url === "string"
+        ? { url: item.image_url, detail: item.detail }
+        : item.image_url;
+      const url = sanitizeString(rawImageUrl?.url || "").trim();
+      if (!url) continue;
+
+      const normalizedImageUrl = { url };
+      const detail = sanitizeString(rawImageUrl?.detail || "").trim().toLowerCase();
+      if (ALLOWED_IMAGE_DETAILS.has(detail)) {
+        normalizedImageUrl.detail = detail;
+      }
+
+      blocks.push({ type: "image_url", image_url: normalizedImageUrl });
+    }
+  }
+
+  return blocks;
+}
+
+function buildUserMessageContent(prompt, content) {
+  const cleanPrompt = sanitizeString(prompt || "").trim();
+  const blocks = normalizeUserContentBlocks(content);
+
+  if (cleanPrompt && !blocks.length) {
+    return cleanPrompt;
+  }
+
+  if (cleanPrompt) {
+    blocks.unshift({ type: "text", text: cleanPrompt });
+  }
+
+  if (!blocks.length) {
+    return "";
+  }
+
+  if (blocks.length === 1 && blocks[0].type === "text") {
+    return blocks[0].text;
+  }
+
+  return blocks;
+}
+
+function summarizeUserMessageContent(content) {
+  if (typeof content === "string") {
+    return sanitizeString(content).trim();
+  }
+
+  if (!Array.isArray(content) || !content.length) {
+    return "";
+  }
+
+  const firstText = content.find((item) => item?.type === "text" && typeof item.text === "string" && item.text.trim());
+  if (firstText) {
+    return sanitizeString(firstText.text).trim().split("\n")[0].slice(0, 240);
+  }
+
+  const imageCount = content.filter((item) => item?.type === "image_url").length;
+  if (imageCount) {
+    return `Sent ${imageCount} image attachment${imageCount === 1 ? "" : "s"}`;
+  }
+
+  return "Sent attachments";
+}
+
+function normalizeContinueTaskInput(input) {
+  if (typeof input === "string") {
+    return { prompt: input, content: null };
+  }
+
+  if (input && typeof input === "object") {
+    return {
+      prompt: typeof input.prompt === "string" ? input.prompt : "",
+      content: Array.isArray(input.content) ? input.content : null
+    };
+  }
+
+  return { prompt: "", content: null };
+}
 
 class TaskManager {
   constructor(config) {
@@ -198,19 +304,20 @@ class TaskManager {
     return { ok: true, id: started.id };
   }
 
-  continueTask(id, prompt) {
+  continueTask(id, input) {
     const t = this.tasks.get(id);
     if (!t) return { ok: false, error: "not_found" };
     if (t.status === "running" || t.status === "awaiting_approval") {
       return { ok: false, error: "task_busy" };
     }
 
-    const clean = String(prompt || "").trim();
-    if (!clean) return { ok: false, error: "prompt_required" };
+    const { prompt, content } = normalizeContinueTaskInput(input);
+    const messageContent = buildUserMessageContent(prompt, content);
+    if (!hasThreadContent(messageContent)) return { ok: false, error: "prompt_required" };
 
-    t.latestPrompt = clean;
-    t.thread.push({ role: "user", content: clean });
-    this._push(t, { level: "info", data: { kind: "chat", role: "user", content: clean } });
+    t.latestPrompt = summarizeUserMessageContent(messageContent) || t.latestPrompt || t.goal;
+    t.thread.push({ role: "user", content: messageContent });
+    this._push(t, { level: "info", data: { kind: "chat", role: "user", content: messageContent } });
     this._schedulePersist(t);
     this._runThread(t);
     return { ok: true, id: t.id };
@@ -521,9 +628,9 @@ class TaskManager {
       .slice(-THREAD_CONTEXT_LIMIT)
       .map((entry) => ({
         role: String(entry?.role || ""),
-        content: sanitizeString(entry?.content || "")
+        content: sanitizeThreadContent(entry?.content)
       }))
-      .filter((entry) => (entry.role === "user" || entry.role === "assistant") && entry.content);
+      .filter((entry) => (entry.role === "user" || entry.role === "assistant") && hasThreadContent(entry.content));
   }
 
   _requestApproval(task, payload) {

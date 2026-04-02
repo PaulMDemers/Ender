@@ -101,18 +101,18 @@ const googleDriveSchema = z.object({
     "upload_text_file",
     "update_text_file"
   ]),
-  query: z.string().nullable().default(null),
-  nameContains: z.string().nullable().default(null),
-  folderId: z.string().nullable().default(null),
-  mimeType: z.string().nullable().default(null),
-  trashed: z.boolean().nullable().default(null),
-  pageSize: z.number().int().positive().max(100).nullable().default(null),
-  pageToken: z.string().nullable().default(null),
-  fileId: z.string().min(1).nullable().default(null),
-  fields: z.string().nullable().default(null),
-  maxChars: z.number().int().positive().max(1000000).nullable().default(null),
-  name: z.string().min(1).nullable().default(null),
-  content: z.string().min(1).nullable().default(null)
+  query: z.string().nullable(),
+  nameContains: z.string().nullable(),
+  folderId: z.string().nullable(),
+  mimeType: z.string().nullable(),
+  trashed: z.boolean().nullable(),
+  pageSize: z.number().int().positive().max(100).nullable(),
+  pageToken: z.string().nullable(),
+  fileId: z.string().min(1).nullable(),
+  fields: z.string().nullable(),
+  maxChars: z.number().int().positive().max(1000000).nullable(),
+  name: z.string().min(1).nullable(),
+  content: z.string().min(1).nullable()
 }).superRefine((input, ctx) => {
   if (
     (input.action === "get_file"

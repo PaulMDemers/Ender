@@ -145,3 +145,4 @@ vite.config.ts.timestamp-*
 playwright-report/
 test-results/
 blob-report/
+/.ender-snapshots

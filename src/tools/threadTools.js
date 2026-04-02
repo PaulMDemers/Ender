@@ -22,6 +22,27 @@ function createThreadTools(taskManager, { taskId, onLog } = {}) {
     return { ok: false, error: "thread_not_child" };
   };
 
+  const normalizeChildWorkspace = (current, workspace) => {
+    const raw = String(workspace || "").trim();
+    if (!raw) {
+      return current.workspace || undefined;
+    }
+
+    const normalized = raw.toLowerCase();
+    if (
+      normalized === "."
+      || normalized === "./"
+      || normalized === "current"
+      || normalized === "current workspace"
+      || normalized === "same"
+      || normalized === "same workspace"
+    ) {
+      return current.workspace || undefined;
+    }
+
+    return raw;
+  };
+
   const thread_spawn = tool(
     async ({ prompt, workspace }) => {
       const currentState = requireCurrentTask();
@@ -34,7 +55,8 @@ function createThreadTools(taskManager, { taskId, onLog } = {}) {
         return JSON.stringify({ ok: false, error: "prompt_required" });
       }
 
-      const result = taskManager.startChildTask(taskId, cleanPrompt, workspace || undefined);
+      const childWorkspace = normalizeChildWorkspace(currentState.current, workspace);
+      const result = taskManager.startChildTask(taskId, cleanPrompt, childWorkspace);
       if (!result.ok) {
         return JSON.stringify(result);
       }
@@ -44,10 +66,10 @@ function createThreadTools(taskManager, { taskId, onLog } = {}) {
     },
     {
       name: "thread_spawn",
-      description: "Purpose: Start a child thread for delegated work. When to use: Only for independent subtasks where concurrency is beneficial. Side effects: yes, creates background work. Requires explicit user intent: no. Output: child thread id.",
+      description: "Purpose: Start a child thread for delegated work. When to use: Only for independent subtasks where concurrency is beneficial. Constraints: Pass null to reuse the current workspace; plain phrases like 'current workspace' are interpreted as the current workspace. Side effects: yes, creates background work. Requires explicit user intent: no. Output: child thread id.",
       schema: z.object({
         prompt: z.string().min(1),
-        workspace: z.string().nullable().default(null)
+        workspace: z.string().nullable()
       })
     }
   );
@@ -80,7 +102,7 @@ function createThreadTools(taskManager, { taskId, onLog } = {}) {
       description: "Purpose: Check child thread status without blocking. When to use: For non-blocking polling. Side effects: no. Requires explicit user intent: no. Output: current status snapshot.",
       schema: z.object({
         threadId: z.string().min(1),
-        includeLogs: z.boolean().nullable().default(false)
+        includeLogs: z.boolean().nullable()
       })
     }
   );
@@ -111,8 +133,8 @@ function createThreadTools(taskManager, { taskId, onLog } = {}) {
       description: "Purpose: Wait for a child thread to finish. When to use: For blocking join behavior. Constraints: timeoutMs 0 returns an immediate snapshot. Side effects: no. Requires explicit user intent: no. Output: final or current status snapshot.",
       schema: z.object({
         threadId: z.string().min(1),
-        timeoutMs: z.number().int().nonnegative().nullable().default(null),
-        includeLogs: z.boolean().nullable().default(false)
+        timeoutMs: z.number().int().nonnegative().nullable(),
+        includeLogs: z.boolean().nullable()
       })
     }
   );

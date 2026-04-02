@@ -17,6 +17,7 @@ const { createGoogleDriveTools } = require("../tools/googleDriveTools");
 const { createSelfUpdateTools } = require("../tools/selfUpdateTools");
 const { runAgentLoop } = require("./runAgentLoop");
 const { SYSTEM_PROMPT } = require("../agents/systemPrompt");
+const { validateToolSchemasForBackend } = require("../llm/toolSchemaPreflight");
 
 async function runTask({ goal, thread, config, onLog, requestApproval, workspaceDir, taskId, scheduleManager, taskManager, selfUpdateManager }) {
   const activeWorkdir = workspaceDir || config.workdir;
@@ -41,6 +42,8 @@ async function runTask({ goal, thread, config, onLog, requestApproval, workspace
     createExecTool(activeWorkdir, { requestApproval, onLog }),
     ...createLedgerTools(ledger)
   ];
+
+  validateToolSchemasForBackend(config.backend, tools, { onLog });
 
   onLog({ level: "info", data: `backend=${config.backend}` });
   onLog({ level: "info", data: `workspace=${activeWorkdir}` });

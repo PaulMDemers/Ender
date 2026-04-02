@@ -1,28 +1,58 @@
 const { HumanMessage, SystemMessage, AIMessage, ToolMessage } = require("@langchain/core/messages");
 const { sanitizeJsonValue, sanitizeString } = require("../utils/jsonSafe");
 
+function sanitizeMessageContent(value) {
+  if (Array.isArray(value)) {
+    return sanitizeJsonValue(value);
+  }
+  const text = sanitizeString(value || "");
+  return text || "";
+}
+
+function normalizeAssistantMessageContent(value) {
+  if (Array.isArray(value)) {
+    return sanitizeJsonValue(value);
+  }
+
+  if (value == null) {
+    return "";
+  }
+
+  return sanitizeString(value);
+}
+
 function toConversationMessage(entry) {
   if (!entry || typeof entry !== "object") return null;
   const role = String(entry.role || "").toLowerCase();
-  const content = sanitizeString(entry.content || "");
-  if (!content) return null;
-  if (role === "assistant") return new AIMessage(content);
-  if (role === "user" || role === "human") return new HumanMessage(content);
+  const content = sanitizeMessageContent(entry.content);
+  if (!content || (Array.isArray(content) && content.length === 0)) return null;
+  if (role === "assistant") return new AIMessage({ content });
+  if (role === "user" || role === "human") return new HumanMessage({ content });
   return null;
 }
 
-function normalizeToolInvokeResult(result) {
+function normalizeToolInvokeResult(result, name) {
   if (result && typeof result === "object" && Array.isArray(result.toolMessageContent)) {
-    const content = sanitizeJsonValue(result.toolMessageContent);
+    const visualContent = sanitizeJsonValue(result.toolMessageContent);
     const logSummary = sanitizeString(
       result.logSummary || JSON.stringify({ ok: true, blocks: result.toolMessageContent.length })
     );
     const fingerprint = sanitizeString(result.fingerprint || logSummary);
     return {
-      content,
+      content: logSummary,
       contentForLog: logSummary,
       fingerprint,
-      doneSignal: false
+      doneSignal: false,
+      followUpHumanContent: [
+        {
+          type: "text",
+          text: sanitizeString(
+            result.followUpText
+              || `Tool ${name} produced multimodal output. Use the attached content as tool evidence before deciding the next step.`
+          )
+        },
+        ...visualContent
+      ]
     };
   }
 
@@ -33,14 +63,15 @@ function normalizeToolInvokeResult(result) {
     content,
     contentForLog: content,
     fingerprint: content.slice(0, 300),
-    doneSignal: content.startsWith("DONE:")
+    doneSignal: content.startsWith("DONE:"),
+    followUpHumanContent: null
   };
 }
 
 async function runAgentLoop({ model, tools, systemPrompt, userPrompt, thread = null, maxSteps = null, stallLimit = 4, onLog }) {
   const conversation = Array.isArray(thread) && thread.length
     ? thread.map(toConversationMessage).filter(Boolean)
-    : [new HumanMessage(sanitizeString(userPrompt))];
+    : [new HumanMessage({ content: sanitizeString(userPrompt) })];
   const messages = [new SystemMessage(sanitizeString(systemPrompt)), ...conversation];
   const toolsByName = Object.fromEntries(tools.map((t) => [t.name, t]));
   const bound = model.bindTools(tools);
@@ -60,7 +91,7 @@ async function runAgentLoop({ model, tools, systemPrompt, userPrompt, thread = n
     onLog({ level: "info", data: `step ${step}: invoking model` });
     const ai = await bound.invoke(messages);
     const toolCalls = sanitizeJsonValue(ai.tool_calls || ai.toolCalls || []);
-    const aiContent = sanitizeJsonValue(ai.content);
+    const aiContent = normalizeAssistantMessageContent(ai.content);
 
     messages.push(new AIMessage({ content: aiContent, tool_calls: toolCalls }));
 
@@ -102,6 +133,10 @@ async function runAgentLoop({ model, tools, systemPrompt, userPrompt, thread = n
         continue;
       }
 
+      onLog({
+        level: "debug",
+        data: `tool args (${name}): ${JSON.stringify(sanitizeJsonValue(args)).slice(0, 400)}`
+      });
       onLog({ level: "info", data: `tool call: ${name}` });
       let result;
       try {
@@ -125,7 +160,7 @@ async function runAgentLoop({ model, tools, systemPrompt, userPrompt, thread = n
         continue;
       }
 
-      const normalized = normalizeToolInvokeResult(result);
+      const normalized = normalizeToolInvokeResult(result, name);
       const content = normalized.content;
       const logContent = normalized.contentForLog;
       onLog({ level: "info", data: `tool result (${name}): ${logContent.slice(0, 400)}` });
@@ -146,6 +181,9 @@ async function runAgentLoop({ model, tools, systemPrompt, userPrompt, thread = n
       }
 
       messages.push(new ToolMessage({ content, tool_call_id: callId, name }));
+      if (normalized.followUpHumanContent) {
+        messages.push(new HumanMessage({ content: normalized.followUpHumanContent }));
+      }
     }
 
     const iterationFingerprint = fingerprintParts.join("||");

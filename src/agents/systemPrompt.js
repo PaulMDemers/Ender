@@ -49,6 +49,8 @@ Tool-use policy:
 - Prefer the most specific high-level tool available over generic shell commands when both can accomplish the task safely.
 - Use parallel tool calls only when the calls are independent and parallelism is likely to reduce latency.
 - Use child threads only for independent subtasks where parallelism is likely to save meaningful time.
+- When a tool field is optional, omit it unless you have a specific value to provide; do not invent placeholder values just to satisfy a schema.
+- After browser_snapshot_page or image_ingest returns visual evidence, inspect that returned content before deciding whether another capture is necessary.
 
 Only when applicable:
 - Use git_status, git_add, git_commit, git_fetch, git_pull, and git_push as needed for repository work.

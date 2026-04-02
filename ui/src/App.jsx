@@ -424,7 +424,6 @@ export default function App() {
         setTimeout(() => setReconnectNotice(""), 1500);
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [health?.ok]);
 
   useEffect(() => {
@@ -477,7 +476,7 @@ export default function App() {
     () => (showArchived ? archivedTasks : activeTasks).slice(0, taskVisibleCount),
     [showArchived, archivedTasks, activeTasks, taskVisibleCount]
   );
-  const { entries, status, completed, pendingApprovals, removeApproval } = useTaskLogs(
+  const { entries, status, pendingApprovals, removeApproval } = useTaskLogs(
     selectedId,
     serverUrl,
     selectedTask?.runCount || 0
@@ -795,10 +794,10 @@ export default function App() {
     }, 250);
   };
 
-  const sendNextPrompt = async (prompt) => {
+  const sendNextPrompt = async (input) => {
     if (!selectedTask) return;
     setThreadScrollToken((value) => value + 1);
-    await continueTask(selectedTask.id, prompt);
+    await continueTask(selectedTask.id, input);
     setTasks((prev) =>
       prev.map((task) => (task.id === selectedTask.id
         ? { ...task, status: "running", runCount: (task.runCount || 0) + 1 }

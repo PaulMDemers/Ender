@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 
 const TOOL_TEXT_KEYS = ["stdout", "stderr", "output", "content", "message", "diff", "text", "result"];
 
@@ -27,7 +27,7 @@ function getChatEntry(entry) {
   const role = entry.data.role === "assistant" ? "assistant" : "user";
   return {
     role,
-    content: typeof entry.data.content === "string" ? entry.data.content : String(entry.data.content || "")
+    content: Object.prototype.hasOwnProperty.call(entry.data, "content") ? entry.data.content : ""
   };
 }
 
@@ -240,6 +240,230 @@ function extractRunDetails(entries) {
   return details;
 }
 
+function isLikelyJsonBlock(value) {
+  const parsed = tryParseJson(value);
+  return parsed !== null;
+}
+
+function renderInline(text) {
+  const value = String(text || "");
+  if (!value) return null;
+
+  const parts = [];
+  const regex = /`([^`]+)`/g;
+  let lastIndex = 0;
+  let match;
+  let key = 0;
+
+  while ((match = regex.exec(value)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(value.slice(lastIndex, match.index));
+    }
+    parts.push(<code key={`inline-${key++}`} className="threadInlineCode mono">{match[1]}</code>);
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < value.length) {
+    parts.push(value.slice(lastIndex));
+  }
+
+  return parts.map((part, index) => (typeof part === "string" ? <span key={`text-${index}`}>{part}</span> : part));
+}
+
+function renderMarkdownBlocks(content) {
+  const source = String(content || "").replace(/\r\n/g, "\n");
+  const lines = source.split("\n");
+  const blocks = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const fenceMatch = line.match(/^```([^`]*)$/);
+    if (fenceMatch) {
+      const language = fenceMatch[1].trim();
+      const codeLines = [];
+      i += 1;
+      while (i < lines.length && !/^```\s*$/.test(lines[i])) {
+        codeLines.push(lines[i]);
+        i += 1;
+      }
+      if (i < lines.length && /^```\s*$/.test(lines[i])) {
+        i += 1;
+      }
+      blocks.push({ type: "code", language, content: codeLines.join("\n") });
+      continue;
+    }
+
+    if (!line.trim()) {
+      i += 1;
+      continue;
+    }
+
+    if (/^#{1,6}\s+/.test(line)) {
+      const level = Math.min(6, line.match(/^#+/)[0].length);
+      blocks.push({ type: "heading", level, content: line.replace(/^#{1,6}\s+/, "") });
+      i += 1;
+      continue;
+    }
+
+    if (/^[-*]\s+/.test(line)) {
+      const items = [];
+      while (i < lines.length && /^[-*]\s+/.test(lines[i])) {
+        items.push(lines[i].replace(/^[-*]\s+/, ""));
+        i += 1;
+      }
+      blocks.push({ type: "list", items });
+      continue;
+    }
+
+    const paragraphLines = [line];
+    i += 1;
+    while (
+      i < lines.length &&
+      lines[i].trim() &&
+      !/^```([^`]*)$/.test(lines[i]) &&
+      !/^#{1,6}\s+/.test(lines[i]) &&
+      !/^[-*]\s+/.test(lines[i])
+    ) {
+      paragraphLines.push(lines[i]);
+      i += 1;
+    }
+    blocks.push({ type: "paragraph", content: paragraphLines.join("\n") });
+  }
+
+  if (!blocks.length && source.trim()) {
+    return [{ type: "paragraph", content: source.trim() }];
+  }
+
+  return blocks;
+}
+
+function renderStringMessage(content, compact) {
+  const blocks = renderMarkdownBlocks(content);
+  const onlyJson = isLikelyJsonBlock(content);
+
+  if (onlyJson) {
+    const parsed = tryParseJson(content);
+    return (
+      <pre className={`threadCodeBlock mono ${compact ? "compact" : ""}`.trim()}>
+        <code>{JSON.stringify(parsed, null, 2)}</code>
+      </pre>
+    );
+  }
+
+  return blocks.map((block, index) => {
+    if (block.type === "heading") {
+      const Tag = `h${block.level}`;
+      return <Tag key={`heading-${index}`} className={`threadHeading threadHeading${block.level}`}>{renderInline(block.content)}</Tag>;
+    }
+    if (block.type === "list") {
+      return (
+        <ul key={`list-${index}`} className="threadList">
+          {block.items.map((item, itemIndex) => (
+            <li key={`list-item-${itemIndex}`}>{renderInline(item)}</li>
+          ))}
+        </ul>
+      );
+    }
+    if (block.type === "code") {
+      return (
+        <div key={`code-${index}`} className="threadCodeWrap">
+          {block.language ? <div className="threadCodeLabel mono">{block.language}</div> : null}
+          <pre className={`threadCodeBlock mono ${compact ? "compact" : ""}`.trim()}>
+            <code>{block.content}</code>
+          </pre>
+        </div>
+      );
+    }
+    return <p key={`paragraph-${index}`} className="threadParagraph">{renderInline(block.content)}</p>;
+  });
+}
+
+function renderStructuredPart(part, index, compact) {
+  if (!part || typeof part !== "object") {
+    return (
+      <pre key={`part-${index}`} className={`threadCodeBlock mono ${compact ? "compact" : ""}`.trim()}>
+        <code>{formatStructuredValue(part)}</code>
+      </pre>
+    );
+  }
+
+  if (part.type === "text") {
+    return (
+      <div key={`part-${index}`} className="threadAttachmentText">
+        {renderStringMessage(part.text || "", compact)}
+      </div>
+    );
+  }
+
+  if (part.type === "image_url") {
+    const imageUrl = typeof part.image_url === "string" ? part.image_url : part.image_url?.url;
+    if (!imageUrl) return null;
+
+    return (
+      <figure key={`part-${index}`} className="threadAttachmentFigure">
+        <img className="threadAttachmentImage" src={imageUrl} alt={`Attached image ${index + 1}`} loading="lazy" />
+      </figure>
+    );
+  }
+
+  return (
+    <pre key={`part-${index}`} className={`threadCodeBlock mono ${compact ? "compact" : ""}`.trim()}>
+      <code>{formatStructuredValue(part)}</code>
+    </pre>
+  );
+}
+
+function RichMessage({ content, className = "", compact = false, showRaw = false }) {
+  const isStructured = Array.isArray(content);
+  const rawValue = useMemo(() => {
+    if (Array.isArray(content)) {
+      return JSON.stringify(content, null, 2);
+    }
+    return String(content || "");
+  }, [content]);
+
+  return (
+    <div className={`threadRichMessage ${className}`.trim()}>
+      {showRaw ? (
+        <pre className={`threadCodeBlock mono ${compact ? "compact" : ""}`.trim()}>
+          <code>{rawValue}</code>
+        </pre>
+      ) : isStructured ? (
+        content.map((part, index) => renderStructuredPart(part, index, compact))
+      ) : (
+        renderStringMessage(rawValue, compact)
+      )}
+    </div>
+  );
+}
+
+function ChatRow({ item, messageClassName, isUserChat }) {
+  const [showRaw, setShowRaw] = useState(false);
+  const rawToggleLabel = Array.isArray(item.message) ? "show raw payload" : "show raw markdown";
+
+  return (
+    <>
+      <div className="logMetaBar">
+        <span className={`logMetaChip ${item.tone} mono`}>{item.metaLabel}</span>
+        <div className="logMetaToolbar">
+          <button
+            type="button"
+            className="threadToggleButton mono"
+            onClick={() => setShowRaw((value) => !value)}
+            aria-pressed={showRaw}
+          >
+            {showRaw ? "show rendered" : rawToggleLabel}
+          </button>
+        </div>
+      </div>
+      <div className={messageClassName}>
+        <RichMessage content={item.message || ""} compact={isUserChat} showRaw={showRaw} />
+      </div>
+    </>
+  );
+}
+
 export default function LogViewer({ entries, status, entryCount, taskId, scrollToBottomToken = 0 }) {
   const panelRef = useRef(null);
   const endRef = useRef(null);
@@ -377,10 +601,16 @@ export default function LogViewer({ entries, status, entryCount, taskId, scrollT
                 <div key={`${item.timestamp || index}-${index}`} className="logRow">
                   <div className="logRowAccent" />
                   <div className="logContent">
-                    <div className="logMetaBar">
-                      <span className={`logMetaChip ${item.tone} mono`}>{item.metaLabel}</span>
-                    </div>
-                    <div className={messageClassName}>{item.message || "No message payload"}</div>
+                    {item.kind === "chat" ? (
+                      <ChatRow item={item} messageClassName={messageClassName} isUserChat={isUserChat} />
+                    ) : (
+                      <>
+                        <div className="logMetaBar">
+                          <span className={`logMetaChip ${item.tone} mono`}>{item.metaLabel}</span>
+                        </div>
+                        <div className={messageClassName}>{item.message || "No message payload"}</div>
+                      </>
+                    )}
                     <div className="logTimestamp mono">{formatTime(item.timestamp)}</div>
                   </div>
                 </div>

@@ -69,16 +69,16 @@ function escapeCqlText(value) {
 const confluenceIdSchema = z.union([z.string(), z.number()]);
 const confluenceSchema = z.object({
   action: z.enum(["search_pages", "get_page", "create_page", "update_page"]),
-  query: z.string().nullable().default(null),
-  cql: z.string().nullable().default(null),
-  limit: z.number().int().positive().max(100).nullable().default(null),
-  start: z.number().int().nonnegative().nullable().default(null),
-  pageId: confluenceIdSchema.nullable().default(null),
-  spaceKey: z.string().min(1).nullable().default(null),
-  title: z.string().nullable().default(null),
-  content: z.string().min(1).nullable().default(null),
-  parentPageId: confluenceIdSchema.nullable().default(null),
-  version: z.number().int().positive().nullable().default(null)
+  query: z.string().nullable(),
+  cql: z.string().nullable(),
+  limit: z.number().int().positive().max(100).nullable(),
+  start: z.number().int().nonnegative().nullable(),
+  pageId: confluenceIdSchema.nullable(),
+  spaceKey: z.string().min(1).nullable(),
+  title: z.string().nullable(),
+  content: z.string().min(1).nullable(),
+  parentPageId: confluenceIdSchema.nullable(),
+  version: z.number().int().positive().nullable()
 }).superRefine((input, ctx) => {
   if ((input.action === "get_page" || input.action === "update_page") && input.pageId == null) {
     ctx.addIssue({

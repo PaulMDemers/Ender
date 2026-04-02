@@ -82,13 +82,13 @@ function createCronTools(scheduleManager, { taskId, requestApproval, onLog } = {
       schema: z.object({
         name: z.string().min(1),
         cron: z.string().min(1),
-        timezone: z.string().optional().nullable(),
+        timezone: z.string().nullable(),
         targetKind: z.enum(["prompt", "thread", "workflow"]),
-        prompt: z.string().optional().nullable(),
-        workspace: z.string().optional().nullable(),
-        threadId: z.string().optional().nullable(),
-        workflowId: z.string().optional().nullable(),
-        workflowInputs: z.array(z.record(z.any())).optional().nullable()
+        prompt: z.string().nullable(),
+        workspace: z.string().nullable(),
+        threadId: z.string().nullable(),
+        workflowId: z.string().nullable(),
+        workflowInputs: z.array(z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]))).nullable()
       })
     }
   );

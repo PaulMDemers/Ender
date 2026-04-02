@@ -51,6 +51,48 @@ test("continueTask preserves the original goal for reruns", async (t) => {
   assert.equal(rerunWorkspace, task.workspaceLabel || task.workspace);
 });
 
+test("continueTask accepts structured multimodal user content", async (t) => {
+  const root = await makeTempDir();
+  t.after(async () => {
+    await fs.rm(root, { recursive: true, force: true });
+  });
+
+  const manager = new TaskManager({
+    workdir: root,
+    workspaceBase: root,
+    threadsDir: path.join(root, "threads")
+  });
+  manager._runThread = () => {};
+
+  const started = manager.start("Original goal");
+  assert.equal(started.ok, true);
+
+  const task = manager.tasks.get(started.id);
+  task.status = "done";
+
+  const continued = manager.continueTask(started.id, {
+    content: [
+      { type: "text", text: "Please inspect this screenshot." },
+      { type: "image_url", image_url: { url: "data:image/png;base64,ZmFrZQ==", detail: "auto" } }
+    ]
+  });
+
+  assert.equal(continued.ok, true);
+  assert.equal(task.latestPrompt, "Please inspect this screenshot.");
+  assert.ok(Array.isArray(task.thread.at(-1).content));
+  assert.deepEqual(task.thread.at(-1).content, [
+    { type: "text", text: "Please inspect this screenshot." },
+    { type: "image_url", image_url: { url: "data:image/png;base64,ZmFrZQ==", detail: "auto" } }
+  ]);
+
+  const runThread = manager._getRunThread(task.thread);
+  assert.ok(Array.isArray(runThread.at(-1).content));
+  assert.deepEqual(runThread.at(-1).content, [
+    { type: "text", text: "Please inspect this screenshot." },
+    { type: "image_url", image_url: { url: "data:image/png;base64,ZmFrZQ==", detail: "auto" } }
+  ]);
+});
+
 test("schedule_config repo step defers cloning and only stores the plan", async (t) => {
   const root = await makeTempDir();
   t.after(async () => {

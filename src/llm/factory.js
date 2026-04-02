@@ -40,7 +40,8 @@ function createChatModel(config) {
     return new ChatOpenAI({
       apiKey: config.openai.apiKey,
       model: config.openai.model,
-      temperature: 0.2
+      temperature: 0.2,
+      supportsStrictToolCalling: true
     });
   }
 
@@ -67,7 +68,8 @@ function createChatModel(config) {
     azureOpenAIApiDeploymentName: config.azure.deploymentName,
     azureOpenAIApiVersion: config.azure.apiVersion,
     azureOpenAIBasePath: config.azure.basePath,
-    temperature: 0.2
+    temperature: 0.2,
+    supportsStrictToolCalling: true
   });
 }
 

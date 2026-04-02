@@ -55,11 +55,18 @@ export function startTask(goal, workspace) {
   });
 }
 
-export function continueTask(id, prompt) {
+export function continueTask(id, input) {
+  const payload = typeof input === "string"
+    ? { prompt: input }
+    : {
+      prompt: typeof input?.prompt === "string" ? input.prompt : "",
+      ...(Array.isArray(input?.content) ? { content: input.content } : {})
+    };
+
   return request(`/tasks/${id}/messages`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt })
+    body: JSON.stringify(payload)
   });
 }
 

@@ -5,7 +5,7 @@ const { getReadiness } = require("../health/readiness");
 function createApp(taskManager, workflowManager, scheduleManager, config, selfUpdateManager = null) {
   const app = express();
   app.use(cors());
-  app.use(express.json());
+  app.use(express.json({ limit: "12mb" }));
 
   app.get("/health", (_req, res) => {
     res.json(getReadiness(config));
@@ -190,8 +190,9 @@ function createApp(taskManager, workflowManager, scheduleManager, config, selfUp
   });
 
   app.post("/tasks/:id/messages", (req, res) => {
-    const prompt = String(req.body && req.body.prompt ? req.body.prompt : "").trim();
-    const result = taskManager.continueTask(req.params.id, prompt);
+    const prompt = typeof req.body?.prompt === "string" ? req.body.prompt : "";
+    const content = Array.isArray(req.body?.content) ? req.body.content : undefined;
+    const result = taskManager.continueTask(req.params.id, { prompt, content });
     if (!result.ok) {
       const code = result.error === "not_found" ? 404 : result.error === "prompt_required" ? 400 : 409;
       return res.status(code).json(result);

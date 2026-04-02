@@ -19,6 +19,40 @@ It is designed for operator-driven work: launch a task against a workspace, watc
 - Works with multiple LLM backends: OpenAI, AWS Bedrock, Azure OpenAI, and Ollama.
 - Includes tools for files, shell execution, git, GitHub, GitLab, Jira, Confluence, Google Drive, email, browser capture, schedules, and child threads.
 
+## Core Functionality at a Glance
+
+### Runtime and orchestration
+
+| Area | Summary |
+| --- | --- |
+| Task runtime | Iterative LangChain-based tool loop with persistence, approvals, SSE logs, reruns, and follow-up prompts. |
+| Workflows | Server-defined state machines rendered by the UI from generic `form`, `select`, and `complete` steps. |
+| Schedules | Cron-backed automation for `prompt`, `thread`, and `workflow` targets. |
+| Self-update | Optional supervised self-edit / verify / restart / rollback flow for Ender’s own repo. |
+| Persistence | Threads, schedules, and workflow sessions are stored on disk as JSON. |
+
+### Tooling categories
+
+| Category | Included functionality |
+| --- | --- |
+| Workspace tools | Read, write, list, and existence checks for workspace files. |
+| Local execution | Shell command execution with approval gating for risky commands. |
+| Web and browser | Raw HTTP fetch, web search, readable page extraction, image ingest, and rendered page snapshots. |
+| Source control | Git clone/fetch/status/add/commit/pull/push plus GitHub and GitLab repo / PR / MR operations. |
+| Work management | Jira issue lookup, board issue listing, transitions, and comments. |
+| Knowledge systems | Confluence search/read/create/update and Google Drive search/read/export/upload/update. |
+| Communication | IMAP email listing/reading and SMTP email sending. |
+| Automation | Current time lookup plus schedule create/list/delete. |
+| Delegation and continuity | Child thread spawn/status/await plus task ledger tools for facts, todos, and completion. |
+
+### Built-in workflow
+
+| Workflow | Purpose | Scheduling |
+| --- | --- | --- |
+| `jira_to_repo_task` | Select a Jira issue, clone a repository, choose commit/push and Jira outcome policy, then start a task in the repo. | Supported |
+
+For the full functionality tables, see [docs/reference/functionality-matrix.md](docs/reference/functionality-matrix.md).
+
 ## Project Layout
 
 ```text
@@ -363,6 +397,7 @@ Start here:
 
 - [Documentation index](docs/README.md)
 - [Knowledge base index](knowledge/README.md)
+- [Functionality matrix](docs/reference/functionality-matrix.md)
 - [First task tutorial](docs/tutorials/first-task.md)
 - [Jira workflow tutorial](docs/tutorials/jira-workflow.md)
 - [Schedules tutorial](docs/tutorials/schedules.md)
