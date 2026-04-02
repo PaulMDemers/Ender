@@ -116,30 +116,25 @@ export default function NewTaskForm({
 
   return (
     <section className="consolePanel launchPanel">
-      <div className="panelChrome">
-        <div className="panelLabel mono">task.launch</div>
-      </div>
-
       <div className="panelBody launchPanelBody">
         <div className="launchHero">
           <div className="workflowBadge">NEW THREAD</div>
           <h2 className="launchTitle">Launch a supervised agent run</h2>
           <p className="launchDescription">
-            Give Ender a concrete objective, optionally scope it to a workspace, and move immediately into the
-            live transcript once execution begins.
+            Give Ender a concrete objective and move straight into the live transcript.
           </p>
         </div>
 
         <form className="launchForm" onSubmit={submit}>
           <label className="launchField">
             <span className="fieldLabel">Mission goal</span>
-            <span className="fieldHint">Plain language is fine. Ender will preserve this thread and let you resume later.</span>
+            <span className="fieldHint">Plain language is fine. Ender preserves the thread so you can resume later.</span>
             <textarea
               ref={taRef}
               value={goal}
               rows={4}
               className="consoleTextarea"
-              placeholder="Example: audit the API auth flow, identify weak points, and prepare a safe remediation plan."
+              placeholder="Example: audit the auth flow and prepare a safe remediation plan."
               onChange={(event) => {
                 setGoal(event.target.value);
                 autosize();
@@ -156,7 +151,7 @@ export default function NewTaskForm({
           <div className="launchGrid">
             <label className="launchField">
               <span className="fieldLabel">Workspace</span>
-              <span className="fieldHint">Optional absolute or relative path. Use a picker if you want to scope the run.</span>
+              <span className="fieldHint">Optional path if this run should stay inside a repo or folder.</span>
               <div className="workspacePickerRow">
                 <input
                   className="consoleInput"
@@ -182,8 +177,8 @@ export default function NewTaskForm({
               {selfWorkspacePath ? (
                 <div className="panelNote">
                   {selfUpdateReady
-                    ? "Supervised self-update is available for tasks launched against the Ender repo workspace."
-                    : selfUpdateHint || "The Ender repo workspace is available, but supervised self-update is not ready on this server."}
+                    ? "Supervised self-update is available for the Ender repo workspace."
+                    : selfUpdateHint || "The Ender repo workspace is available, but supervised self-update is not ready."}
                 </div>
               ) : null}
             </label>

@@ -497,6 +497,8 @@ export default function App() {
   };
 
   const effectiveStatus = selectedTask ? status || selectedTask.status : null;
+  const primaryApproval = pendingApprovals[0] || null;
+  const threadBlockedByApproval = effectiveStatus === "awaiting_approval";
   const activeMode = composeMode === "thread" && !selectedTask ? "new" : composeMode;
   const sendLocked = !selectedTask || !isThreadIdle(effectiveStatus);
   const latestEntry = entries.length ? entries[entries.length - 1] : null;
@@ -854,12 +856,31 @@ export default function App() {
     if (selectedTask && composeMode === "thread") {
       return (
         <div className="transcriptStack">
-          {pendingApprovals.length ? (
-            <ApprovalPrompt
-              approval={pendingApprovals[0]}
-              onApprove={(approvalId) => decideApproval(approvalId, true)}
-              onDeny={(approvalId) => decideApproval(approvalId, false)}
-            />
+          {primaryApproval ? (
+            <>
+              <section className="approvalStickyBar">
+                <div className="approvalStickyCopy">
+                  <div className="workflowBadge">APPROVAL REQUIRED</div>
+                  <div className="approvalStickyTitle">{primaryApproval.title || "Sensitive action requested"}</div>
+                  <div className="approvalStickyMeta">
+                    {primaryApproval.description || "Resolve the pending action before continuing this run."}
+                  </div>
+                </div>
+                <div className="approvalStickyActions">
+                  <button className="primaryButton" onClick={() => decideApproval(primaryApproval.id, true)}>
+                    Approve
+                  </button>
+                  <button className="dangerButton" onClick={() => decideApproval(primaryApproval.id, false)}>
+                    Deny
+                  </button>
+                </div>
+              </section>
+              <ApprovalPrompt
+                approval={primaryApproval}
+                onApprove={(approvalId) => decideApproval(approvalId, true)}
+                onDeny={(approvalId) => decideApproval(approvalId, false)}
+              />
+            </>
           ) : null}
           <LogViewer
             entries={entries}
@@ -949,6 +970,14 @@ export default function App() {
               </div>
 
               {reconnectNotice ? <div className="panelNote">{reconnectNotice}</div> : null}
+
+              <div className="serverSummaryMetaRow">
+                <span className="serverSummaryMetaChip mono">{health?.ok ? "connected" : "offline"}</span>
+                <span className="serverSummaryMetaChip mono">{tasks.length} threads</span>
+                {selfWorkspacePath ? (
+                  <span className="serverSummaryMetaChip mono">{selfUpdateReady ? "self-update ready" : "self-update unavailable"}</span>
+                ) : null}
+              </div>
 
               {!serverSummaryCollapsed ? (
                 <>
@@ -1086,19 +1115,19 @@ export default function App() {
                 >
                   Menu
                 </button>
-                <div className="headerTitleCopy">
-                  <div className="headerEyebrow">
-                    {selectedTask && composeMode === "thread" ? "Live transcript" : headerModeCopy.eyebrow}
-                  </div>
-                  <div
+                  <div className="headerTitleCopy">
+                    <div className="headerEyebrow">
+                      {selectedTask && composeMode === "thread" ? "Live transcript" : headerModeCopy.eyebrow}
+                    </div>
+                    <div
                     className={`headerGoal ${selectedTask && composeMode === "thread" ? "threadPrompt" : ""}`}
                     title={selectedTask && composeMode === "thread" ? selectedTask.goal : headerModeCopy.title}
-                  >
-                    {selectedTask && composeMode === "thread" ? selectedTask.goal : headerModeCopy.title}
+                    >
+                      {selectedTask && composeMode === "thread" ? selectedTask.goal : headerModeCopy.title}
+                    </div>
+                    {!selectedTask || composeMode !== "thread" ? <div className="headerMeta">{headerModeCopy.subtitle}</div> : null}
                   </div>
-                  {!selectedTask || composeMode !== "thread" ? <div className="headerMeta">{headerModeCopy.subtitle}</div> : null}
                 </div>
-              </div>
               <div className="headerActionColumn">
                 <div className="headerActions">
                   <div className={`connectionStatus ${health?.ok ? "ready" : "notReady"}`}>
@@ -1157,10 +1186,12 @@ export default function App() {
                       <span className="headerChipLabel">Updated</span>
                       <span className="headerChipValue mono">{formatTimestamp(selectedTaskUpdatedAt)}</span>
                     </div>
-                    <div className="headerChip">
-                      <span className="headerChipLabel">Approvals</span>
-                      <span className="headerChipValue mono">{pendingApprovals.length}</span>
-                    </div>
+                    {primaryApproval ? (
+                      <div className="headerChip">
+                        <span className="headerChipLabel">Blocked</span>
+                        <span className="headerChipValue mono">approval required</span>
+                      </div>
+                    ) : null}
                   </>
                 ) : (
                   <>
@@ -1169,12 +1200,12 @@ export default function App() {
                       <span className="headerChipValue mono">{activeTasks.length}</span>
                     </div>
                     <div className="headerChip">
-                      <span className="headerChipLabel">Archived</span>
-                      <span className="headerChipValue mono">{archivedTasks.length}</span>
-                    </div>
-                    <div className="headerChip">
                       <span className="headerChipLabel">Timezone</span>
                       <span className="headerChipValue mono">{Intl.DateTimeFormat().resolvedOptions().timeZone}</span>
+                    </div>
+                    <div className="headerChip">
+                      <span className="headerChipLabel">Archive</span>
+                      <span className="headerChipValue mono">{archivedTasks.length} hidden</span>
                     </div>
                   </>
                 )}
@@ -1185,13 +1216,30 @@ export default function App() {
           <section className="mainBody">{renderMainContent()}</section>
 
           {selectedTask && composeMode === "thread" ? (
-            <ThreadComposer
-              disabled={sendLocked}
-              status={effectiveStatus}
-              onSend={sendNextPrompt}
-              workspace={selectedTask.workspace}
-              taskId={selectedTask.id}
-            />
+            threadBlockedByApproval ? (
+              <section className="threadComposer composerBlockedState">
+                <div className="composerTop">
+                  <div>
+                    <div className="composerEyebrow">Run paused</div>
+                    <div className="composerContext mono">
+                      {selectedTask.id.slice(0, 8)} · approval needed
+                    </div>
+                  </div>
+                  <div className="composerContext mono">{selectedTask.workspace || "No workspace scope"}</div>
+                </div>
+                <div className="composerBlockedMessage">
+                  Resolve the pending approval above to continue this run. Follow-up prompts are disabled until the operator approves or denies the action.
+                </div>
+              </section>
+            ) : (
+              <ThreadComposer
+                disabled={sendLocked}
+                status={effectiveStatus}
+                onSend={sendNextPrompt}
+                workspace={selectedTask.workspace}
+                taskId={selectedTask.id}
+              />
+            )
           ) : null}
         </main>
       </div>

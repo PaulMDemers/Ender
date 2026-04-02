@@ -29,7 +29,7 @@ export default function ApprovalPrompt({ approval, onApprove, onDeny }) {
       ) : null}
 
       <div className="approvalFooter">
-        <div className="panelNote">Requested at {formatTimestamp(approval.requestedAt)}. Approval decisions are reflected in the transcript history.</div>
+        <div className="panelNote">Requested at {formatTimestamp(approval.requestedAt)}. Resolve this action to unblock the run; the decision is recorded in the transcript.</div>
         <div className="approvalActions">
           <button className="primaryButton" onClick={() => onApprove?.(approval.id)}>
             Approve

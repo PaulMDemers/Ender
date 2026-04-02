@@ -194,7 +194,7 @@ function StepSelect({ step, onSubmit, busy }) {
             </label>
           ))}
           {serverFilters.length ? null : (
-            <div className="panelNote">Client-side filters update these workflow options immediately.</div>
+            <div className="panelNote">Client-side filters update these options immediately.</div>
           )}
         </div>
       ) : null}

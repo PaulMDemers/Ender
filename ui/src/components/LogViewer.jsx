@@ -507,16 +507,28 @@ export default function LogViewer({ entries, status, entryCount, taskId, scrollT
   return (
     <section className="consolePanel logConsole">
       <div className="logConsoleHeader">
-        <div className="panelChrome">
-          <div className="panelLabel mono">live_transcript.panel</div>
-          <div className="logPanelMeta mono">
-            {taskId ? `${taskId.slice(0, 8)} · ${entryCount} lines · ${status || "idle"}` : "no thread selected"}
+        <div className="logConsoleMetaRow">
+          <div className="logConsoleMetaGroup">
+            <span className="logMetaChip neutral mono">transcript</span>
+            <span className="logPanelMeta mono">
+              {taskId ? `${taskId.slice(0, 8)} · ${entryCount} lines · ${status || "idle"}` : "no thread selected"}
+            </span>
           </div>
+          {progressLabel ? (
+            <div className="logProgressIndicator">
+              <span className="logProgressDots" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </span>
+              <span className="logProgressLabel">{progressLabel}</span>
+            </div>
+          ) : null}
         </div>
         {hasRunDetails ? (
           <details className="logRunDetails">
             <summary className="logRunDetailsSummary">
-              <span className="logRunDetailsLabel mono">run_details</span>
+              <span className="logRunDetailsLabel mono">run details</span>
               <span className="logToolChevron" aria-hidden="true" />
             </summary>
             <div className="logRunDetailsBody">
@@ -616,21 +628,6 @@ export default function LogViewer({ entries, status, entryCount, taskId, scrollT
                 </div>
               );
             })}
-            {progressLabel ? (
-              <div className="logRow logProgressRow">
-                <div className="logRowAccent" />
-                <div className="logContent">
-                  <div className="logProgressIndicator">
-                    <span className="logProgressDots" aria-hidden="true">
-                      <span />
-                      <span />
-                      <span />
-                    </span>
-                    <span className="logProgressLabel">{progressLabel}</span>
-                  </div>
-                </div>
-              </div>
-            ) : null}
             <div ref={endRef} className="logStreamEnd" aria-hidden="true" />
           </div>
         )}

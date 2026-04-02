@@ -87,6 +87,7 @@ export default function SchedulePanel({
   const [workflowConfigBusy, setWorkflowConfigBusy] = useState(false);
   const [workflowConfigError, setWorkflowConfigError] = useState("");
   const [workflowBootstrap, setWorkflowBootstrap] = useState({ nonce: 0, inputs: [] });
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const threadOptions = useMemo(
     () => (tasks || []).map((task) => ({ value: task.id, label: `${task.id.slice(0, 8)} · ${task.goal}` })),
@@ -129,6 +130,7 @@ export default function SchedulePanel({
     setWorkspace("");
     setThreadId("");
     setWorkflowId("");
+    setShowAdvanced(false);
     resetWorkflowConfigState();
   };
 
@@ -192,6 +194,7 @@ export default function SchedulePanel({
     setWorkspace(target.workspace || "");
     setThreadId(target.threadId || "");
     setWorkflowId(target.workflowId || "");
+    setShowAdvanced(Boolean(schedule.timezone || target.kind === WORKFLOW_TARGET || schedule.enabled === false));
     setWorkflowConfigError("");
     if (target.kind === WORKFLOW_TARGET && target.workflowId) {
       queueWorkflowBootstrap(target.inputs || []);
@@ -266,21 +269,21 @@ export default function SchedulePanel({
   };
 
   const workflowReady = isWorkflowConfigured(workflowSession);
+  const cadencePresets = [
+    { label: "Weekdays 9am", cron: "0 9 * * 1-5" },
+    { label: "Daily 9am", cron: "0 9 * * *" },
+    { label: "Hourly", cron: "0 * * * *" }
+  ];
 
   return (
     <div className="scheduleWorkspace">
       <section className="consolePanel scheduleEditor">
-        <div className="panelChrome">
-          <div className="panelLabel mono">schedules.panel</div>
-        </div>
-
         <div className="panelBody workflowPanelBody">
           <div className="workflowHero">
             <span className="workflowBadge">SCHEDULE</span>
             <div className="launchTitle">{editingId ? "Edit automation" : "Create a recurring run"}</div>
             <div className="launchDescription">
-              Schedules are first-class operators in Ender. Use them to start prompts, resume existing threads, or
-              trigger guided workflows on a cron cadence.
+              Start prompts, resume threads, or trigger workflows on a recurring cadence.
             </div>
           </div>
 
@@ -292,7 +295,7 @@ export default function SchedulePanel({
               </label>
 
               <label className="workflowField">
-                <span className="workflowFieldLabel">Cron</span>
+                <span className="workflowFieldLabel">Cadence</span>
                 <input
                   className="consoleInput mono"
                   value={cronExpr}
@@ -300,16 +303,18 @@ export default function SchedulePanel({
                   required
                   placeholder="0 9 * * 1-5"
                 />
-              </label>
-
-              <label className="workflowField">
-                <span className="workflowFieldLabel">Timezone</span>
-                <input
-                  className="consoleInput"
-                  value={timezone}
-                  onChange={(event) => setTimezone(event.target.value)}
-                  placeholder="America/New_York"
-                />
+                <div className="schedulePresetRow">
+                  {cadencePresets.map((preset) => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      className={`miniButton ${cronExpr === preset.cron ? "schedulePresetActive" : ""}`.trim()}
+                      onClick={() => setCronExpr(preset.cron)}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
               </label>
 
               <label className="workflowField">
@@ -330,6 +335,12 @@ export default function SchedulePanel({
                   <option value={WORKFLOW_TARGET}>Run workflow</option>
                 </select>
               </label>
+            </div>
+
+            <div className="workflowActionBar scheduleAdvancedToggleRow">
+              <button type="button" className="secondaryButton" onClick={() => setShowAdvanced((value) => !value)}>
+                {showAdvanced ? "Hide advanced options" : "Show advanced options"}
+              </button>
             </div>
 
             {targetKind === PROMPT_TARGET ? (
@@ -432,13 +443,31 @@ export default function SchedulePanel({
               </>
             ) : null}
 
-            <label className="workflowField">
-              <span className="workflowFieldLabel">Enabled</span>
-              <select className="consoleInput" value={enabled ? "yes" : "no"} onChange={(event) => setEnabled(event.target.value === "yes")}>
-                <option value="yes">Enabled</option>
-                <option value="no">Disabled</option>
-              </select>
-            </label>
+            {showAdvanced ? (
+              <div className="workflowGrid scheduleAdvancedGrid">
+                <label className="workflowField">
+                  <span className="workflowFieldLabel">Timezone</span>
+                  <input
+                    className="consoleInput"
+                    value={timezone}
+                    onChange={(event) => setTimezone(event.target.value)}
+                    placeholder="America/New_York"
+                  />
+                </label>
+
+                <label className="workflowField">
+                  <span className="workflowFieldLabel">Automation state</span>
+                  <label className="toggleField">
+                    <input
+                      type="checkbox"
+                      checked={enabled}
+                      onChange={(event) => setEnabled(event.target.checked)}
+                    />
+                    <span>{enabled ? "Enabled" : "Disabled"}</span>
+                  </label>
+                </label>
+              </div>
+            ) : null}
 
             <div className="workflowActionBar">
               <button type="submit" className="primaryButton workflowAction" disabled={busy || workflowConfigBusy}>
@@ -457,10 +486,6 @@ export default function SchedulePanel({
       </section>
 
       <section className="consolePanel scheduleLedger">
-        <div className="panelChrome">
-          <div className="panelLabel mono">automation.ledger</div>
-        </div>
-
         <div className="panelBody workflowPanelBody">
           <div className="workflowHero compact">
             <span className="workflowBadge">ACTIVE JOBS</span>

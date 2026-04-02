@@ -33,6 +33,9 @@ export default function WorkflowPanel({
   const effectiveError = error || session?.bootstrapError || "";
   const debugEntries = Array.isArray(session?.debug) ? session.debug : [];
   const historyCount = Array.isArray(debugEntries) ? debugEntries.length : 0;
+  const stepSummary = session
+    ? `${session.canGoBack ? "Multi-step flow" : "Starting point"}${step?.type ? ` · ${step.type.replaceAll("_", " ")}` : ""}`
+    : "Choose a server-defined flow";
 
   return (
     <div className="workflowStack">
@@ -49,7 +52,7 @@ export default function WorkflowPanel({
         {session ? (
           <div className="workflowToolbar">
             <div className="stepProgress mono">
-              session {session.id.slice(0, 8)} · updated {new Date(session.updatedAt).toLocaleTimeString()}
+              {stepSummary} · session {session.id.slice(0, 8)} · updated {new Date(session.updatedAt).toLocaleTimeString()}
             </div>
             <div className="workflowActionBar">
               <button type="button" className="secondaryButton" disabled={busy} onClick={() => onReset?.()}>
@@ -69,10 +72,6 @@ export default function WorkflowPanel({
       </section>
 
       <section className="consolePanel workflowConsole">
-        <div className="panelChrome">
-          <div className="panelLabel mono">{session ? session.workflowId : "workflow.setup"}</div>
-        </div>
-
         <div className="panelBody workflowPanelBody">
           {!session ? (
             loading ? <div className="emptyState">Loading workflows...</div> : <WorkflowList workflows={workflows} onStart={onStartWorkflow} />

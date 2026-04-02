@@ -123,7 +123,7 @@ export default function ThreadComposer({ disabled, onSend, workspace, taskId, st
           value={text}
           className="composerTextarea"
           rows={2}
-          placeholder="Continue this thread with the next instruction. Shift+Enter adds a new line."
+          placeholder="Continue this thread. Shift+Enter adds a new line."
           onChange={(event) => setText(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {

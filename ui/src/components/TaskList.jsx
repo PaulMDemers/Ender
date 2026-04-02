@@ -72,7 +72,6 @@ export default function TaskList({
               className="threadCardMain"
               onClick={() => {
                 onSelect?.(task.id);
-                if (!expanded) toggleExpanded(task.id);
               }}
             >
               <div className="threadCardTop">
@@ -86,6 +85,14 @@ export default function TaskList({
               <div className={`threadTitle ${expanded ? "expanded" : "clamped"}`} title={task.goal}>
                 {task.goal}
               </div>
+
+              {!expanded ? (
+                <div className="threadCardSummary mono">
+                  <span>{String(task.id).slice(0, 8)}</span>
+                  <span>runs {task.runCount || 1}</span>
+                  <span>logs {task.logCount || 0}</span>
+                </div>
+              ) : null}
             </button>
             <div className="threadCardFooter">
               <button

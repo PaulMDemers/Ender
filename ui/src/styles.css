@@ -319,8 +319,8 @@ body::before {
 .composerEyebrow,
 .sidePanelEyebrow {
   font-family: "IBM Plex Mono", monospace;
-  font-size: 0.78rem;
-  letter-spacing: 0.18em;
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   color: #e58cff;
 }
@@ -345,7 +345,7 @@ body::before {
 
 .subtitle {
   margin: 8px 0 0;
-  font-size: 0.92rem;
+  font-size: 0.88rem;
   max-width: 30ch;
 }
 
@@ -450,7 +450,7 @@ body::before {
 }
 
 .serverSummary {
-  padding: 16px;
+  padding: 14px;
 }
 
 .serverSummaryActions {
@@ -460,6 +460,25 @@ body::before {
   min-width: 0;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.serverSummaryMetaRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.serverSummaryMetaChip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--muted);
+  font-size: 0.7rem;
 }
 
 .summaryToggle {
@@ -532,8 +551,8 @@ body::before {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 50px;
-  padding: 10px 16px;
+  min-height: 38px;
+  padding: 8px 12px;
   border-radius: 999px;
   font-family: "IBM Plex Mono", monospace;
   font-size: 0.76rem;
@@ -614,12 +633,12 @@ body::before {
 .railPrimaryActions {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
 }
 
 .railSection {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   min-height: 0;
 }
 
@@ -629,11 +648,11 @@ body::before {
 
 .modeButton {
   display: grid;
-  gap: 6px;
+  gap: 4px;
   justify-items: center;
   align-content: center;
-  min-height: 88px;
-  padding: 14px 10px;
+  min-height: 72px;
+  padding: 12px 10px;
   border: 1px solid var(--line);
   border-radius: 18px;
   text-align: center;
@@ -660,7 +679,7 @@ body::before {
   min-height: auto;
   justify-items: start;
   align-content: start;
-  padding: 14px;
+  padding: 12px 14px;
   text-align: left;
 }
 
@@ -697,7 +716,7 @@ body::before {
 .taskList {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
@@ -720,22 +739,31 @@ body::before {
 .threadCardMain {
   width: 100%;
   border: 0;
-  padding: 14px 14px 12px;
+  padding: 12px 12px 10px;
   text-align: left;
   background: transparent;
   min-width: 0;
 }
 
 .threadTitle {
-  margin-top: 12px;
-  font-size: 0.92rem;
-  line-height: 1.4;
+  margin-top: 8px;
+  font-size: 0.88rem;
+  line-height: 1.35;
   overflow-wrap: anywhere;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.threadCardSummary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 0.72rem;
 }
 
 .threadTitle.expanded {
@@ -759,9 +787,9 @@ body::before {
 .threadCardMeta {
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
-  margin-top: 12px;
+  margin-top: 8px;
   color: var(--muted);
-  font-size: 0.76rem;
+  font-size: 0.72rem;
 }
 
 .threadCardMeta > :first-child {
@@ -770,9 +798,9 @@ body::before {
 }
 
 .threadCardWorkspace {
-  margin-top: 10px;
+  margin-top: 8px;
   color: var(--muted-soft);
-  font-size: 0.78rem;
+  font-size: 0.74rem;
   line-height: 1.4;
   overflow-wrap: anywhere;
   display: -webkit-box;
@@ -837,7 +865,7 @@ body::before {
 .threadActions {
   flex-wrap: wrap;
   row-gap: 8px;
-  padding: 10px 14px 14px;
+  padding: 10px 12px 12px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   justify-content: flex-start;
 }
@@ -845,7 +873,7 @@ body::before {
 .threadCardFooter {
   display: flex;
   justify-content: flex-end;
-  padding: 0 14px 12px;
+  padding: 0 12px 10px;
   min-width: 0;
   flex-wrap: wrap;
 }
@@ -859,7 +887,7 @@ body::before {
 .threadCardDetails {
   display: grid;
   gap: 10px;
-  padding: 0 14px 12px;
+  padding: 0 12px 10px;
 }
 
 .threadActions .miniButton {
@@ -904,8 +932,8 @@ body::before {
   top: 0;
   z-index: 10;
   display: grid;
-  gap: 10px;
-  padding: 14px 24px 12px;
+  gap: 8px;
+  padding: 12px 20px 10px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   background:
     linear-gradient(180deg, rgba(22, 24, 33, 0.92), rgba(22, 24, 33, 0.78)),
@@ -932,13 +960,13 @@ body::before {
 
 .headerActionColumn {
   display: grid;
-  gap: 6px;
+  gap: 4px;
   justify-items: end;
   align-content: start;
 }
 
 .headerActions > * {
-  min-height: 50px;
+  min-height: 40px;
   flex: 0 0 auto;
 }
 
@@ -952,7 +980,7 @@ body::before {
 
 .headerGoal {
   margin-top: 4px;
-  font-size: clamp(1.22rem, 1.5vw, 1.55rem);
+  font-size: clamp(1.16rem, 1.4vw, 1.4rem);
   font-weight: 700;
   letter-spacing: -0.02em;
   line-height: 1.15;
@@ -961,9 +989,9 @@ body::before {
 }
 
 .headerGoal.threadPrompt {
-  font-size: clamp(0.98rem, 1.1vw, 1.14rem);
-  line-height: 1.3;
-  max-width: min(48ch, 100%);
+  font-size: clamp(0.94rem, 1vw, 1.06rem);
+  line-height: 1.25;
+  max-width: min(56ch, 100%);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   line-clamp: 2;
@@ -976,9 +1004,9 @@ body::before {
 }
 
 .headerMeta {
-  margin-top: 6px;
-  font-size: 0.92rem;
-  max-width: 60ch;
+  margin-top: 4px;
+  font-size: 0.84rem;
+  max-width: 56ch;
 }
 
 .headerThreadMeta {
@@ -990,7 +1018,8 @@ body::before {
 }
 
 .headerChipRow {
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
 }
 
 .overviewHeaderChipRow {
@@ -998,16 +1027,16 @@ body::before {
 }
 
 .threadHeaderChipRow {
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 }
 
 .headerChip {
-  padding: 11px 14px;
+  padding: 9px 12px;
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: 14px;
   background: rgba(255, 255, 255, 0.04);
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 
 .headerChipLabel,
@@ -1023,9 +1052,9 @@ body::before {
 .headerChipValue {
   display: flex;
   align-items: center;
-  min-height: 28px;
-  font-size: 0.8rem;
-  line-height: 1.35;
+  min-height: 22px;
+  font-size: 0.76rem;
+  line-height: 1.25;
   overflow-wrap: anywhere;
 }
 
@@ -1038,8 +1067,8 @@ body::before {
 
 .headerStatusPill {
   align-self: start;
-  min-height: 28px;
-  padding: 0 11px;
+  min-height: 24px;
+  padding: 0 9px;
   font-size: 0.68rem;
   line-height: 1;
 }
@@ -1055,13 +1084,13 @@ body::before {
 .mainBody {
   min-height: 0;
   overflow: auto;
-  padding: 24px;
+  padding: 18px 20px 20px;
 }
 
 .launchWorkspace,
 .scheduleWorkspace {
   display: grid;
-  gap: 20px;
+  gap: 16px;
 }
 
 .launchWorkspace {
@@ -1077,7 +1106,7 @@ body::before {
 .transcriptStack {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 12px;
   min-height: 100%;
 }
 
@@ -1171,19 +1200,19 @@ body::before {
 
 .panelBody,
 .modalBody {
-  padding: 24px;
+  padding: 20px;
 }
 
 .launchPanelBody,
 .workflowPanelBody {
   display: grid;
-  gap: 22px;
+  gap: 16px;
 }
 
 .launchHero,
 .workflowHero {
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 
 .workflowHero.compact {
@@ -1193,16 +1222,16 @@ body::before {
 .launchTitle,
 .approvalTitle,
 .modalTitle {
-  font-size: clamp(1.5rem, 2vw, 2rem);
+  font-size: clamp(1.28rem, 1.8vw, 1.72rem);
   line-height: 1.08;
   margin: 0;
 }
 
 .launchDescription {
-  max-width: 64ch;
+  max-width: 56ch;
   color: var(--muted);
-  font-size: 1rem;
-  line-height: 1.55;
+  font-size: 0.92rem;
+  line-height: 1.45;
   margin: 0;
 }
 
@@ -1210,19 +1239,19 @@ body::before {
 .workflowStep,
 .workflowSelect {
   display: grid;
-  gap: 18px;
+  gap: 14px;
 }
 
 .launchGrid {
   display: grid;
   grid-template-columns: 1.2fr 0.8fr;
-  gap: 18px;
+  gap: 14px;
 }
 
 .launchField,
 .workflowField {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .fieldLabel {
@@ -1234,7 +1263,7 @@ body::before {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 16px;
-  padding: 14px 16px;
+  padding: 12px 14px;
   color: var(--ink);
   background: var(--bg-input);
   transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
@@ -1242,11 +1271,11 @@ body::before {
 
 .consoleTextarea {
   resize: vertical;
-  min-height: 132px;
+  min-height: 112px;
 }
 
 .consoleTextarea.compact {
-  min-height: 108px;
+  min-height: 92px;
 }
 
 .consoleInput:focus,
@@ -1306,7 +1335,7 @@ body::before {
 .launchReadiness {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
 }
 
 .launchSummaryValue {
@@ -1336,17 +1365,33 @@ body::before {
 
 .logConsoleHeader {
   display: grid;
-  gap: 14px;
+  gap: 10px;
+}
+
+.logConsoleMetaRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px 0;
+  flex-wrap: wrap;
+}
+
+.logConsoleMetaGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .logPanel {
   min-height: 0;
   overflow: auto;
-  padding: 18px 22px 22px;
+  padding: 14px 18px 18px;
 }
 
 .logRunDetails {
-  margin: 0 22px;
+  margin: 0 18px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.02);
@@ -1358,7 +1403,7 @@ body::before {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 14px;
+  padding: 8px 12px;
   list-style: none;
   cursor: pointer;
 }
@@ -1375,8 +1420,8 @@ body::before {
 
 .logRunDetailsBody {
   display: grid;
-  gap: 8px;
-  padding: 0 14px 14px;
+  gap: 6px;
+  padding: 0 12px 12px;
 }
 
 .logRunDetailsRow {
@@ -1399,7 +1444,7 @@ body::before {
 
 .logStream {
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
 .logStreamEnd {
@@ -1417,13 +1462,13 @@ body::before {
 .logRow {
   display: grid;
   grid-template-columns: 2px minmax(0, 1fr);
-  gap: 14px;
+  gap: 10px;
   align-items: start;
 }
 
 .logTimestamp {
   color: #c5bada;
-  font-size: 0.82rem;
+  font-size: 0.76rem;
 }
 
 .logRowAccent {
@@ -1435,7 +1480,7 @@ body::before {
 
 .logContent {
   display: grid;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -1493,13 +1538,13 @@ body::before {
 .logMessage {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  line-height: 1.55;
+  line-height: 1.46;
   color: #f1edf9;
 }
 
 .logChatMessage {
-  padding: 14px 16px;
-  border-radius: 16px;
+  padding: 12px 14px;
+  border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.03);
 }
@@ -1568,6 +1613,7 @@ body::before {
 .threadParagraph {
   margin: 0;
   white-space: pre-wrap;
+  line-height: 1.45;
 }
 
 .threadHeading {
@@ -1658,7 +1704,7 @@ body::before {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 14px;
+  padding: 8px 12px;
   list-style: none;
   cursor: pointer;
 }
@@ -1678,15 +1724,15 @@ body::before {
 
 .logToolGroupBody {
   display: grid;
-  gap: 12px;
-  padding: 0 14px 14px;
+  gap: 10px;
+  padding: 0 12px 12px;
 }
 
 .logToolEvent {
   display: grid;
-  gap: 10px;
-  padding: 12px 14px;
-  border-radius: 16px;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.07);
   background: rgba(255, 255, 255, 0.025);
 }
@@ -1717,7 +1763,7 @@ body::before {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 14px;
+  padding: 10px 12px;
   list-style: none;
   cursor: pointer;
 }
@@ -1758,14 +1804,14 @@ body::before {
 
 .logToolBody {
   display: grid;
-  gap: 10px;
-  padding: 0 14px 14px;
+  gap: 8px;
+  padding: 0 12px 12px;
 }
 
 .logCodeBlock {
   margin: 0;
-  padding: 14px 16px;
-  border-radius: 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(10, 12, 18, 0.78);
   color: #eef3ff;
@@ -1834,7 +1880,7 @@ body::before {
 }
 
 .approvalCard {
-  padding: 22px;
+  padding: 18px;
   border-color: rgba(209, 77, 243, 0.34);
   background:
     radial-gradient(circle at top center, rgba(209, 77, 243, 0.16), transparent 60%),
@@ -1842,13 +1888,54 @@ body::before {
   box-shadow: 0 0 0 1px rgba(209, 77, 243, 0.18), 0 24px 64px rgba(209, 77, 243, 0.16);
 }
 
+.approvalStickyBar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid rgba(209, 77, 243, 0.34);
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(61, 31, 73, 0.96), rgba(36, 24, 44, 0.94)),
+    rgba(25, 27, 38, 0.98);
+  box-shadow: 0 14px 36px rgba(209, 77, 243, 0.12);
+}
+
+.approvalStickyCopy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.approvalStickyTitle {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.approvalStickyMeta {
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.4;
+}
+
+.approvalStickyActions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .approvalTitle {
-  margin-top: 12px;
+  margin-top: 8px;
 }
 
 .approvalDesc {
-  font-size: 1.08rem;
-  line-height: 1.55;
+  font-size: 0.96rem;
+  line-height: 1.45;
 }
 
 .approvalDetails,
@@ -1870,13 +1957,23 @@ body::before {
 }
 
 .threadComposer {
-  padding: 18px 24px 22px;
+  padding: 14px 20px 18px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 0;
   background:
     linear-gradient(180deg, rgba(24, 26, 37, 0.94), rgba(17, 18, 26, 0.98)),
     rgba(17, 18, 26, 0.98);
   box-shadow: none;
+}
+
+.composerBlockedState {
+  display: grid;
+  gap: 10px;
+}
+
+.composerBlockedMessage {
+  color: var(--muted);
+  line-height: 1.45;
 }
 
 .composerHiddenInput {
@@ -1923,9 +2020,9 @@ body::before {
 .composerInputRow {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 14px;
+  gap: 12px;
   align-items: stretch;
-  margin-top: 14px;
+  margin-top: 10px;
 }
 
 .composerAttachmentList {
@@ -1997,25 +2094,25 @@ body::before {
 
 .workflowStack {
   display: grid;
-  gap: 18px;
+  gap: 14px;
 }
 
 .workflowIntro {
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
 .workflowList,
 .scheduleList {
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
 .workflowCard {
   width: 100%;
-  padding: 18px;
+  padding: 14px 16px;
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: 16px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.015)),
     rgba(255, 255, 255, 0.025);
@@ -2032,7 +2129,7 @@ body::before {
 }
 
 .workflowName {
-  font-size: 1.18rem;
+  font-size: 1.04rem;
 }
 
 .workflowToolbar,
@@ -2043,7 +2140,7 @@ body::before {
 .workflowFilters,
 .workflowGrid {
   display: grid;
-  gap: 16px;
+  gap: 12px;
 }
 
 .workflowGrid {
@@ -2067,27 +2164,46 @@ body::before {
 }
 
 .scheduleRow {
-  padding: 16px 18px;
+  padding: 14px 16px;
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .scheduleMetaInline {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
 }
 
 .scheduleMetaChip {
   display: inline-flex;
   align-items: center;
-  min-height: 34px;
-  padding: 0 12px;
+  min-height: 28px;
+  padding: 0 10px;
   border-radius: 999px;
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.03);
   color: var(--muted);
   font-size: 0.76rem;
+}
+
+.schedulePresetRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.schedulePresetActive {
+  border-color: rgba(209, 77, 243, 0.28);
+  background: rgba(209, 77, 243, 0.12);
+}
+
+.scheduleAdvancedToggleRow {
+  justify-content: flex-start;
+}
+
+.scheduleAdvancedGrid {
+  align-items: end;
 }
 
 .scheduleActions {
