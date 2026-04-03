@@ -507,7 +507,7 @@ export default function App() {
       if (!state.active) return;
 
       const nextWidth = state.startWidth + (state.startX - event.clientX);
-      const maxWidth = Math.max(420, Math.min(window.innerWidth - 96, 1200));
+      const maxWidth = Math.max(420, Math.floor(window.innerWidth * 0.9));
       const clamped = Math.min(maxWidth, Math.max(360, nextWidth));
       setEditorDockWidth(clamped);
     };
