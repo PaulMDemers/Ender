@@ -6,20 +6,25 @@ services:
     env_file:
       - .env
     environment:
-      AGENT_THREADS_DIR: /app/threads
+      PORT: 3000
       AGENT_WORKDIR: /app/workspace
+      AGENT_WORKSPACE_BASE: /app/workspace
+      AGENT_THREADS_DIR: /app/threads
       AGENT_SCHEDULES_DIR: /app/schedules
+      AGENT_WORKFLOW_SESSIONS_DIR: /app/workflow-sessions
+      AGENT_SELF_ROOT: /app
     ports:
       - "3000:3000"
     volumes:
       - ./threads:/app/threads
       - ./workspace:/app/workspace
       - ./schedules:/app/schedules
+      - ./workflow-sessions:/app/workflow-sessions
 
   ui:
     build:
-      context: ./ui
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ui/Dockerfile
       args:
         VITE_ENDER_API: http://localhost:3000
     depends_on:
