@@ -146,3 +146,4 @@ playwright-report/
 test-results/
 blob-report/
 /.ender-snapshots
+/self-reviews

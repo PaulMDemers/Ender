@@ -19,6 +19,8 @@ It is designed for operator-driven work: launch a task against a workspace, watc
 - Works with multiple LLM backends: OpenAI, AWS Bedrock, Azure OpenAI, and Ollama.
 - Includes tools for files, shell execution, git, GitHub, GitLab, Jira, Confluence, Google Drive, email, browser capture, schedules, and child threads.
 
+![Ender live thread view](docs/website/screenshots/hero-thread-view.jpg)
+
 ## Core Functionality at a Glance
 
 ### Runtime and orchestration
@@ -50,6 +52,10 @@ It is designed for operator-driven work: launch a task against a workspace, watc
 | Workflow | Purpose | Scheduling |
 | --- | --- | --- |
 | `jira_to_repo_task` | Select a Jira issue, clone a repository, choose commit/push and Jira outcome policy, then start a task in the repo. | Supported |
+
+![Ender workflow step](docs/website/screenshots/workflow-step-view.jpg)
+
+Sensitive actions stay operator-visible instead of disappearing into a black box.
 
 For the full functionality tables, see [docs/reference/functionality-matrix.md](docs/reference/functionality-matrix.md).
 
@@ -111,6 +117,8 @@ This starts:
 
 - API: [http://localhost:3000](http://localhost:3000)
 - UI: [http://localhost:5173](http://localhost:5173)
+
+![Ender new thread launch](docs/website/screenshots/new-thread-full.jpg)
 
 ## Knowledge Base for Future Threads
 
@@ -200,6 +208,8 @@ Published ports:
 
 - API: `3000`
 - UI: `5173`
+
+![Ender schedule manager](docs/website/screenshots/schedule-manager-view.jpg)
 
 ## Configuration
 
