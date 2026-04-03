@@ -1231,6 +1231,10 @@ body.editorDockResizing {
   gap: 12px;
 }
 
+.editorDockCredentials {
+  grid-template-columns: minmax(0, 1.25fr) minmax(180px, 0.75fr);
+}
+
 .editorDockTitle {
   margin-top: 4px;
   font-size: 1rem;
@@ -2618,6 +2622,10 @@ body.editorDockResizing {
     left: 12px;
     width: auto;
     min-width: 0;
+  }
+
+  .editorDockCredentials {
+    grid-template-columns: 1fr;
   }
 
   .headerThreadMeta {

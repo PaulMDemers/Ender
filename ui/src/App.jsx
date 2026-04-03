@@ -296,6 +296,7 @@ export default function App() {
   const [editorSurface, setEditorSurface] = useState(null);
   const [editorFrameKey, setEditorFrameKey] = useState(0);
   const [editorDockWidth, setEditorDockWidth] = useState(720);
+  const [editorDetailsCollapsed, setEditorDetailsCollapsed] = useState(true);
 
   const wasOnlineRef = useRef(null);
   const dockResizeRef = useRef({
@@ -482,6 +483,7 @@ export default function App() {
   useEffect(() => {
     if (codeServerSession) return;
     setEditorSurface(null);
+    setEditorDetailsCollapsed(true);
   }, [codeServerSession]);
 
   useEffect(() => {
@@ -956,12 +958,14 @@ export default function App() {
   const openEditorModal = () => {
     if (!codeServerSession?.url) return;
     setEditorFrameKey((value) => value + 1);
+    setEditorDetailsCollapsed(true);
     setEditorSurface("modal");
   };
 
   const openEditorSplit = () => {
     if (!codeServerSession?.url) return;
     setEditorFrameKey((value) => value + 1);
+    setEditorDetailsCollapsed(true);
     setEditorSurface("split");
   };
 
@@ -1423,10 +1427,29 @@ export default function App() {
             <div>
               <div className="panelLabel mono">thread.editor</div>
               <div className="editorDockTitle">Docked workspace editor</div>
-              <div className="panelNote">If the embed is blocked by the browser or editor headers, open it in a new tab instead.</div>
+              {!editorDetailsCollapsed ? (
+                <div className="panelNote">If the embed is blocked by the browser or editor headers, open it in a new tab instead.</div>
+              ) : null}
             </div>
+            {!editorDetailsCollapsed ? (
+              <div className="editorCredentials editorDockCredentials">
+                <div className="editorCredential">
+                  <span className="headerChipLabel">URL</span>
+                  <a className="editorLink mono" href={codeServerSession.url} target="_blank" rel="noreferrer">
+                    {codeServerSession.url}
+                  </a>
+                </div>
+                <div className="editorCredential">
+                  <span className="headerChipLabel">Password</span>
+                  <span className="editorMetaValue mono">{codeServerSession.password}</span>
+                </div>
+              </div>
+            ) : null}
             <div className="editorDockActions">
               <span className="statusPill success">running</span>
+              <button type="button" className="miniButton" onClick={() => setEditorDetailsCollapsed((value) => !value)}>
+                {editorDetailsCollapsed ? "Show Details" : "Hide Details"}
+              </button>
               <button type="button" className="miniButton" onClick={openEditorTab}>
                 New Tab
               </button>
@@ -1473,39 +1496,46 @@ export default function App() {
                     This embed stays scoped to the active thread workspace. If the iframe is blocked, use a new tab instead.
                   </div>
                 </div>
-                <div className="editorMetaGrid">
-                  <div className="editorMetaItem">
-                    <span className="headerChipLabel">Workspace</span>
-                    <span className="editorMetaValue mono" title={selectedTask?.workspace || "none"}>
-                      {formatPathTail(selectedTask?.workspace, 4)}
-                    </span>
-                  </div>
-                  <div className="editorMetaItem">
-                    <span className="headerChipLabel">Status</span>
-                    <span className="statusPill success">running</span>
-                  </div>
-                  <div className="editorMetaItem">
-                    <span className="headerChipLabel">Mode</span>
-                    <span className="editorMetaValue mono">{codeServerSession.mode || "local"}</span>
-                  </div>
-                  <div className="editorMetaItem">
-                    <span className="headerChipLabel">Port</span>
-                    <span className="editorMetaValue mono">{codeServerSession.port}</span>
-                  </div>
-                </div>
-                <div className="editorCredentials">
-                  <div className="editorCredential">
-                    <span className="headerChipLabel">URL</span>
-                    <a className="editorLink mono" href={codeServerSession.url} target="_blank" rel="noreferrer">
-                      {codeServerSession.url}
-                    </a>
-                  </div>
-                  <div className="editorCredential">
-                    <span className="headerChipLabel">Password</span>
-                    <span className="editorMetaValue mono">{codeServerSession.password}</span>
-                  </div>
-                </div>
+                {!editorDetailsCollapsed ? (
+                  <>
+                    <div className="editorMetaGrid">
+                      <div className="editorMetaItem">
+                        <span className="headerChipLabel">Workspace</span>
+                        <span className="editorMetaValue mono" title={selectedTask?.workspace || "none"}>
+                          {formatPathTail(selectedTask?.workspace, 4)}
+                        </span>
+                      </div>
+                      <div className="editorMetaItem">
+                        <span className="headerChipLabel">Status</span>
+                        <span className="statusPill success">running</span>
+                      </div>
+                      <div className="editorMetaItem">
+                        <span className="headerChipLabel">Mode</span>
+                        <span className="editorMetaValue mono">{codeServerSession.mode || "local"}</span>
+                      </div>
+                      <div className="editorMetaItem">
+                        <span className="headerChipLabel">Port</span>
+                        <span className="editorMetaValue mono">{codeServerSession.port}</span>
+                      </div>
+                    </div>
+                    <div className="editorCredentials">
+                      <div className="editorCredential">
+                        <span className="headerChipLabel">URL</span>
+                        <a className="editorLink mono" href={codeServerSession.url} target="_blank" rel="noreferrer">
+                          {codeServerSession.url}
+                        </a>
+                      </div>
+                      <div className="editorCredential">
+                        <span className="headerChipLabel">Password</span>
+                        <span className="editorMetaValue mono">{codeServerSession.password}</span>
+                      </div>
+                    </div>
+                  </>
+                ) : null}
                 <div className="editorModalActions">
+                  <button type="button" className="miniButton" onClick={() => setEditorDetailsCollapsed((value) => !value)}>
+                    {editorDetailsCollapsed ? "Show Details" : "Hide Details"}
+                  </button>
                   <button type="button" className="primaryButton" onClick={openEditorSplit}>
                     Dock Right
                   </button>
