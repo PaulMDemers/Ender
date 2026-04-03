@@ -147,3 +147,4 @@ test-results/
 blob-report/
 /.ender-snapshots
 /self-reviews
+/.ender-code-server

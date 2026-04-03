@@ -13,6 +13,9 @@ services:
       AGENT_SCHEDULES_DIR: /app/schedules
       AGENT_WORKFLOW_SESSIONS_DIR: /app/workflow-sessions
       AGENT_SELF_ROOT: /app
+      CODE_SERVER_MODE: docker
+      CODE_SERVER_IMAGE: codercom/code-server:latest
+      CODE_SERVER_HOST_WORKDIR: ${PWD}/workspace
     ports:
       - "3000:3000"
     volumes:
@@ -20,6 +23,7 @@ services:
       - ./workspace:/app/workspace
       - ./schedules:/app/schedules
       - ./workflow-sessions:/app/workflow-sessions
+      - /var/run/docker.sock:/var/run/docker.sock
 
   ui:
     build:

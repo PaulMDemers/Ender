@@ -2,7 +2,39 @@ const express = require("express");
 const cors = require("cors");
 const { getReadiness } = require("../health/readiness");
 
-function createApp(taskManager, workflowManager, scheduleManager, config, selfUpdateManager = null) {
+function getRequestOrigin(req, config) {
+  const explicitHost = String(config?.codeServer?.publicHost || "").trim();
+  const explicitProtocol = String(config?.codeServer?.publicProtocol || "").trim();
+  if (explicitHost) {
+    return {
+      protocol: explicitProtocol || req.protocol || "http",
+      hostname: explicitHost
+    };
+  }
+
+  const hostHeader = String(req.get("x-forwarded-host") || req.get("host") || "").trim();
+  if (!hostHeader) {
+    return {
+      protocol: req.protocol || "http",
+      hostname: "localhost"
+    };
+  }
+
+  try {
+    const u = new URL(`${req.protocol || "http"}://${hostHeader}`);
+    return {
+      protocol: explicitProtocol || u.protocol.replace(/:$/, ""),
+      hostname: u.hostname
+    };
+  } catch {
+    return {
+      protocol: explicitProtocol || req.protocol || "http",
+      hostname: hostHeader.replace(/:\d+$/, "")
+    };
+  }
+}
+
+function createApp(taskManager, workflowManager, scheduleManager, config, selfUpdateManager = null, codeServerManager = null) {
   const app = express();
   app.use(cors());
   app.use(express.json({ limit: "12mb" }));
@@ -151,6 +183,77 @@ function createApp(taskManager, workflowManager, scheduleManager, config, selfUp
     return res.json(task);
   });
 
+  app.get("/tasks/:id/code-server", async (req, res) => {
+    if (!codeServerManager) {
+      return res.status(503).json({
+        ok: false,
+        error: "code_server_unavailable",
+        message: "code-server support is not configured on this server."
+      });
+    }
+
+    const task = taskManager.get(req.params.id);
+    if (!task) {
+      return res.status(404).json({ error: "not_found" });
+    }
+
+    const result = await codeServerManager.getTaskSession(task, getRequestOrigin(req, config));
+    if (!result.ok) {
+      return res.status(result.error === "code_server_disabled" ? 503 : 400).json(result);
+    }
+    return res.json(result);
+  });
+
+  app.post("/tasks/:id/code-server", async (req, res) => {
+    if (!codeServerManager) {
+      return res.status(503).json({
+        ok: false,
+        error: "code_server_unavailable",
+        message: "code-server support is not configured on this server."
+      });
+    }
+
+    const task = taskManager.get(req.params.id);
+    if (!task) {
+      return res.status(404).json({ error: "not_found" });
+    }
+
+    try {
+      const result = await codeServerManager.launchTaskSession(task, getRequestOrigin(req, config));
+      if (!result.ok) {
+        return res.status(result.error === "code_server_disabled" ? 503 : 400).json(result);
+      }
+      return res.status(result.created ? 201 : 200).json(result);
+    } catch (err) {
+      return res.status(500).json({
+        ok: false,
+        error: "code_server_launch_failed",
+        message: err.message || String(err)
+      });
+    }
+  });
+
+  app.delete("/tasks/:id/code-server", async (req, res) => {
+    if (!codeServerManager) {
+      return res.status(503).json({
+        ok: false,
+        error: "code_server_unavailable",
+        message: "code-server support is not configured on this server."
+      });
+    }
+
+    const task = taskManager.get(req.params.id);
+    if (!task) {
+      return res.status(404).json({ error: "not_found" });
+    }
+
+    const result = await codeServerManager.stopTaskSession(req.params.id);
+    if (!result.ok) {
+      return res.status(500).json(result);
+    }
+    return res.json(result);
+  });
+
   app.post("/tasks", (req, res) => {
     const goal = String(req.body && req.body.goal ? req.body.goal : "").trim();
     const workspace = String(req.body && req.body.workspace ? req.body.workspace : "").trim();
@@ -174,6 +277,12 @@ function createApp(taskManager, workflowManager, scheduleManager, config, selfUp
 
   app.delete("/tasks/:id", async (req, res) => {
     const deleteWorkspace = Boolean(req.body && req.body.deleteWorkspace);
+    if (codeServerManager) {
+      const editorResult = await codeServerManager.stopTaskSession(req.params.id);
+      if (!editorResult.ok) {
+        return res.status(500).json(editorResult);
+      }
+    }
     const result = await taskManager.delete(req.params.id, { deleteWorkspace });
     if (!result.ok) {
       return res.status(result.error === "not_found" ? 404 : 500).json(result);

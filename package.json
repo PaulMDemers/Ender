@@ -23,7 +23,7 @@
     "test:e2e:ui": "playwright test --ui",
     "test:visual:update": "playwright test --update-snapshots",
     "typecheck": "tsc --project tsconfig.json",
-    "check": "node --check src/server.js && node --check src/runtime/scheduleManager.js && node --check src/workflows/workflowManager.js && node --check src/shared/contracts.js && node --check src/selfUpdate/checkpoints.js && node --check src/selfUpdate/runner.js && node --check src/selfUpdate/manager.js && node --check src/tools/selfUpdateTools.js && node --check scripts/ender-supervisor.js",
+    "check": "node --check src/server.js && node --check src/runtime/scheduleManager.js && node --check src/runtime/codeServerManager.js && node --check src/workflows/workflowManager.js && node --check src/shared/contracts.js && node --check src/selfUpdate/checkpoints.js && node --check src/selfUpdate/runner.js && node --check src/selfUpdate/manager.js && node --check src/tools/selfUpdateTools.js && node --check scripts/ender-supervisor.js",
     "verify": "npm run test && npm run typecheck && npm run check && npm run build && npm run test:e2e"
   },
   "engines": {

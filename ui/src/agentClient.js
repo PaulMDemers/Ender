@@ -47,6 +47,18 @@ export function getTask(id) {
   return request(`/tasks/${id}`);
 }
 
+export function getTaskCodeServer(id) {
+  return request(`/tasks/${id}/code-server`);
+}
+
+export function launchTaskCodeServer(id) {
+  return request(`/tasks/${id}/code-server`, { method: "POST" });
+}
+
+export function stopTaskCodeServer(id) {
+  return request(`/tasks/${id}/code-server`, { method: "DELETE" });
+}
+
 export function startTask(goal, workspace) {
   return request("/tasks", {
     method: "POST",

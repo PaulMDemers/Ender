@@ -20,6 +20,16 @@ const schema = z.object({
   ENDER_SUPERVISOR_TOKEN: z.string().optional(),
   AGENT_SELF_UPDATE_VERIFY: z.string().optional(),
   AGENT_SELF_UPDATE_TIMEOUT_MS: z.string().optional(),
+  CODE_SERVER_ENABLED: z.string().optional(),
+  CODE_SERVER_MODE: z.string().optional(),
+  CODE_SERVER_IMAGE: z.string().optional(),
+  CODE_SERVER_BIND_HOST: z.string().optional(),
+  CODE_SERVER_PUBLIC_HOST: z.string().optional(),
+  CODE_SERVER_PUBLIC_PROTOCOL: z.string().optional(),
+  CODE_SERVER_HOST_WORKDIR: z.string().optional(),
+  CODE_SERVER_STATE_DIR: z.string().optional(),
+  CODE_SERVER_COMMAND: z.string().optional(),
+  CODE_SERVER_NPX_PACKAGE: z.string().optional(),
   LLM_BACKEND: z.enum(["openai", "bedrock", "azure", "ollama"]).default("openai"),
 
   OPENAI_API_KEY: z.string().optional(),
@@ -144,6 +154,23 @@ function loadConfig(env = process.env) {
     );
   }
 
+  let codeServerEnabled = true;
+  try {
+    codeServerEnabled = parseBooleanEnv(parsed.CODE_SERVER_ENABLED, true);
+  } catch {
+    throw new Error("CODE_SERVER_ENABLED must be one of true/false/1/0/yes/no/on/off when set");
+  }
+
+  const codeServerPublicProtocol = String(parsed.CODE_SERVER_PUBLIC_PROTOCOL || "").trim().toLowerCase();
+  if (codeServerPublicProtocol && codeServerPublicProtocol !== "http" && codeServerPublicProtocol !== "https") {
+    throw new Error("CODE_SERVER_PUBLIC_PROTOCOL must be http or https when set");
+  }
+
+  const codeServerMode = String(parsed.CODE_SERVER_MODE || "auto").trim().toLowerCase();
+  if (!["auto", "local", "docker"].includes(codeServerMode)) {
+    throw new Error("CODE_SERVER_MODE must be one of auto, local, or docker when set");
+  }
+
   return {
     port: Number(parsed.PORT || 3000),
     maxSteps,
@@ -164,6 +191,18 @@ function loadConfig(env = process.env) {
       supervisorToken: parsed.ENDER_SUPERVISOR_TOKEN ? String(parsed.ENDER_SUPERVISOR_TOKEN).trim() : null,
       verifyCommand: String(parsed.AGENT_SELF_UPDATE_VERIFY || "npm run verify").trim(),
       timeoutMs: selfUpdateTimeoutMs
+    },
+    codeServer: {
+      enabled: codeServerEnabled,
+      mode: codeServerMode,
+      image: String(parsed.CODE_SERVER_IMAGE || "codercom/code-server:latest").trim(),
+      bindHost: String(parsed.CODE_SERVER_BIND_HOST || "0.0.0.0").trim(),
+      publicHost: parsed.CODE_SERVER_PUBLIC_HOST ? String(parsed.CODE_SERVER_PUBLIC_HOST).trim() : null,
+      publicProtocol: codeServerPublicProtocol || null,
+      hostWorkdir: parsed.CODE_SERVER_HOST_WORKDIR ? path.resolve(parsed.CODE_SERVER_HOST_WORKDIR) : null,
+      stateDir: path.resolve(parsed.CODE_SERVER_STATE_DIR || path.resolve(process.cwd(), ".ender-code-server")),
+      command: String(parsed.CODE_SERVER_COMMAND || "code-server").trim(),
+      npxPackage: String(parsed.CODE_SERVER_NPX_PACKAGE || "code-server@4.113.0").trim()
     },
 
     openai: {

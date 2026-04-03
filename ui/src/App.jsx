@@ -3,11 +3,13 @@ import {
   advanceWorkflowSession,
   continueTask,
   createSchedule,
+  getTaskCodeServer,
   createWorkflowSession,
   deleteSchedule,
   deleteTaskWithOptions,
   getApiBase,
   getHealth,
+  launchTaskCodeServer,
   getWorkflowSession,
   listSchedules,
   listTasks,
@@ -17,6 +19,7 @@ import {
   retreatWorkflowSession,
   runScheduleNow,
   setApiBase,
+  stopTaskCodeServer,
   terminateTask,
   updateSchedule
 } from "./agentClient";
@@ -213,6 +216,11 @@ function summarizeHealth(health, hasSelectedThread) {
         : ""
     },
     {
+      label: "Thread editor",
+      ready: Boolean(health?.services?.codeServer?.ready),
+      detail: health?.setupHints?.codeServer || ""
+    },
+    {
       label: "GitHub token",
       ready: Boolean(health?.services?.github?.ready),
       detail: health?.services?.github?.missing?.length
@@ -282,8 +290,21 @@ export default function App() {
   const [railOpen, setRailOpen] = useState(false);
   const [threadScrollToken, setThreadScrollToken] = useState(0);
   const [reconnectNotice, setReconnectNotice] = useState("");
+  const [codeServerSession, setCodeServerSession] = useState(null);
+  const [codeServerBusy, setCodeServerBusy] = useState(false);
+  const [codeServerError, setCodeServerError] = useState("");
+  const [editorSurface, setEditorSurface] = useState(null);
+  const [editorFrameKey, setEditorFrameKey] = useState(0);
+  const [editorDockWidth, setEditorDockWidth] = useState(720);
 
   const wasOnlineRef = useRef(null);
+  const dockResizeRef = useRef({
+    active: false,
+    startX: 0,
+    startWidth: 720
+  });
+  const selectedTask = useMemo(() => tasks.find((task) => task.id === selectedId) || null, [tasks, selectedId]);
+  const taskStateForServer = taskUiState[serverUrl] || {};
 
   useEffect(() => {
     const saved = localStorage.getItem("ender_api_base");
@@ -427,6 +448,84 @@ export default function App() {
   }, [health?.ok]);
 
   useEffect(() => {
+    if (!selectedTask || composeMode !== "thread") {
+      setCodeServerSession(null);
+      setCodeServerError("");
+      setEditorSurface(null);
+      return undefined;
+    }
+
+    let live = true;
+
+    const load = async () => {
+      try {
+        const result = await getTaskCodeServer(selectedTask.id);
+        if (!live) return;
+        setCodeServerSession(result.session || null);
+        setCodeServerError("");
+      } catch (err) {
+        if (!live) return;
+        setCodeServerSession(null);
+        setCodeServerError(err.message || "Unable to load thread editor status");
+      }
+    };
+
+    load();
+    const intervalId = setInterval(load, 15000);
+
+    return () => {
+      live = false;
+      clearInterval(intervalId);
+    };
+  }, [selectedTask?.id, serverUrl, composeMode]);
+
+  useEffect(() => {
+    if (codeServerSession) return;
+    setEditorSurface(null);
+  }, [codeServerSession]);
+
+  useEffect(() => {
+    if (editorSurface !== "modal") return undefined;
+
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setEditorSurface(null);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [editorSurface]);
+
+  useEffect(() => {
+    const onPointerMove = (event) => {
+      const state = dockResizeRef.current;
+      if (!state.active) return;
+
+      const nextWidth = state.startWidth + (state.startX - event.clientX);
+      const maxWidth = Math.max(420, Math.min(window.innerWidth - 96, 1200));
+      const clamped = Math.min(maxWidth, Math.max(360, nextWidth));
+      setEditorDockWidth(clamped);
+    };
+
+    const onPointerUp = () => {
+      if (!dockResizeRef.current.active) return;
+      dockResizeRef.current.active = false;
+      document.body.classList.remove("editorDockResizing");
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      document.body.classList.remove("editorDockResizing");
+    };
+  }, []);
+
+  useEffect(() => {
     let live = true;
     const load = async () => {
       try {
@@ -455,8 +554,6 @@ export default function App() {
     };
   }, [selectedId, serverUrl, composeMode]);
 
-  const selectedTask = useMemo(() => tasks.find((task) => task.id === selectedId) || null, [tasks, selectedId]);
-  const taskStateForServer = taskUiState[serverUrl] || {};
   const activeTasks = useMemo(() => {
     const pinned = [];
     const rest = [];
@@ -513,6 +610,7 @@ export default function App() {
   const selfWorkspacePath = String(health?.services?.selfUpdate?.rootDir || "").trim() || "";
   const selfUpdateReady = Boolean(health?.services?.selfUpdate?.ready);
   const selfUpdateHint = health?.setupHints?.selfUpdate || "";
+  const codeServerReady = Boolean(health?.services?.codeServer?.ready);
 
   const refresh = async () => {
     try {
@@ -815,6 +913,65 @@ export default function App() {
     await resolveApproval(selectedTask.id, approvalId, approved);
     removeApproval(approvalId);
     await refresh();
+  };
+
+  const launchEditor = async () => {
+    if (!selectedTask) return;
+    setCodeServerBusy(true);
+    setCodeServerError("");
+    try {
+      const result = await launchTaskCodeServer(selectedTask.id);
+      setCodeServerSession(result.session || null);
+      if (result.session?.url) {
+        setEditorFrameKey((value) => value + 1);
+        setEditorSurface("split");
+      }
+    } catch (err) {
+      setCodeServerError(err.message || "Unable to launch thread editor");
+    } finally {
+      setCodeServerBusy(false);
+    }
+  };
+
+  const stopEditor = async () => {
+    if (!selectedTask) return;
+    setCodeServerBusy(true);
+    setCodeServerError("");
+    try {
+      await stopTaskCodeServer(selectedTask.id);
+      setCodeServerSession(null);
+      setEditorSurface(null);
+    } catch (err) {
+      setCodeServerError(err.message || "Unable to stop thread editor");
+    } finally {
+      setCodeServerBusy(false);
+    }
+  };
+
+  const openEditorTab = () => {
+    if (!codeServerSession?.url) return;
+    window.open(codeServerSession.url, "_blank", "noopener,noreferrer");
+  };
+
+  const openEditorModal = () => {
+    if (!codeServerSession?.url) return;
+    setEditorFrameKey((value) => value + 1);
+    setEditorSurface("modal");
+  };
+
+  const openEditorSplit = () => {
+    if (!codeServerSession?.url) return;
+    setEditorFrameKey((value) => value + 1);
+    setEditorSurface("split");
+  };
+
+  const beginDockResize = (event) => {
+    dockResizeRef.current = {
+      active: true,
+      startX: event.clientX,
+      startWidth: editorDockWidth
+    };
+    document.body.classList.add("editorDockResizing");
   };
 
   const renderMainContent = () => {
@@ -1130,6 +1287,16 @@ export default function App() {
                 </div>
               <div className="headerActionColumn">
                 <div className="headerActions">
+                  {selectedTask && composeMode === "thread" ? (
+                    <button
+                      type="button"
+                      className="iconButton"
+                      onClick={codeServerSession ? openEditorSplit : launchEditor}
+                      disabled={codeServerBusy || (!codeServerSession && !codeServerReady)}
+                    >
+                      {codeServerBusy ? "Launching..." : codeServerSession ? "Editor" : "Launch Editor"}
+                    </button>
+                  ) : null}
                   <div className={`connectionStatus ${health?.ok ? "ready" : "notReady"}`}>
                     <span className="statusDot" />
                     {health?.ok ? "Server ready" : "Connection issue"}
@@ -1214,7 +1381,6 @@ export default function App() {
           </header>
 
           <section className="mainBody">{renderMainContent()}</section>
-
           {selectedTask && composeMode === "thread" ? (
             threadBlockedByApproval ? (
               <section className="threadComposer composerBlockedState">
@@ -1243,6 +1409,130 @@ export default function App() {
           ) : null}
         </main>
       </div>
+
+      {editorSurface === "split" && codeServerSession?.url ? (
+        <aside className="editorDock" role="dialog" aria-label="Docked workspace editor" style={{ width: `${editorDockWidth}px` }}>
+          <button
+            type="button"
+            className="editorDockResizeHandle"
+            aria-label="Resize docked editor"
+            title="Drag to resize"
+            onPointerDown={beginDockResize}
+          />
+          <div className="editorDockHeader">
+            <div>
+              <div className="panelLabel mono">thread.editor</div>
+              <div className="editorDockTitle">Docked workspace editor</div>
+              <div className="panelNote">If the embed is blocked by the browser or editor headers, open it in a new tab instead.</div>
+            </div>
+            <div className="editorDockActions">
+              <span className="statusPill success">running</span>
+              <button type="button" className="miniButton" onClick={openEditorTab}>
+                New Tab
+              </button>
+              <button type="button" className="miniButton" onClick={openEditorModal}>
+                Modal
+              </button>
+              <button type="button" className="miniButton miniButtonDanger" onClick={() => setEditorSurface(null)}>
+                Close
+              </button>
+            </div>
+          </div>
+            <div className="editorFrameShell">
+              <iframe
+              key={`split-${editorFrameKey}-${codeServerSession.url}`}
+              className="editorFrame"
+              src={codeServerSession.url}
+              title="Thread workspace editor"
+            />
+          </div>
+        </aside>
+      ) : null}
+
+      {editorSurface === "modal" && codeServerSession?.url ? (
+        <div className="modalBackdrop" onClick={() => setEditorSurface(null)}>
+          <div
+            className="modalCard editorModal"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Workspace editor"
+          >
+            <div className="panelChrome">
+              <div className="panelLabel mono">thread.editor</div>
+              <button type="button" className="iconButton" aria-label="Close workspace editor" onClick={() => setEditorSurface(null)}>
+                Close
+              </button>
+            </div>
+
+            <div className="editorModalBody">
+              <div className="editorModalHeader">
+                <div>
+                  <div className="modalTitle">Workspace editor</div>
+                  <div className="modalSubtitle">
+                    This embed stays scoped to the active thread workspace. If the iframe is blocked, use a new tab instead.
+                  </div>
+                </div>
+                <div className="editorMetaGrid">
+                  <div className="editorMetaItem">
+                    <span className="headerChipLabel">Workspace</span>
+                    <span className="editorMetaValue mono" title={selectedTask?.workspace || "none"}>
+                      {formatPathTail(selectedTask?.workspace, 4)}
+                    </span>
+                  </div>
+                  <div className="editorMetaItem">
+                    <span className="headerChipLabel">Status</span>
+                    <span className="statusPill success">running</span>
+                  </div>
+                  <div className="editorMetaItem">
+                    <span className="headerChipLabel">Mode</span>
+                    <span className="editorMetaValue mono">{codeServerSession.mode || "local"}</span>
+                  </div>
+                  <div className="editorMetaItem">
+                    <span className="headerChipLabel">Port</span>
+                    <span className="editorMetaValue mono">{codeServerSession.port}</span>
+                  </div>
+                </div>
+                <div className="editorCredentials">
+                  <div className="editorCredential">
+                    <span className="headerChipLabel">URL</span>
+                    <a className="editorLink mono" href={codeServerSession.url} target="_blank" rel="noreferrer">
+                      {codeServerSession.url}
+                    </a>
+                  </div>
+                  <div className="editorCredential">
+                    <span className="headerChipLabel">Password</span>
+                    <span className="editorMetaValue mono">{codeServerSession.password}</span>
+                  </div>
+                </div>
+                <div className="editorModalActions">
+                  <button type="button" className="primaryButton" onClick={openEditorSplit}>
+                    Dock Right
+                  </button>
+                  <button type="button" className="miniButton" onClick={openEditorTab}>
+                    New Tab
+                  </button>
+                  <button type="button" className="miniButton miniButtonDanger" onClick={stopEditor} disabled={codeServerBusy}>
+                    {codeServerBusy ? "Stopping..." : "Stop"}
+                  </button>
+                  <button type="button" className="miniButton miniButtonDanger" onClick={() => setEditorSurface(null)}>
+                    Close
+                  </button>
+                </div>
+                {codeServerError ? <div className="errorBanner editorErrorBanner">{codeServerError}</div> : null}
+              </div>
+              <div className="editorFrameShell editorModalViewport">
+                <iframe
+                  key={`modal-${editorFrameKey}-${codeServerSession.url}`}
+                  className="editorFrame"
+                  src={codeServerSession.url}
+                  title="Thread workspace editor"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }
