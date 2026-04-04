@@ -270,6 +270,7 @@ export default function App() {
   const [serverUrl, setServerUrl] = useState(getApiBase());
   const [savedServers, setSavedServers] = useState([]);
   const [serverModalOpen, setServerModalOpen] = useState(false);
+  const [serverBootstrapMode, setServerBootstrapMode] = useState("saved");
   const [composeMode, setComposeMode] = useState("new");
   const [workflows, setWorkflows] = useState([]);
   const [workflowLoading, setWorkflowLoading] = useState(false);
@@ -295,14 +296,17 @@ export default function App() {
   const [codeServerError, setCodeServerError] = useState("");
   const [editorSurface, setEditorSurface] = useState(null);
   const [editorFrameKey, setEditorFrameKey] = useState(0);
-  const [editorDockWidth, setEditorDockWidth] = useState(720);
+  const [editorDockWidth, setEditorDockWidth] = useState(640);
   const [editorDetailsCollapsed, setEditorDetailsCollapsed] = useState(true);
+  const [threadFocusRequested, setThreadFocusRequested] = useState(false);
+  const [threadMobilePanel, setThreadMobilePanel] = useState("transcript");
 
   const wasOnlineRef = useRef(null);
+  const dockRailRestoreRef = useRef(null);
   const dockResizeRef = useRef({
     active: false,
     startX: 0,
-    startWidth: 720
+    startWidth: 640
   });
   const selectedTask = useMemo(() => tasks.find((task) => task.id === selectedId) || null, [tasks, selectedId]);
   const taskStateForServer = taskUiState[serverUrl] || {};
@@ -315,12 +319,21 @@ export default function App() {
     if (saved) {
       const normalized = setApiBase(saved);
       setServerUrl(normalized);
+      setServerBootstrapMode("saved");
       setServerModalOpen(false);
     } else {
       setServerUrl(getApiBase());
-      setServerModalOpen(nextSavedServers.length === 0);
+      setServerBootstrapMode("default");
+      setServerModalOpen(false);
     }
   }, []);
+
+  useEffect(() => {
+    if (!selectedTask || composeMode !== "thread") {
+      setThreadFocusRequested(false);
+      setThreadMobilePanel("transcript");
+    }
+  }, [selectedTask, composeMode]);
 
   useEffect(() => {
     localStorage.setItem(RAIL_COLLAPSED_KEY, String(railCollapsed));
@@ -484,6 +497,7 @@ export default function App() {
     if (codeServerSession) return;
     setEditorSurface(null);
     setEditorDetailsCollapsed(true);
+    setThreadMobilePanel("transcript");
   }, [codeServerSession]);
 
   useEffect(() => {
@@ -507,8 +521,8 @@ export default function App() {
       if (!state.active) return;
 
       const nextWidth = state.startWidth + (state.startX - event.clientX);
-      const maxWidth = Math.max(420, Math.floor(window.innerWidth * 0.9));
-      const clamped = Math.min(maxWidth, Math.max(360, nextWidth));
+      const maxWidth = Math.max(520, Math.floor(window.innerWidth * 0.58));
+      const clamped = Math.min(maxWidth, Math.max(420, nextWidth));
       setEditorDockWidth(clamped);
     };
 
@@ -528,6 +542,27 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const onResize = () => {
+      setEditorDockWidth((current) => {
+        const maxWidth = Math.max(520, Math.floor(window.innerWidth * 0.58));
+        return Math.min(current, maxWidth);
+      });
+
+      const nextSurface = getResponsiveEditorSurface(editorSurface, window.innerWidth);
+      if (nextSurface && nextSurface !== editorSurface) {
+        setEditorFrameKey((value) => value + 1);
+        setEditorSurface(nextSurface);
+        setThreadMobilePanel(nextSurface === "stacked" ? "editor" : "transcript");
+      }
+    };
+
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+    };
+  }, [editorSurface]);
+
+  useEffect(() => {
     let live = true;
     const load = async () => {
       try {
@@ -543,6 +578,9 @@ export default function App() {
         setLoadError(err.message || "Unable to reach server");
         setTasks([]);
         setSelectedId(null);
+        if (serverBootstrapMode === "default" && savedServers.length === 0) {
+          setServerModalOpen(true);
+        }
       } finally {
         if (live) setLoading(false);
       }
@@ -554,7 +592,7 @@ export default function App() {
       live = false;
       clearInterval(id);
     };
-  }, [selectedId, serverUrl, composeMode]);
+  }, [selectedId, serverUrl, composeMode, savedServers.length, serverBootstrapMode]);
 
   const activeTasks = useMemo(() => {
     const pinned = [];
@@ -613,6 +651,55 @@ export default function App() {
   const selfUpdateReady = Boolean(health?.services?.selfUpdate?.ready);
   const selfUpdateHint = health?.setupHints?.selfUpdate || "";
   const codeServerReady = Boolean(health?.services?.codeServer?.ready);
+  const hasSplitEditor = editorSurface === "split" && Boolean(codeServerSession?.url);
+  const hasStackedEditor = editorSurface === "stacked" && Boolean(codeServerSession?.url);
+  const isThreadFocusMode = Boolean(selectedTask && composeMode === "thread" && (threadFocusRequested || hasSplitEditor));
+
+  useEffect(() => {
+    if (!hasSplitEditor) {
+      if (dockRailRestoreRef.current !== null && !threadFocusRequested) {
+        setRailCollapsed(Boolean(dockRailRestoreRef.current));
+      }
+      dockRailRestoreRef.current = null;
+      return;
+    }
+
+    if (dockRailRestoreRef.current === null) {
+      dockRailRestoreRef.current = railCollapsed;
+    }
+    if (!railCollapsed) {
+      setRailCollapsed(true);
+    }
+    setRailOpen(false);
+  }, [hasSplitEditor, railCollapsed, threadFocusRequested]);
+
+  function getPreferredEditorSurface(width = typeof window !== "undefined" ? window.innerWidth : 1440) {
+    if (width < 980) return "stacked";
+    if (width < 1180) return "modal";
+    return "split";
+  }
+
+  function getResponsiveEditorSurface(currentSurface, width = typeof window !== "undefined" ? window.innerWidth : 1440) {
+    if (!currentSurface) return null;
+    if (currentSurface === "split") {
+      return getPreferredEditorSurface(width);
+    }
+    if (currentSurface === "stacked") {
+      return getPreferredEditorSurface(width);
+    }
+    if (currentSurface === "modal" && width < 980) {
+      return "stacked";
+    }
+    return currentSurface;
+  }
+
+  function shouldUseStackedEditor() {
+    return getPreferredEditorSurface() === "stacked";
+  }
+
+  function shouldUseModalEditor() {
+    return getPreferredEditorSurface() === "modal";
+  }
 
   const refresh = async () => {
     try {
@@ -650,6 +737,7 @@ export default function App() {
       setSavedServers(nextSavedServers);
       localStorage.setItem("ender_api_base", normalized);
       setServerUrl(normalized);
+      setServerBootstrapMode("saved");
       setLoading(true);
       setTasks([]);
       setSelectedId(null);
@@ -926,7 +1014,9 @@ export default function App() {
       setCodeServerSession(result.session || null);
       if (result.session?.url) {
         setEditorFrameKey((value) => value + 1);
-        setEditorSurface("split");
+        const nextSurface = getPreferredEditorSurface();
+        setEditorSurface(nextSurface);
+        setThreadMobilePanel(nextSurface === "stacked" ? "editor" : "transcript");
       }
     } catch (err) {
       setCodeServerError(err.message || "Unable to launch thread editor");
@@ -952,7 +1042,12 @@ export default function App() {
 
   const openEditorTab = () => {
     if (!codeServerSession?.url) return;
-    window.open(codeServerSession.url, "_blank", "noopener,noreferrer");
+    const nextWindow = window.open(codeServerSession.url, "_blank", "noopener,noreferrer");
+    if (nextWindow) {
+      setEditorSurface(null);
+      setEditorDetailsCollapsed(true);
+      setThreadMobilePanel("transcript");
+    }
   };
 
   const openEditorModal = () => {
@@ -960,13 +1055,59 @@ export default function App() {
     setEditorFrameKey((value) => value + 1);
     setEditorDetailsCollapsed(true);
     setEditorSurface("modal");
+    setThreadMobilePanel("transcript");
+  };
+
+  const openEditorStacked = () => {
+    if (!codeServerSession?.url) return;
+    setEditorFrameKey((value) => value + 1);
+    setEditorDetailsCollapsed(true);
+    setEditorSurface("stacked");
+    setThreadMobilePanel("editor");
   };
 
   const openEditorSplit = () => {
     if (!codeServerSession?.url) return;
+    if (shouldUseStackedEditor()) {
+      openEditorStacked();
+      return;
+    }
+    if (shouldUseModalEditor()) {
+      openEditorModal();
+      return;
+    }
     setEditorFrameKey((value) => value + 1);
     setEditorDetailsCollapsed(true);
     setEditorSurface("split");
+    setThreadMobilePanel("transcript");
+  };
+
+  const showThreadTranscript = () => {
+    setThreadMobilePanel("transcript");
+    setRailOpen(false);
+  };
+
+  const showThreadEditor = () => {
+    if (!codeServerSession?.url) {
+      launchEditor();
+      return;
+    }
+    if (shouldUseStackedEditor()) {
+      openEditorStacked();
+      return;
+    }
+    openEditorSplit();
+  };
+
+  const toggleThreadFocus = () => {
+    setThreadFocusRequested((value) => !value);
+    setRailOpen(false);
+  };
+
+  const leaveThreadFocus = () => {
+    setThreadFocusRequested(false);
+    setRailCollapsed(false);
+    setRailOpen(false);
   };
 
   const beginDockResize = (event) => {
@@ -976,6 +1117,96 @@ export default function App() {
       startWidth: editorDockWidth
     };
     document.body.classList.add("editorDockResizing");
+  };
+
+  const renderThreadTranscript = () => (
+    <div className="transcriptStack">
+      {primaryApproval ? (
+        <>
+          <section className="approvalStickyBar">
+            <div className="approvalStickyCopy">
+              <div className="workflowBadge">APPROVAL REQUIRED</div>
+              <div className="approvalStickyTitle">{primaryApproval.title || "Sensitive action requested"}</div>
+              <div className="approvalStickyMeta">
+                {primaryApproval.description || "Resolve the pending action before continuing this run."}
+              </div>
+            </div>
+            <div className="approvalStickyActions">
+              <button className="primaryButton" onClick={() => decideApproval(primaryApproval.id, true)}>
+                Approve
+              </button>
+              <button className="dangerButton" onClick={() => decideApproval(primaryApproval.id, false)}>
+                Deny
+              </button>
+            </div>
+          </section>
+          <ApprovalPrompt
+            approval={primaryApproval}
+            onApprove={(approvalId) => decideApproval(approvalId, true)}
+            onDeny={(approvalId) => decideApproval(approvalId, false)}
+          />
+        </>
+      ) : null}
+      <LogViewer
+        entries={entries}
+        status={effectiveStatus}
+        entryCount={entries.length}
+        taskId={selectedTask.id}
+        scrollToBottomToken={threadScrollToken}
+      />
+    </div>
+  );
+
+  const renderStackedEditor = () => {
+    if (!codeServerSession?.url) return null;
+
+    return (
+      <section className="threadEditorStack" aria-label="Thread workspace editor">
+        <div className="threadEditorStackHeader">
+          <div>
+            <div className="panelLabel mono">thread.editor</div>
+            <div className="editorDockTitle">Workspace editor</div>
+          </div>
+          <div className="editorDockActions threadEditorStackActions">
+            <span className="statusPill success">running</span>
+            <button type="button" className="miniButton" onClick={() => setEditorDetailsCollapsed((value) => !value)}>
+              {editorDetailsCollapsed ? "Show Details" : "Hide Details"}
+            </button>
+            <button type="button" className="miniButton" onClick={openEditorTab}>
+              New Tab
+            </button>
+            <button type="button" className="miniButton miniButtonDanger" onClick={() => setEditorSurface(null)}>
+              Close
+            </button>
+          </div>
+        </div>
+        {!editorDetailsCollapsed ? (
+          <div className="threadEditorStackMeta">
+            <div className="panelNote">Switch back to the transcript any time to review logs, approvals, or continue the thread.</div>
+            <div className="editorCredentials">
+              <div className="editorCredential">
+                <span className="headerChipLabel">URL</span>
+                <a className="editorLink mono" href={codeServerSession.url} target="_blank" rel="noreferrer">
+                  {codeServerSession.url}
+                </a>
+              </div>
+              <div className="editorCredential">
+                <span className="headerChipLabel">Password</span>
+                <span className="editorMetaValue mono">{codeServerSession.password}</span>
+              </div>
+            </div>
+          </div>
+        ) : null}
+        <div className="editorFrameShell threadEditorStackViewport">
+          <iframe
+            key={`stacked-${editorFrameKey}-${codeServerSession.url}`}
+            className="editorFrame"
+            src={codeServerSession.url}
+            title="Thread workspace editor"
+          />
+        </div>
+      </section>
+    );
   };
 
   const renderMainContent = () => {
@@ -1015,43 +1246,35 @@ export default function App() {
     }
 
     if (selectedTask && composeMode === "thread") {
-      return (
-        <div className="transcriptStack">
-          {primaryApproval ? (
-            <>
-              <section className="approvalStickyBar">
-                <div className="approvalStickyCopy">
-                  <div className="workflowBadge">APPROVAL REQUIRED</div>
-                  <div className="approvalStickyTitle">{primaryApproval.title || "Sensitive action requested"}</div>
-                  <div className="approvalStickyMeta">
-                    {primaryApproval.description || "Resolve the pending action before continuing this run."}
-                  </div>
-                </div>
-                <div className="approvalStickyActions">
-                  <button className="primaryButton" onClick={() => decideApproval(primaryApproval.id, true)}>
-                    Approve
-                  </button>
-                  <button className="dangerButton" onClick={() => decideApproval(primaryApproval.id, false)}>
-                    Deny
-                  </button>
-                </div>
-              </section>
-              <ApprovalPrompt
-                approval={primaryApproval}
-                onApprove={(approvalId) => decideApproval(approvalId, true)}
-                onDeny={(approvalId) => decideApproval(approvalId, false)}
-              />
-            </>
-          ) : null}
-          <LogViewer
-            entries={entries}
-            status={effectiveStatus}
-            entryCount={entries.length}
-            taskId={selectedTask.id}
-            scrollToBottomToken={threadScrollToken}
-          />
-        </div>
-      );
+      if (hasStackedEditor) {
+        return (
+          <div className="threadMobileWorkspace">
+            <div className="threadMobileSwitcher" role="tablist" aria-label="Thread workspace view">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={threadMobilePanel === "transcript"}
+                className={`threadSurfaceButton ${threadMobilePanel === "transcript" ? "active" : ""}`}
+                onClick={showThreadTranscript}
+              >
+                Transcript
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={threadMobilePanel === "editor"}
+                className={`threadSurfaceButton ${threadMobilePanel === "editor" ? "active" : ""}`}
+                onClick={() => setThreadMobilePanel("editor")}
+              >
+                Editor
+              </button>
+            </div>
+            {threadMobilePanel === "editor" ? renderStackedEditor() : renderThreadTranscript()}
+          </div>
+        );
+      }
+
+      return renderThreadTranscript();
     }
 
     return (
@@ -1081,7 +1304,7 @@ export default function App() {
 
       <div className={`railScrim ${railOpen ? "visible" : ""}`} onClick={() => setRailOpen(false)} />
 
-      <div className={`layout ${railCollapsed ? "railCollapsed" : ""}`}>
+      <div className={`layout ${railCollapsed ? "railCollapsed" : ""} ${hasSplitEditor ? "withDock" : ""} ${isThreadFocusMode ? "reviewMode" : ""}`}>
         <aside className={`leftRail ${railOpen ? "open" : ""}`}>
           <button
             type="button"
@@ -1265,8 +1488,8 @@ export default function App() {
           </div>
         </aside>
 
-        <main className="mainPane">
-          <header className={`mainHeader ${headerCollapsed ? "collapsed" : ""}`}>
+        <main className={`mainPane ${isThreadFocusMode ? "reviewMode" : ""}`}>
+          <header className={`mainHeader ${headerCollapsed ? "collapsed" : ""} ${isThreadFocusMode ? "reviewMode" : ""}`}>
             <div className="headerTopRow">
               <div className="headerTitleGroup">
                 <button
@@ -1295,10 +1518,25 @@ export default function App() {
                     <button
                       type="button"
                       className="iconButton"
-                      onClick={codeServerSession ? openEditorSplit : launchEditor}
+                      onClick={
+                        hasStackedEditor && threadMobilePanel === "editor"
+                          ? showThreadTranscript
+                          : codeServerSession
+                            ? showThreadEditor
+                            : launchEditor
+                      }
                       disabled={codeServerBusy || (!codeServerSession && !codeServerReady)}
                     >
-                      {codeServerBusy ? "Launching..." : codeServerSession ? "Editor" : "Launch Editor"}
+                      {codeServerBusy ? "Launching..." : hasStackedEditor && threadMobilePanel === "editor" ? "Transcript" : codeServerSession ? "Editor" : "Launch Editor"}
+                    </button>
+                  ) : null}
+                  {selectedTask && composeMode === "thread" && !hasSplitEditor ? (
+                    <button
+                      type="button"
+                      className="iconButton"
+                      onClick={isThreadFocusMode ? leaveThreadFocus : toggleThreadFocus}
+                    >
+                      {isThreadFocusMode ? "Show Threads" : "Focus View"}
                     </button>
                   ) : null}
                   <div className={`connectionStatus ${health?.ok ? "ready" : "notReady"}`}>
@@ -1321,15 +1559,25 @@ export default function App() {
                     />
                   </button>
                 </div>
-                {selectedTask && composeMode === "thread" ? (
-                  <div className="headerThreadMeta mono">
-                    {`Thread ${String(selectedTask.id).slice(0, 8)} · ${formatRelative(selectedTaskUpdatedAt)}`}
-                  </div>
-                ) : null}
               </div>
             </div>
 
-            {!headerCollapsed ? (
+            {!headerCollapsed && selectedTask && composeMode === "thread" ? (
+              <div className="threadHeaderMetaStrip">
+                <span className={`statusPill headerStatusPill ${getStatusTone(effectiveStatus)}`}>
+                  {getStatusLabel(effectiveStatus)}
+                </span>
+                <span className="headerMetaTag mono">{`thread ${String(selectedTask.id).slice(0, 8)}`}</span>
+                <span className="headerMetaTag mono" title={selectedTask.workspace || "none"}>
+                  {`workspace ${formatPathTail(selectedTask.workspace, 3)}`}
+                </span>
+                <span className="headerMetaTag mono">{`updated ${formatTimestamp(selectedTaskUpdatedAt)}`}</span>
+                <span className="headerMetaTag mono">{formatRelative(selectedTaskUpdatedAt)}</span>
+                {primaryApproval ? <span className="headerMetaTag attention mono">approval required</span> : null}
+              </div>
+            ) : null}
+
+            {!headerCollapsed && (!selectedTask || composeMode !== "thread") ? (
               <div
                 className={`headerChipRow ${
                   selectedTask && composeMode === "thread" ? "threadHeaderChipRow" : "overviewHeaderChipRow"
@@ -1339,53 +1587,24 @@ export default function App() {
                   <span className="headerChipLabel">Server</span>
                   <span className="headerChipValue mono">{currentServer?.name || serverUrl}</span>
                 </div>
-                {selectedTask && composeMode === "thread" ? (
-                  <>
-                    <div className="headerChip">
-                      <span className="headerChipLabel">Status</span>
-                      <span className={`statusPill headerStatusPill ${getStatusTone(effectiveStatus)}`}>
-                        {getStatusLabel(effectiveStatus)}
-                      </span>
-                    </div>
-                    <div className="headerChip">
-                      <span className="headerChipLabel">Workspace</span>
-                      <span className="headerChipValue headerPathValue mono" title={selectedTask.workspace || "none"}>
-                        {formatPathTail(selectedTask.workspace, 3)}
-                      </span>
-                    </div>
-                    <div className="headerChip">
-                      <span className="headerChipLabel">Updated</span>
-                      <span className="headerChipValue mono">{formatTimestamp(selectedTaskUpdatedAt)}</span>
-                    </div>
-                    {primaryApproval ? (
-                      <div className="headerChip">
-                        <span className="headerChipLabel">Blocked</span>
-                        <span className="headerChipValue mono">approval required</span>
-                      </div>
-                    ) : null}
-                  </>
-                ) : (
-                  <>
-                    <div className="headerChip">
-                      <span className="headerChipLabel">Threads</span>
-                      <span className="headerChipValue mono">{activeTasks.length}</span>
-                    </div>
-                    <div className="headerChip">
-                      <span className="headerChipLabel">Timezone</span>
-                      <span className="headerChipValue mono">{Intl.DateTimeFormat().resolvedOptions().timeZone}</span>
-                    </div>
-                    <div className="headerChip">
-                      <span className="headerChipLabel">Archive</span>
-                      <span className="headerChipValue mono">{archivedTasks.length} hidden</span>
-                    </div>
-                  </>
-                )}
+                <div className="headerChip">
+                  <span className="headerChipLabel">Threads</span>
+                  <span className="headerChipValue mono">{activeTasks.length}</span>
+                </div>
+                <div className="headerChip">
+                  <span className="headerChipLabel">Timezone</span>
+                  <span className="headerChipValue mono">{Intl.DateTimeFormat().resolvedOptions().timeZone}</span>
+                </div>
+                <div className="headerChip">
+                  <span className="headerChipLabel">Archive</span>
+                  <span className="headerChipValue mono">{archivedTasks.length} hidden</span>
+                </div>
               </div>
             ) : null}
           </header>
 
-          <section className="mainBody">{renderMainContent()}</section>
-          {selectedTask && composeMode === "thread" ? (
+          <section className={`mainBody ${isThreadFocusMode ? "reviewMode" : ""}`}>{renderMainContent()}</section>
+          {selectedTask && composeMode === "thread" && !(hasStackedEditor && threadMobilePanel === "editor") ? (
             threadBlockedByApproval ? (
               <section className="threadComposer composerBlockedState">
                 <div className="composerTop">
@@ -1412,65 +1631,66 @@ export default function App() {
             )
           ) : null}
         </main>
-      </div>
-
-      {editorSurface === "split" && codeServerSession?.url ? (
-        <aside className="editorDock" role="dialog" aria-label="Docked workspace editor" style={{ width: `${editorDockWidth}px` }}>
-          <button
-            type="button"
-            className="editorDockResizeHandle"
-            aria-label="Resize docked editor"
-            title="Drag to resize"
-            onPointerDown={beginDockResize}
-          />
-          <div className="editorDockHeader">
-            <div>
-              <div className="panelLabel mono">thread.editor</div>
-              <div className="editorDockTitle">Docked workspace editor</div>
-              {!editorDetailsCollapsed ? (
-                <div className="panelNote">If the embed is blocked by the browser or editor headers, open it in a new tab instead.</div>
-              ) : null}
-            </div>
-            {!editorDetailsCollapsed ? (
-              <div className="editorCredentials editorDockCredentials">
-                <div className="editorCredential">
-                  <span className="headerChipLabel">URL</span>
-                  <a className="editorLink mono" href={codeServerSession.url} target="_blank" rel="noreferrer">
-                    {codeServerSession.url}
-                  </a>
+        {hasSplitEditor ? (
+          <aside className="editorDock" role="dialog" aria-label="Docked workspace editor" style={{ width: `${editorDockWidth}px` }}>
+            <button
+              type="button"
+              className="editorDockResizeHandle"
+              aria-label="Resize docked editor"
+              title="Drag to resize"
+              onPointerDown={beginDockResize}
+            />
+            <div className="editorDockHeader">
+              <div className="editorDockTopBar">
+                <div className="editorDockHeading">
+                  <div className="panelLabel mono">thread.editor</div>
+                  <div className="editorDockTitle">Docked workspace editor</div>
                 </div>
-                <div className="editorCredential">
-                  <span className="headerChipLabel">Password</span>
-                  <span className="editorMetaValue mono">{codeServerSession.password}</span>
+                <div className="editorDockActions">
+                  <span className="statusPill success">running</span>
+                  <button type="button" className="miniButton" onClick={() => setEditorDetailsCollapsed((value) => !value)}>
+                    {editorDetailsCollapsed ? "Show Details" : "Hide Details"}
+                  </button>
+                  <button type="button" className="miniButton" onClick={openEditorTab}>
+                    New Tab
+                  </button>
+                  <button type="button" className="miniButton" onClick={openEditorModal}>
+                    Modal
+                  </button>
+                  <button type="button" className="miniButton miniButtonDanger" onClick={() => setEditorSurface(null)}>
+                    Close
+                  </button>
                 </div>
               </div>
-            ) : null}
-            <div className="editorDockActions">
-              <span className="statusPill success">running</span>
-              <button type="button" className="miniButton" onClick={() => setEditorDetailsCollapsed((value) => !value)}>
-                {editorDetailsCollapsed ? "Show Details" : "Hide Details"}
-              </button>
-              <button type="button" className="miniButton" onClick={openEditorTab}>
-                New Tab
-              </button>
-              <button type="button" className="miniButton" onClick={openEditorModal}>
-                Modal
-              </button>
-              <button type="button" className="miniButton miniButtonDanger" onClick={() => setEditorSurface(null)}>
-                Close
-              </button>
+              {!editorDetailsCollapsed ? (
+                <div className="editorDockDetails">
+                  <div className="panelNote">If the embed is blocked by the browser or editor headers, open it in a new tab instead.</div>
+                  <div className="editorCredentials editorDockCredentials">
+                    <div className="editorCredential">
+                      <span className="headerChipLabel">URL</span>
+                      <a className="editorLink mono" href={codeServerSession.url} target="_blank" rel="noreferrer">
+                        {codeServerSession.url}
+                      </a>
+                    </div>
+                    <div className="editorCredential">
+                      <span className="headerChipLabel">Password</span>
+                      <span className="editorMetaValue mono">{codeServerSession.password}</span>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </div>
-          </div>
             <div className="editorFrameShell">
               <iframe
-              key={`split-${editorFrameKey}-${codeServerSession.url}`}
-              className="editorFrame"
-              src={codeServerSession.url}
-              title="Thread workspace editor"
-            />
-          </div>
-        </aside>
-      ) : null}
+                key={`split-${editorFrameKey}-${codeServerSession.url}`}
+                className="editorFrame"
+                src={codeServerSession.url}
+                title="Thread workspace editor"
+              />
+            </div>
+          </aside>
+        ) : null}
+      </div>
 
       {editorSurface === "modal" && codeServerSession?.url ? (
         <div className="modalBackdrop" onClick={() => setEditorSurface(null)}>
@@ -1536,9 +1756,11 @@ export default function App() {
                   <button type="button" className="miniButton" onClick={() => setEditorDetailsCollapsed((value) => !value)}>
                     {editorDetailsCollapsed ? "Show Details" : "Hide Details"}
                   </button>
-                  <button type="button" className="primaryButton" onClick={openEditorSplit}>
-                    Dock Right
-                  </button>
+                  {!shouldUseModalEditor() ? (
+                    <button type="button" className="primaryButton" onClick={openEditorSplit}>
+                      Dock Right
+                    </button>
+                  ) : null}
                   <button type="button" className="miniButton" onClick={openEditorTab}>
                     New Tab
                   </button>

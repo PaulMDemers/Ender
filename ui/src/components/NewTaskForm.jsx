@@ -126,128 +126,139 @@ export default function NewTaskForm({
         </div>
 
         <form className="launchForm" onSubmit={submit}>
-          <label className="launchField">
-            <span className="fieldLabel">Mission goal</span>
-            <span className="fieldHint">Plain language is fine. Ender preserves the thread so you can resume later.</span>
-            <textarea
-              ref={taRef}
-              value={goal}
-              rows={4}
-              className="consoleTextarea"
-              placeholder="Example: audit the auth flow and prepare a safe remediation plan."
-              onChange={(event) => {
-                setGoal(event.target.value);
-                autosize();
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  submit();
-                }
-              }}
-            />
-          </label>
-
-          <div className="launchGrid">
-            <label className="launchField">
-              <span className="fieldLabel">Workspace</span>
-              <span className="fieldHint">Optional path if this run should stay inside a repo or folder.</span>
-              <div className="workspacePickerRow">
-                <input
-                  className="consoleInput"
-                  placeholder="/path/to/repo or project"
-                  value={workspace}
-                  onChange={(event) => setWorkspace(event.target.value)}
+          <div className="launchWorkspace">
+            <div className="launchPrimaryColumn">
+              <label className="launchField">
+                <span className="fieldLabel">Mission goal</span>
+                <span className="fieldHint">Plain language is fine. Ender preserves the thread so you can resume later.</span>
+                <textarea
+                  ref={taRef}
+                  value={goal}
+                  rows={4}
+                  className="consoleTextarea"
+                  placeholder="Example: audit the auth flow and prepare a safe remediation plan."
+                  onChange={(event) => {
+                    setGoal(event.target.value);
+                    autosize();
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      submit();
+                    }
+                  }}
                 />
-                <button type="button" className="secondaryButton pickerToggle" onClick={() => setPickerOpen((value) => !value)}>
-                  {pickerOpen ? "Close picker" : "Browse"}
-                </button>
-              </div>
-              {selfWorkspacePath ? (
-                <div className="workflowActionBar">
-                  <button
-                    type="button"
-                    className="secondaryButton"
-                    onClick={() => setWorkspace(selfWorkspacePath)}
-                  >
-                    Use Ender repo
+              </label>
+
+              <label className="launchField">
+                <span className="fieldLabel">Workspace</span>
+                <span className="fieldHint">Optional path if this run should stay inside a repo or folder.</span>
+                <div className="workspacePickerRow">
+                  <input
+                    className="consoleInput"
+                    placeholder="/path/to/repo or project"
+                    value={workspace}
+                    onChange={(event) => setWorkspace(event.target.value)}
+                  />
+                  <button type="button" className="secondaryButton pickerToggle" onClick={() => setPickerOpen((value) => !value)}>
+                    {pickerOpen ? "Close picker" : "Browse"}
                   </button>
                 </div>
-              ) : null}
-              {selfWorkspacePath ? (
-                <div className="panelNote">
-                  {selfUpdateReady
-                    ? "Supervised self-update is available for the Ender repo workspace."
-                    : selfUpdateHint || "The Ender repo workspace is available, but supervised self-update is not ready."}
+                {selfWorkspacePath ? (
+                  <div className="workflowActionBar">
+                    <button
+                      type="button"
+                      className="secondaryButton"
+                      onClick={() => setWorkspace(selfWorkspacePath)}
+                    >
+                      Use Ender repo
+                    </button>
+                  </div>
+                ) : null}
+              </label>
+
+              {pickerOpen ? (
+                <div className="pickerBox">
+                  <div className="pickerHeader">
+                    <div>
+                      <div className="fieldLabel">Directory browser</div>
+                      <div className="pickerPath mono">{pickerPath || "/"}</div>
+                    </div>
+                    <div className="pickerActions">
+                      <button
+                        type="button"
+                        className="miniButton"
+                        disabled={!pickerParent || pickerLoading}
+                        onClick={() => pickerParent && loadDirs(pickerParent)}
+                      >
+                        Up
+                      </button>
+                      <button
+                        type="button"
+                        className="miniButton"
+                        disabled={pickerLoading}
+                        onClick={() => {
+                          setWorkspace(pickerPath);
+                          setPickerOpen(false);
+                        }}
+                      >
+                        Use current
+                      </button>
+                    </div>
+                  </div>
+                  <div className="pickerList">
+                    {pickerLoading ? <div className="emptyState">Loading directories...</div> : null}
+                    {!pickerLoading && !pickerItems.length ? <div className="emptyState">No child directories</div> : null}
+                    {!pickerLoading
+                      ? pickerItems.map((item) => (
+                          <button
+                            key={item.path}
+                            type="button"
+                            className="pickerItem"
+                            onClick={() => loadDirs(item.path)}
+                          >
+                            <span>{item.name}</span>
+                            <span className="mono">{item.path}</span>
+                          </button>
+                        ))
+                      : null}
+                  </div>
                 </div>
               ) : null}
-            </label>
+            </div>
 
-            <div className="launchField">
-              <span className="fieldLabel">Connected target</span>
-              <span className="launchSummaryLabel">Server</span>
+            <aside className="sidePanel launchSidePanel">
+              <div className="sectionLabel">Connected target</div>
               <div className="launchSummaryValue">{serverName}</div>
               <div className="launchSummaryMeta mono">{serverUrl}</div>
-            </div>
+
+              {selfWorkspacePath ? (
+                <div className="launchContextBlock">
+                  <span className="launchSummaryLabel">Self workspace</span>
+                  <div className="sidePanelValue mono" title={selfWorkspacePath}>{selfWorkspacePath}</div>
+                  <div className="panelNote">
+                    {selfUpdateReady
+                      ? "Supervised self-update is available for the Ender repo workspace."
+                      : selfUpdateHint || "The Ender repo workspace is available, but supervised self-update is not ready."}
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="launchContextBlock">
+                <span className="launchSummaryLabel">Readiness</span>
+                <div className="launchReadiness">
+                  {(readinessChecks || []).slice(0, 4).map((item) => (
+                    <span key={item.label} className={`readinessChip ${item.ready ? "ready" : "notReady"}`}>
+                      {item.label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </aside>
           </div>
 
-          {pickerOpen ? (
-            <div className="pickerBox">
-              <div className="pickerHeader">
-                <div>
-                  <div className="fieldLabel">Directory browser</div>
-                  <div className="pickerPath mono">{pickerPath || "/"}</div>
-                </div>
-                <div className="pickerActions">
-                  <button
-                    type="button"
-                    className="miniButton"
-                    disabled={!pickerParent || pickerLoading}
-                    onClick={() => pickerParent && loadDirs(pickerParent)}
-                  >
-                    Up
-                  </button>
-                  <button
-                    type="button"
-                    className="miniButton"
-                    disabled={pickerLoading}
-                    onClick={() => {
-                      setWorkspace(pickerPath);
-                      setPickerOpen(false);
-                    }}
-                  >
-                    Use current
-                  </button>
-                </div>
-              </div>
-              <div className="pickerList">
-                {pickerLoading ? <div className="emptyState">Loading directories...</div> : null}
-                {!pickerLoading && !pickerItems.length ? <div className="emptyState">No child directories</div> : null}
-                {!pickerLoading
-                  ? pickerItems.map((item) => (
-                      <button
-                        key={item.path}
-                        type="button"
-                        className="pickerItem"
-                        onClick={() => loadDirs(item.path)}
-                      >
-                        <span>{item.name}</span>
-                        <span className="mono">{item.path}</span>
-                      </button>
-                    ))
-                  : null}
-              </div>
-            </div>
-          ) : null}
-
           <div className="launchFooter">
-            <div className="launchReadiness">
-              {(readinessChecks || []).slice(0, 3).map((item) => (
-                <span key={item.label} className={`readinessChip ${item.ready ? "ready" : "notReady"}`}>
-                  {item.label}
-                </span>
-              ))}
-            </div>
+            <div className="panelNote">Press Enter to start quickly. Use Shift+Enter for a multiline objective.</div>
             <button className="primaryButton launchAction" disabled={busy || !goal.trim()}>
               {busy ? "Starting run..." : "Start task"}
             </button>

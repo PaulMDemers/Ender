@@ -183,7 +183,8 @@ function groupEntries(entries) {
     const isHiddenAgentStep = item.kind === "log" && item.source === "agent" && /^step \d+: invoking model$/i.test(item.message);
     const isHiddenContext = item.kind === "log" && item.source === "context" && /^(backend|workspace)=/i.test(item.message);
     const isHiddenStopReason = item.kind === "log" && /^loop stop reason=/i.test(item.message);
-    if (isHiddenAgentStep || isHiddenContext || isHiddenStopReason) {
+    const isHiddenToolArgs = item.kind === "log" && /^tool args \(/i.test(item.message);
+    if (isHiddenAgentStep || isHiddenContext || isHiddenStopReason || isHiddenToolArgs) {
       continue;
     }
     if (item.kind === "tool") {
@@ -440,7 +441,7 @@ function RichMessage({ content, className = "", compact = false, showRaw = false
 
 function ChatRow({ item, messageClassName, isUserChat }) {
   const [showRaw, setShowRaw] = useState(false);
-  const rawToggleLabel = Array.isArray(item.message) ? "show raw payload" : "show raw markdown";
+  const rawToggleLabel = Array.isArray(item.message) ? "raw payload" : "raw markdown";
 
   return (
     <>
@@ -453,7 +454,7 @@ function ChatRow({ item, messageClassName, isUserChat }) {
             onClick={() => setShowRaw((value) => !value)}
             aria-pressed={showRaw}
           >
-            {showRaw ? "show rendered" : rawToggleLabel}
+            {showRaw ? "rendered" : rawToggleLabel}
           </button>
         </div>
       </div>
@@ -528,7 +529,7 @@ export default function LogViewer({ entries, status, entryCount, taskId, scrollT
         {hasRunDetails ? (
           <details className="logRunDetails">
             <summary className="logRunDetailsSummary">
-              <span className="logRunDetailsLabel mono">run details</span>
+              <span className="logRunDetailsLabel mono">details</span>
               <span className="logToolChevron" aria-hidden="true" />
             </summary>
             <div className="logRunDetailsBody">

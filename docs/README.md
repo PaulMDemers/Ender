@@ -38,4 +38,5 @@ The scheduling docs cover the recurring automation tools shown above: cadence se
 ## Existing Internal Notes
 
 - [Agentic spec](agentic-spec.md)
+- [UI enhancement backlog](ui-enhancement-backlog.md)
 - [Website rebuild template](website-rebuild-template.md)

@@ -515,7 +515,7 @@ export default function SchedulePanel({
 
                 {schedule.lastRunMessage ? <div className="panelNote">{schedule.lastRunMessage}</div> : null}
 
-                <div className="scheduleActions">
+                <div className="scheduleActions scheduleActionsCompact">
                   <button type="button" className="miniButton" disabled={busy} onClick={() => startEdit(schedule)}>
                     Edit
                   </button>

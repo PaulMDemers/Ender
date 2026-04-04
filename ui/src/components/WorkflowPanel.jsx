@@ -50,7 +50,7 @@ export default function WorkflowPanel({
           </div>
         </div>
         {session ? (
-          <div className="workflowToolbar">
+          <div className="workflowToolbar workflowToolbarCompact">
             <div className="stepProgress mono">
               {stepSummary} · session {session.id.slice(0, 8)} · updated {new Date(session.updatedAt).toLocaleTimeString()}
             </div>
@@ -71,18 +71,35 @@ export default function WorkflowPanel({
         ) : null}
       </section>
 
-      <section className="consolePanel workflowConsole">
-        <div className="panelBody workflowPanelBody">
-          {!session ? (
-            loading ? <div className="emptyState">Loading workflows...</div> : <WorkflowList workflows={workflows} onStart={onStartWorkflow} />
-          ) : (
-            <>
-              <WorkflowStepRenderer step={step} onSubmit={onAdvance} busy={busy} />
-              {step?.type === "complete" ? <div className="emptyState">Workflow complete. Transitioning into the task view.</div> : null}
-            </>
-          )}
+      <div className="workflowWorkspace">
+        <section className="consolePanel workflowConsole">
+          <div className="panelBody workflowPanelBody">
+            {!session ? (
+              loading ? <div className="emptyState">Loading workflows...</div> : <WorkflowList workflows={workflows} onStart={onStartWorkflow} />
+            ) : (
+              <>
+                <WorkflowStepRenderer step={step} onSubmit={onAdvance} busy={busy} />
+                {step?.type === "complete" ? <div className="emptyState">Workflow complete. Transitioning into the task view.</div> : null}
+              </>
+            )}
 
-          {effectiveError ? <div className="errorBanner">{effectiveError}</div> : null}
+            {effectiveError ? <div className="errorBanner">{effectiveError}</div> : null}
+          </div>
+        </section>
+
+        <aside className="sidePanel workflowSidePanel">
+          <div className="sectionLabel">Flow status</div>
+          <div className="launchSummaryValue">{session ? (step?.title || session.workflowName) : "Choose workflow"}</div>
+          <div className="panelNote">
+            {session
+              ? "Complete this step and Ender will continue the server-defined flow without leaving the console."
+              : "Pick a workflow from the list to start a guided launch with structured inputs and validation."}
+          </div>
+
+          <div className="launchContextBlock">
+            <span className="launchSummaryLabel">Mode</span>
+            <div className="sidePanelValue mono">{session ? stepSummary : "server-defined launch flow"}</div>
+          </div>
 
           {historyCount ? (
             <details className="workflowDebug">
@@ -90,8 +107,8 @@ export default function WorkflowPanel({
               <pre className="workflowDebugPre">{JSON.stringify(debugEntries, null, 2)}</pre>
             </details>
           ) : null}
-        </div>
-      </section>
+        </aside>
+      </div>
     </div>
   );
 }
