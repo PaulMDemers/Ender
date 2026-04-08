@@ -12,6 +12,7 @@ It is designed for operator-driven work: launch a task against a workspace, watc
 
 - Runs an iterative tool-calling loop until the task is completed, stalled, canceled, or reaches a configured step cap.
 - Exposes a local API for threads, live logs, approvals, workflows, schedules, health, and workspace browsing.
+- Adds a persisted global task ledger that can queue work, auto-dispatch tasks, and track which thread completed each item.
 - Ships a React UI and an Electron desktop app built from the same frontend.
 - Persists threads, schedules, and workflow sessions to JSON on disk so they survive server restarts.
 - Supports guided workflows that gather structured inputs before starting work.
@@ -30,6 +31,7 @@ It is designed for operator-driven work: launch a task against a workspace, watc
 | Task runtime | Iterative LangChain-based tool loop with persistence, approvals, SSE logs, reruns, and follow-up prompts. |
 | Workflows | Server-defined state machines rendered by the UI from generic `form`, `select`, and `complete` steps. |
 | Schedules | Cron-backed automation for `prompt`, `thread`, and `workflow` targets. |
+| Global task ledger | Persists queue entries, auto-dispatches work when slots are free, and links completed work back to the responsible thread. |
 | Self-update | Optional supervised self-edit / verify / restart / rollback flow for Ender’s own repo. |
 | Persistence | Threads, schedules, and workflow sessions are stored on disk as JSON. |
 
@@ -69,6 +71,7 @@ ender/
 ├── knowledge/  # Fast onboarding docs for future threads
 ├── threads/    # Persisted task snapshots
 ├── schedules/  # Persisted cron schedules
+├── task-ledger/ # Persisted global task ledger entries
 ├── workflow-sessions/ # Persisted interactive workflow sessions
 └── workspace/  # Default working directory for cloned/generated work
 ```
@@ -220,10 +223,13 @@ Published ports:
 - `AGENT_WORKSPACE_BASE`: root used by the workspace picker. Default `..`.
 - `AGENT_THREADS_DIR`: thread persistence directory. Default `./threads`.
 - `AGENT_SCHEDULES_DIR`: schedule persistence directory. Default `./schedules`.
+- `AGENT_TASK_LEDGER_DIR`: global task-ledger persistence directory. Default `./task-ledger`.
 - `AGENT_WORKFLOW_SESSIONS_DIR`: workflow session persistence directory. Default `./workflow-sessions`.
 - `AGENT_SELF_ROOT`: repo root allowed for self-update tools. Default current working directory.
 - `AGENT_MAX_STEPS`: optional hard limit on model/tool loop iterations.
 - `AGENT_STALL_LIMIT`: repeated-iteration cutoff. Default `4`. Set `0` to disable.
+- `AGENT_TASK_LEDGER_POLL_INTERVAL_MS`: how often Ender refreshes the global task ledger and checks for finished linked threads. Default `15000`. Set `0` to disable polling.
+- `AGENT_TASK_LEDGER_MAX_AUTO_AGENTS`: maximum number of ledger-driven tasks Ender auto-starts concurrently. Default `0` (manual dispatch only).
 - `AGENT_AUTO_RESTART_INTERRUPTED_THREADS`: when `true`, interrupted `running` or `awaiting_approval` threads auto-restart after server boot for all workspaces. Default `false`.
 - Ender self-root threads opt into interrupted-thread auto-restart by default even when `AGENT_AUTO_RESTART_INTERRUPTED_THREADS` is unset or `false`.
 - `AGENT_SELF_UPDATE_VERIFY`: verification command run by the supervisor before restart. Default `npm run verify`.

@@ -11,6 +11,7 @@ services:
       AGENT_WORKSPACE_BASE: /app/workspace
       AGENT_THREADS_DIR: /app/threads
       AGENT_SCHEDULES_DIR: /app/schedules
+      AGENT_TASK_LEDGER_DIR: /app/task-ledger
       AGENT_WORKFLOW_SESSIONS_DIR: /app/workflow-sessions
       AGENT_SELF_ROOT: /app
       CODE_SERVER_MODE: docker
@@ -22,6 +23,7 @@ services:
       - ./threads:/app/threads
       - ./workspace:/app/workspace
       - ./schedules:/app/schedules
+      - ./task-ledger:/app/task-ledger
       - ./workflow-sessions:/app/workflow-sessions
       - /var/run/docker.sock:/var/run/docker.sock
 

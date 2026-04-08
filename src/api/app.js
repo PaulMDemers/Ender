@@ -34,7 +34,15 @@ function getRequestOrigin(req, config) {
   }
 }
 
-function createApp(taskManager, workflowManager, scheduleManager, config, selfUpdateManager = null, codeServerManager = null) {
+function createApp(
+  taskManager,
+  workflowManager,
+  scheduleManager,
+  config,
+  selfUpdateManager = null,
+  codeServerManager = null,
+  taskLedgerManager = null
+) {
   const app = express();
   app.use(cors());
   app.use(express.json({ limit: "12mb" }));
@@ -71,6 +79,38 @@ function createApp(taskManager, workflowManager, scheduleManager, config, selfUp
 
   app.get("/schedules", (_req, res) => {
     res.json({ items: scheduleManager.list() });
+  });
+
+  app.get("/task-ledger", (_req, res) => {
+    if (!taskLedgerManager) {
+      return res.status(503).json({
+        ok: false,
+        error: "task_ledger_unavailable",
+        message: "Task ledger manager is not configured."
+      });
+    }
+
+    return res.json({
+      items: taskLedgerManager.list(),
+      maxAutoAgents: taskLedgerManager.maxAutoAgents,
+      pollIntervalMs: taskLedgerManager.pollIntervalMs
+    });
+  });
+
+  app.get("/task-ledger/:id", (req, res) => {
+    if (!taskLedgerManager) {
+      return res.status(503).json({
+        ok: false,
+        error: "task_ledger_unavailable",
+        message: "Task ledger manager is not configured."
+      });
+    }
+
+    const entry = taskLedgerManager.get(req.params.id);
+    if (!entry) {
+      return res.status(404).json({ error: "not_found" });
+    }
+    return res.json(entry);
   });
 
   app.get("/self-update/status", async (_req, res) => {
@@ -115,6 +155,56 @@ function createApp(taskManager, workflowManager, scheduleManager, config, selfUp
       return res.status(400).json(result);
     }
     return res.status(201).json(result.schedule);
+  });
+
+  app.post("/task-ledger", async (req, res) => {
+    if (!taskLedgerManager) {
+      return res.status(503).json({
+        ok: false,
+        error: "task_ledger_unavailable",
+        message: "Task ledger manager is not configured."
+      });
+    }
+
+    const result = await taskLedgerManager.create(req.body || {});
+    if (!result.ok) {
+      return res.status(400).json(result);
+    }
+    return res.status(201).json(result.entry);
+  });
+
+  app.put("/task-ledger/:id", async (req, res) => {
+    if (!taskLedgerManager) {
+      return res.status(503).json({
+        ok: false,
+        error: "task_ledger_unavailable",
+        message: "Task ledger manager is not configured."
+      });
+    }
+
+    const result = await taskLedgerManager.update(req.params.id, req.body || {});
+    if (!result.ok) {
+      const code = result.error === "not_found" ? 404 : result.error === "entry_running" ? 409 : 400;
+      return res.status(code).json(result);
+    }
+    return res.json(result.entry);
+  });
+
+  app.post("/task-ledger/:id/run", async (req, res) => {
+    if (!taskLedgerManager) {
+      return res.status(503).json({
+        ok: false,
+        error: "task_ledger_unavailable",
+        message: "Task ledger manager is not configured."
+      });
+    }
+
+    const result = await taskLedgerManager.runNow(req.params.id);
+    if (!result.ok) {
+      const code = result.error === "not_found" ? 404 : result.error === "entry_running" ? 409 : 400;
+      return res.status(code).json(result);
+    }
+    return res.status(201).json(result);
   });
 
   app.put("/schedules/:id", async (req, res) => {

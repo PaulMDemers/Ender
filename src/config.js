@@ -11,10 +11,13 @@ const schema = z.object({
   AGENT_WORKSPACE_BASE: z.string().optional(),
   AGENT_THREADS_DIR: z.string().optional(),
   AGENT_SCHEDULES_DIR: z.string().optional(),
+  AGENT_TASK_LEDGER_DIR: z.string().optional(),
   AGENT_WORKFLOW_SESSIONS_DIR: z.string().optional(),
   AGENT_SELF_ROOT: z.string().optional(),
   AGENT_MAX_STEPS: z.string().optional(),
   AGENT_STALL_LIMIT: z.string().optional(),
+  AGENT_TASK_LEDGER_POLL_INTERVAL_MS: z.string().optional(),
+  AGENT_TASK_LEDGER_MAX_AUTO_AGENTS: z.string().optional(),
   AGENT_AUTO_RESTART_INTERRUPTED_THREADS: z.string().optional(),
   ENDER_SUPERVISOR_URL: z.string().optional(),
   ENDER_SUPERVISOR_TOKEN: z.string().optional(),
@@ -111,6 +114,7 @@ function loadConfig(env = process.env) {
   const workspaceBase = path.resolve(parsed.AGENT_WORKSPACE_BASE || path.resolve(process.cwd(), ".."));
   const threadsDir = path.resolve(parsed.AGENT_THREADS_DIR || path.resolve(process.cwd(), "threads"));
   const schedulesDir = path.resolve(parsed.AGENT_SCHEDULES_DIR || path.resolve(process.cwd(), "schedules"));
+  const taskLedgerDir = path.resolve(parsed.AGENT_TASK_LEDGER_DIR || path.resolve(process.cwd(), "task-ledger"));
   const workflowSessionsDir = path.resolve(
     parsed.AGENT_WORKFLOW_SESSIONS_DIR || path.resolve(process.cwd(), "workflow-sessions")
   );
@@ -133,6 +137,26 @@ function loadConfig(env = process.env) {
       throw new Error("AGENT_STALL_LIMIT must be a non-negative number when set");
     }
     stallLimit = Math.floor(n);
+  }
+
+  const taskLedgerPollIntervalRaw = String(parsed.AGENT_TASK_LEDGER_POLL_INTERVAL_MS || "").trim();
+  let taskLedgerPollIntervalMs = 15_000;
+  if (taskLedgerPollIntervalRaw) {
+    const n = Number(taskLedgerPollIntervalRaw);
+    if (!Number.isFinite(n) || n < 0) {
+      throw new Error("AGENT_TASK_LEDGER_POLL_INTERVAL_MS must be a non-negative number when set");
+    }
+    taskLedgerPollIntervalMs = Math.floor(n);
+  }
+
+  const taskLedgerMaxAutoAgentsRaw = String(parsed.AGENT_TASK_LEDGER_MAX_AUTO_AGENTS || "").trim();
+  let taskLedgerMaxAutoAgents = 0;
+  if (taskLedgerMaxAutoAgentsRaw) {
+    const n = Number(taskLedgerMaxAutoAgentsRaw);
+    if (!Number.isFinite(n) || n < 0) {
+      throw new Error("AGENT_TASK_LEDGER_MAX_AUTO_AGENTS must be a non-negative number when set");
+    }
+    taskLedgerMaxAutoAgents = Math.floor(n);
   }
 
   const selfUpdateTimeoutRaw = String(parsed.AGENT_SELF_UPDATE_TIMEOUT_MS || "").trim();
@@ -182,9 +206,12 @@ function loadConfig(env = process.env) {
     workspaceBase,
     threadsDir,
     schedulesDir,
+    taskLedgerDir,
     workflowSessionsDir,
     selfRoot,
     autoRestartInterruptedThreads,
+    taskLedgerPollIntervalMs,
+    taskLedgerMaxAutoAgents,
     selfUpdate: {
       rootDir: selfRoot,
       supervisorUrl: parsed.ENDER_SUPERVISOR_URL ? String(parsed.ENDER_SUPERVISOR_URL).trim() : null,
