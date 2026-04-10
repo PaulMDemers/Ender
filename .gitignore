@@ -148,3 +148,5 @@ blob-report/
 /.ender-snapshots
 /self-reviews
 /.ender-code-server
+/workflow-sessions
+/task-ledger
