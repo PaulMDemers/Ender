@@ -7,6 +7,7 @@ const path = require("node:path");
 const { WorkflowManager } = require("../src/workflows/workflowManager");
 const { ScheduleManager } = require("../src/runtime/scheduleManager");
 const { TaskManager } = require("../src/runtime/taskManager");
+const runTaskModule = require("../src/runtime/runTask");
 
 async function makeTempDir() {
   return fs.mkdtemp(path.join(os.tmpdir(), "ender-group2-"));
@@ -322,4 +323,41 @@ test("TaskManager approval flow resumes the task after approval", async (t) => {
   assert.equal(resolved.ok, true);
   assert.equal(await approvalPromise, true);
   assert.equal(task.status, "running");
+});
+
+test("TaskManager records autonomous needs_input outcomes without marking the thread done", async (t) => {
+  const root = await makeTempDir();
+  t.after(async () => {
+    await fs.rm(root, { recursive: true, force: true });
+  });
+
+  const originalRunTask = runTaskModule.runTask;
+  runTaskModule.runTask = async () => ({
+    result: "DONE:\nNeed the target production URL before continuing.",
+    outcomeStatus: "needs_input",
+    ledger: {}
+  });
+
+  t.after(() => {
+    runTaskModule.runTask = originalRunTask;
+  });
+
+  const manager = new TaskManager({
+    workdir: root,
+    workspaceBase: root,
+    threadsDir: path.join(root, "threads")
+  });
+  await manager.init();
+
+  const started = manager.start("Autonomous ledger run", undefined, { ledgerEntryId: "ledger-1" });
+  assert.equal(started.ok, true);
+
+  const waited = await manager.waitForTask(started.id, { timeoutMs: 1000 });
+  assert.equal(waited.ok, true);
+  assert.equal(waited.timedOut, false);
+
+  const task = manager.get(started.id);
+  assert.ok(task);
+  assert.equal(task.status, "needs_input");
+  assert.match(task.result || "", /Need the target production URL/i);
 });

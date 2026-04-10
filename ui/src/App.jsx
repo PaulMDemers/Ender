@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   advanceWorkflowSession,
   continueTask,
+  createTaskLedgerEntry,
   createSchedule,
   getTaskCodeServer,
   createWorkflowSession,
@@ -10,6 +11,7 @@ import {
   getApiBase,
   getHealth,
   launchTaskCodeServer,
+  listTaskLedger,
   getWorkflowSession,
   listSchedules,
   listTasks,
@@ -17,6 +19,7 @@ import {
   rerunTask,
   resolveApproval,
   retreatWorkflowSession,
+  runTaskLedgerEntryNow,
   runScheduleNow,
   setApiBase,
   stopTaskCodeServer,
@@ -32,6 +35,7 @@ import ApprovalPrompt from "./components/ApprovalPrompt";
 import ServerModal from "./components/ServerModal";
 import WorkflowPanel from "./components/WorkflowPanel";
 import SchedulePanel from "./components/SchedulePanel";
+import TaskLedgerPanel from "./components/TaskLedgerPanel";
 
 const logoIcon = "/icons/icon-rounded-master.png";
 
@@ -110,7 +114,12 @@ function saveWorkflowSessionId(serverUrl, sessionId) {
 }
 
 function isThreadIdle(status) {
-  return status === "done" || status === "error" || status === "canceled" || status === "terminated";
+  return status === "done"
+    || status === "error"
+    || status === "canceled"
+    || status === "terminated"
+    || status === "blocked"
+    || status === "needs_input";
 }
 
 function getStatusTone(status) {
@@ -118,6 +127,8 @@ function getStatusTone(status) {
   if (normalized === "running") return "running";
   if (normalized === "awaiting_approval") return "approval";
   if (normalized === "done") return "success";
+  if (normalized === "needs_input") return "warning";
+  if (normalized === "blocked") return "danger";
   if (normalized === "error") return "danger";
   if (normalized === "terminated" || normalized === "canceled") return "warning";
   return "neutral";
@@ -127,6 +138,7 @@ function getStatusLabel(status) {
   if (!status) return "idle";
   if (status === "awaiting_approval") return "approval needed";
   if (status === "done") return "completed";
+  if (status === "needs_input") return "needs input";
   return String(status).replaceAll("_", " ");
 }
 
@@ -255,6 +267,13 @@ function getModeCopy(mode) {
       subtitle: "Create cron-driven prompts, thread continuations, and workflow launches without leaving the main console."
     };
   }
+  if (mode === "ledger") {
+    return {
+      eyebrow: "Task Ledger",
+      title: "Queue shared agent work",
+      subtitle: "Track generic queued work, dispatch it to available threads, and review completed items across sources."
+    };
+  }
   return {
     eyebrow: "Launch",
     title: "Start a new task",
@@ -280,6 +299,9 @@ export default function App() {
   const [schedules, setSchedules] = useState([]);
   const [scheduleBusy, setScheduleBusy] = useState(false);
   const [scheduleError, setScheduleError] = useState("");
+  const [ledgerEntries, setLedgerEntries] = useState([]);
+  const [ledgerBusy, setLedgerBusy] = useState(false);
+  const [ledgerError, setLedgerError] = useState("");
   const [health, setHealth] = useState(null);
   const [taskUiState, setTaskUiState] = useState({});
   const [taskVisibleCount, setTaskVisibleCount] = useState(TASK_PAGE_SIZE);
@@ -416,6 +438,34 @@ export default function App() {
 
     return () => {
       live = false;
+    };
+  }, [composeMode, serverUrl]);
+
+  useEffect(() => {
+    if (composeMode !== "ledger") return;
+    let live = true;
+
+    const loadLedger = async () => {
+      setLedgerBusy(true);
+      try {
+        const data = await listTaskLedger();
+        if (!live) return;
+        setLedgerEntries(data.items || []);
+        setLedgerError("");
+      } catch (err) {
+        if (!live) return;
+        setLedgerError(err.message || "Unable to load task ledger");
+      } finally {
+        if (live) setLedgerBusy(false);
+      }
+    };
+
+    loadLedger();
+    const id = setInterval(loadLedger, 3000);
+
+    return () => {
+      live = false;
+      clearInterval(id);
     };
   }, [composeMode, serverUrl]);
 
@@ -844,6 +894,11 @@ export default function App() {
     setSchedules(data.items || []);
   };
 
+  const refreshTaskLedger = async () => {
+    const data = await listTaskLedger();
+    setLedgerEntries(data.items || []);
+  };
+
   const createScheduleEntry = async (payload) => {
     setScheduleBusy(true);
     setScheduleError("");
@@ -897,6 +952,44 @@ export default function App() {
     } finally {
       setScheduleBusy(false);
     }
+  };
+
+  const createLedgerEntry = async (payload) => {
+    setLedgerBusy(true);
+    setLedgerError("");
+    try {
+      await createTaskLedgerEntry(payload);
+      await Promise.all([refreshTaskLedger(), refresh()]);
+    } catch (err) {
+      setLedgerError(err.message || "Unable to create task ledger entry");
+      throw err;
+    } finally {
+      setLedgerBusy(false);
+    }
+  };
+
+  const runLedgerEntryNow = async (id) => {
+    setLedgerBusy(true);
+    setLedgerError("");
+    try {
+      const result = await runTaskLedgerEntryNow(id);
+      await Promise.all([refreshTaskLedger(), refresh()]);
+      if (result?.startedTaskId) {
+        setSelectedId(result.startedTaskId);
+        setComposeMode("thread");
+      }
+    } catch (err) {
+      setLedgerError(err.message || "Unable to run task ledger entry");
+    } finally {
+      setLedgerBusy(false);
+    }
+  };
+
+  const openTaskFromLedger = async (taskId) => {
+    await refresh();
+    setSelectedId(taskId);
+    setComposeMode("thread");
+    setRailOpen(false);
   };
 
   const onTerminate = async (id) => {
@@ -1245,6 +1338,19 @@ export default function App() {
       );
     }
 
+    if (activeMode === "ledger") {
+      return (
+        <TaskLedgerPanel
+          entries={ledgerEntries}
+          busy={ledgerBusy}
+          error={ledgerError}
+          onCreate={createLedgerEntry}
+          onRunNow={runLedgerEntryNow}
+          onOpenTask={openTaskFromLedger}
+        />
+      );
+    }
+
     if (selectedTask && composeMode === "thread") {
       if (hasStackedEditor) {
         return (
@@ -1432,6 +1538,14 @@ export default function App() {
                   >
                     <span className="modeButtonLabel">Schedules</span>
                     <span className="modeButtonMeta">Recurring runs</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`modeButton ${activeMode === "ledger" ? "active" : ""}`}
+                    onClick={() => openMode("ledger")}
+                  >
+                    <span className="modeButtonLabel">Task Ledger</span>
+                    <span className="modeButtonMeta">Queued shared work</span>
                   </button>
                 </div>
               ) : null}

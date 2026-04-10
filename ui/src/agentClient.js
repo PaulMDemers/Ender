@@ -124,6 +124,30 @@ export function listSchedules() {
   return request("/schedules");
 }
 
+export function listTaskLedger() {
+  return request("/task-ledger");
+}
+
+export function createTaskLedgerEntry(input) {
+  return request("/task-ledger", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input || {})
+  });
+}
+
+export function updateTaskLedgerEntry(id, input) {
+  return request(`/task-ledger/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input || {})
+  });
+}
+
+export function runTaskLedgerEntryNow(id) {
+  return request(`/task-ledger/${id}/run`, { method: "POST" });
+}
+
 export function createSchedule(input) {
   return request("/schedules", {
     method: "POST",

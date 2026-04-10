@@ -2,7 +2,11 @@ const { z } = require("zod");
 const { tool } = require("@langchain/core/tools");
 const { addUnique } = require("../state/ledger");
 
-function createLedgerTools(ledger) {
+const finalizeStatusSchema = z.enum(["completed", "blocked", "needs_input"]);
+
+function createLedgerTools(ledger, options = {}) {
+  const onFinalize = typeof options.onFinalize === "function" ? options.onFinalize : null;
+
   const save_fact = tool(
     async ({ fact }) => {
       const saved = addUnique(ledger.task.facts, fact);
@@ -37,16 +41,27 @@ function createLedgerTools(ledger) {
   );
 
   const finalize = tool(
-    async ({ note }) => {
+    async ({ note, status }) => {
       ledger.progress.done = true;
+      const normalizedStatus = finalizeStatusSchema.safeParse(status ?? "completed").success
+        ? (status || "completed")
+        : "completed";
+      ledger.progress.outcomeStatus = normalizedStatus;
       const finalNote = String(note || "").trim();
       const normalized = finalNote.startsWith("DONE:") ? finalNote : `DONE:${finalNote ? `\n${finalNote}` : ""}`;
+      onFinalize?.({
+        status: normalizedStatus,
+        note: normalized
+      });
       return normalized;
     },
     {
       name: "finalize",
-      description: "Purpose: Mark task completion and emit the final user-visible response. When to use: Once the task is complete or cannot proceed further. Constraints: note must begin with DONE:; if it does not, the tool will normalize it. Side effects: ends the task. Requires explicit user intent: no. Output: final completion message.",
-      schema: z.object({ note: z.string().nullable() })
+      description: "Purpose: End the current task run and emit the final user-visible response. When to use: Use status=completed only when the task is fully fulfilled. Use status=needs_input when required information is missing. Use status=blocked when an external precondition or hard constraint prevents completion. Constraints: note must begin with DONE:; if it does not, the tool will normalize it. Side effects: ends the task. Requires explicit user intent: no. Output: final completion message.",
+      schema: z.object({
+        note: z.string().nullable(),
+        status: finalizeStatusSchema.nullable().optional()
+      })
     }
   );
 

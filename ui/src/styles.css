@@ -2473,6 +2473,44 @@ body.editorDockResizing {
   gap: 8px;
 }
 
+.taskLedgerWorkspace {
+  align-items: start;
+}
+
+.taskLedgerSidePanel {
+  position: sticky;
+  top: 0;
+}
+
+.taskLedgerRow {
+  gap: 12px;
+}
+
+.taskLedgerRowHeader {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.taskLedgerRowTitleBlock {
+  display: grid;
+  gap: 6px;
+  min-width: min(100%, 520px);
+}
+
+.taskLedgerPromptPreview {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.taskLedgerMetaGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 16px;
+}
+
 .scheduleMetaInline {
   display: flex;
   flex-wrap: wrap;
@@ -2729,7 +2767,8 @@ body.editorDockResizing {
   .launchGrid,
   .workflowGrid,
   .serverForm,
-  .scheduleMetaGrid {
+  .scheduleMetaGrid,
+  .taskLedgerMetaGrid {
     grid-template-columns: 1fr;
   }
 }
@@ -2770,7 +2809,8 @@ body.editorDockResizing {
   .workflowToolbar,
   .panelChrome,
   .serverRow,
-  .scheduleRowHeader {
+  .scheduleRowHeader,
+  .taskLedgerRowHeader {
     align-items: flex-start;
     flex-direction: column;
   }

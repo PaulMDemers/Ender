@@ -19,12 +19,68 @@ const { runAgentLoop } = require("./runAgentLoop");
 const { SYSTEM_PROMPT } = require("../agents/systemPrompt");
 const { validateToolSchemasForBackend } = require("../llm/toolSchemaPreflight");
 
-async function runTask({ goal, thread, config, onLog, requestApproval, workspaceDir, taskId, scheduleManager, taskManager, selfUpdateManager }) {
+function inferLedgerAutonomousStatus(text) {
+  const body = String(text || "").trim().toLowerCase();
+  if (!body) return "blocked";
+
+  const needsInputSignals = [
+    "need more information",
+    "need additional information",
+    "need more info",
+    "need additional info",
+    "i need",
+    "please provide",
+    "can you provide",
+    "which would you like",
+    "how would you like",
+    "what would you like",
+    "do you want",
+    "would you like",
+    "should i",
+    "question"
+  ];
+
+  if (body.includes("?") || needsInputSignals.some((signal) => body.includes(signal))) {
+    return "needs_input";
+  }
+
+  return "blocked";
+}
+
+function buildLedgerTaskSystemPrompt(basePrompt) {
+  return [
+    String(basePrompt || SYSTEM_PROMPT).trim(),
+    "",
+    "Ledger-run autonomy policy:",
+    "- This run is autonomous. Do not stop to ask the operator for preferences, confirmation, or optional next steps.",
+    "- Make reasonable implementation decisions yourself whenever they are reversible or low risk.",
+    "- Only end with finalize status=completed when the requested work is actually fulfilled.",
+    "- If required information is genuinely missing and the task cannot continue, call finalize with status=needs_input and explain exactly what information is missing.",
+    "- If the task cannot be fulfilled because of an external constraint, missing dependency, permission boundary, or hard blocker, call finalize with status=blocked and explain the blocker clearly.",
+    "- Do not treat a request for operator guidance as successful completion."
+  ].join("\n");
+}
+
+async function runTask({
+  goal,
+  thread,
+  config,
+  onLog,
+  requestApproval,
+  workspaceDir,
+  taskId,
+  scheduleManager,
+  taskManager,
+  selfUpdateManager
+}) {
   const activeWorkdir = workspaceDir || config.workdir;
   await fs.mkdir(activeWorkdir, { recursive: true });
 
   const ledger = createLedger();
   const model = createChatModel(config);
+  const taskSummary = taskId && taskManager?.getTaskSummary ? taskManager.getTaskSummary(taskId) : null;
+  const isLedgerTask = Boolean(taskSummary?.ledgerEntryId);
+  let finalizedOutcome = null;
 
   const tools = [
     ...createFileTools(activeWorkdir),
@@ -40,7 +96,11 @@ async function runTask({ goal, thread, config, onLog, requestApproval, workspace
     ...(taskManager ? createThreadTools(taskManager, { taskId, onLog }) : []),
     ...(selfUpdateManager ? createSelfUpdateTools(selfUpdateManager, { requestApproval, onLog, activeWorkdir }) : []),
     createExecTool(activeWorkdir, { requestApproval, onLog }),
-    ...createLedgerTools(ledger)
+    ...createLedgerTools(ledger, {
+      onFinalize(outcome) {
+        finalizedOutcome = outcome;
+      }
+    })
   ];
 
   validateToolSchemasForBackend(config.backend, tools, { onLog });
@@ -51,7 +111,9 @@ async function runTask({ goal, thread, config, onLog, requestApproval, workspace
   const result = await runAgentLoop({
     model,
     tools,
-    systemPrompt: config.systemPrompt || SYSTEM_PROMPT,
+    systemPrompt: isLedgerTask
+      ? buildLedgerTaskSystemPrompt(config.systemPrompt || SYSTEM_PROMPT)
+      : (config.systemPrompt || SYSTEM_PROMPT),
     userPrompt: goal,
     thread,
     maxSteps: config.maxSteps,
@@ -65,6 +127,23 @@ async function runTask({ goal, thread, config, onLog, requestApproval, workspace
 
   onLog({ level: "info", data: `loop stop reason=${result.stopReason}` });
 
+  if (isLedgerTask && finalizedOutcome) {
+    return {
+      result: finalizedOutcome.note,
+      ledger,
+      outcomeStatus: finalizedOutcome.status
+    };
+  }
+
+  if (isLedgerTask && !ledger.progress.done && !String(finalText).startsWith("DONE:")) {
+    const inferredStatus = inferLedgerAutonomousStatus(finalText);
+    return {
+      result: `DONE:\n${String(finalText || "Autonomous ledger task stopped before reaching completion.").trim()}`,
+      ledger,
+      outcomeStatus: inferredStatus
+    };
+  }
+
   if (!ledger.progress.done && !String(finalText).startsWith("DONE:")) {
     const fallbackBody = ledger.task.facts.length
       ? ledger.task.facts.map((f) => `- ${f}`).join("\n")
@@ -72,7 +151,11 @@ async function runTask({ goal, thread, config, onLog, requestApproval, workspace
     return { result: `DONE:\n${fallbackBody}`, ledger };
   }
 
-  return { result: finalText, ledger };
+  return {
+    result: finalText,
+    ledger,
+    outcomeStatus: finalizedOutcome?.status || "completed"
+  };
 }
 
 module.exports = { runTask };

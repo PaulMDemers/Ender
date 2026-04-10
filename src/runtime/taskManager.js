@@ -124,7 +124,12 @@ class TaskManager {
   }
 
   _isTerminalStatus(status) {
-    return status === "done" || status === "error" || status === "canceled" || status === "terminated";
+    return status === "done"
+      || status === "error"
+      || status === "canceled"
+      || status === "terminated"
+      || status === "blocked"
+      || status === "needs_input";
   }
 
   async init() {
@@ -194,6 +199,7 @@ class TaskManager {
       pendingApprovalCount: t.pendingApprovals.size,
       workspace: t.workspace,
       workspaceLabel: t.workspaceLabel,
+      ledgerEntryId: t.ledgerEntryId || null,
       parentTaskId: t.parentTaskId || null,
       childTaskIds: Array.isArray(t.childTaskIds) ? [...t.childTaskIds] : []
     }));
@@ -213,6 +219,7 @@ class TaskManager {
       runCount: t.runCount,
       workspace: t.workspace,
       workspaceLabel: t.workspaceLabel,
+      ledgerEntryId: t.ledgerEntryId || null,
       parentTaskId: t.parentTaskId || null,
       childTaskIds: Array.isArray(t.childTaskIds) ? [...t.childTaskIds] : [],
       pendingApprovals: [...t.pendingApprovals.values()].map((a) => ({
@@ -465,6 +472,7 @@ class TaskManager {
       pendingApprovals: new Map(),
       workspace,
       workspaceLabel,
+      ledgerEntryId: options.ledgerEntryId ? String(options.ledgerEntryId) : null,
       parentTaskId: options.parentTaskId ? String(options.parentTaskId) : null,
       childTaskIds: [],
       waiters: new Set(),
@@ -680,7 +688,7 @@ class TaskManager {
     (async () => {
       try {
         const { runTask } = require("./runTask");
-        const { result } = await runTask({
+        const { result, outcomeStatus } = await runTask({
           goal,
           thread,
           config: this.config,
@@ -695,7 +703,11 @@ class TaskManager {
 
         if (task.deleted || task.status === "canceled" || task.status === "terminated") return;
 
-        task.status = "done";
+        task.status = outcomeStatus === "blocked"
+          ? "blocked"
+          : outcomeStatus === "needs_input"
+            ? "needs_input"
+            : "done";
         task.result = result;
         task.finishedAt = new Date().toISOString();
         const assistantContent = String(result);
@@ -807,6 +819,7 @@ class TaskManager {
       runCount: Number.isFinite(task.runCount) ? task.runCount : 0,
       workspace: task.workspace,
       workspaceLabel: task.workspaceLabel || task.workspace,
+      ledgerEntryId: task.ledgerEntryId || null,
       parentTaskId: task.parentTaskId || null,
       childTaskIds: Array.isArray(task.childTaskIds) ? [...task.childTaskIds] : [],
       pendingApprovalCount: task.pendingApprovals instanceof Map ? task.pendingApprovals.size : 0,
@@ -846,6 +859,7 @@ class TaskManager {
       thread: Array.isArray(task.thread) ? task.thread : [],
       workspace: task.workspace,
       workspaceLabel: task.workspaceLabel || task.workspace,
+      ledgerEntryId: task.ledgerEntryId || null,
       parentTaskId: task.parentTaskId || null,
       childTaskIds: Array.isArray(task.childTaskIds) ? task.childTaskIds : [],
       autoRestartOnInterruption: Boolean(task.autoRestartOnInterruption),
@@ -877,6 +891,7 @@ class TaskManager {
       pendingApprovals: new Map(),
       workspace: String(data.workspace || this.config.workdir),
       workspaceLabel: String(data.workspaceLabel || data.workspace || this.config.workdir),
+      ledgerEntryId: data.ledgerEntryId ? String(data.ledgerEntryId) : null,
       parentTaskId: data.parentTaskId ? String(data.parentTaskId) : null,
       childTaskIds: Array.isArray(data.childTaskIds) ? data.childTaskIds.map((id) => String(id)) : [],
       waiters: new Set(),

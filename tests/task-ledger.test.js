@@ -43,10 +43,16 @@ test("buildTaskLedgerTaskPrompt injects the required worker procedure", () => {
   const prompt = buildTaskLedgerTaskPrompt({
     title: "Ship the orchestration feature",
     prompt: "Implement the orchestration feature end-to-end.",
-    workspace: "/tmp/example"
+    workspace: "/tmp/example",
+    source: {
+      kind: "jira",
+      label: "ABC-123",
+      referenceId: "issue-42"
+    }
   });
 
   assert.match(prompt, /global task ledger/i);
+  assert.match(prompt, /Source: jira · ABC-123 · issue-42/i);
   assert.match(prompt, /Inspect the workspace first/i);
   assert.match(prompt, /Build a concrete plan and a checklist/i);
   assert.match(prompt, /add tests when practical/i);
@@ -73,7 +79,12 @@ test("TaskLedgerManager auto-dispatches pending work and marks it complete when 
   const created = await manager.create({
     title: "Implement queued orchestration",
     prompt: "Add a global work ledger with slot-based auto dispatch.",
-    workspace: "/tmp/workspace-a"
+    workspace: "/tmp/workspace-a",
+    source: {
+      kind: "api",
+      label: "manual submission",
+      referenceId: "req-7"
+    }
   });
 
   assert.equal(created.ok, true);
@@ -83,6 +94,11 @@ test("TaskLedgerManager auto-dispatches pending work and marks it complete when 
   const runningEntry = manager.get(created.entry.id);
   assert.equal(runningEntry.status, "running");
   assert.equal(runningEntry.startedTaskId, startedTaskId);
+  assert.deepEqual(runningEntry.source, {
+    kind: "api",
+    label: "manual submission",
+    referenceId: "req-7"
+  });
   assert.match(taskManager.started[0].prompt, /Required procedure:/);
 
   taskManager.tasks.set(startedTaskId, {
@@ -148,6 +164,45 @@ test("TaskLedgerManager respects max auto agent slots and dispatches the next it
   assert.equal(taskManager.started.length, 2);
   assert.equal(manager.get(second.entry.id).status, "running");
   assert.equal(manager.get(second.entry.id).startedTaskId, taskManager.started[1].id);
+});
+
+test("TaskLedgerManager maps autonomous needs_input task outcomes onto ledger entry status", async (t) => {
+  const root = await makeTempDir();
+  t.after(async () => {
+    await fs.rm(root, { recursive: true, force: true });
+  });
+
+  const taskManager = createTaskManagerDouble();
+  const manager = new TaskLedgerManager({
+    config: {
+      taskLedgerDir: path.join(root, "task-ledger"),
+      taskLedgerPollIntervalMs: 0,
+      taskLedgerMaxAutoAgents: 1
+    },
+    taskManager
+  });
+
+  await manager.init();
+  const created = await manager.create({
+    title: "Need deployment target",
+    prompt: "Ship the patch but only if the production hostname is known."
+  });
+
+  const startedTaskId = taskManager.started[0].id;
+  taskManager.tasks.set(startedTaskId, {
+    id: startedTaskId,
+    goal: taskManager.started[0].prompt,
+    status: "needs_input",
+    finishedAt: "2026-04-08T10:08:00.000Z",
+    result: "DONE:\nNeed the production hostname before deployment can continue."
+  });
+
+  await manager.reconcile({ dispatch: false });
+
+  const entry = manager.get(created.entry.id);
+  assert.equal(entry.status, "needs_input");
+  assert.equal(entry.completedTaskId, startedTaskId);
+  assert.match(entry.lastError || "", /needs additional information/i);
 });
 
 test("task ledger API exposes create, list, and run endpoints", async (t) => {

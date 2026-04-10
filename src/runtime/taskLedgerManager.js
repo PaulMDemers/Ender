@@ -2,8 +2,8 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { randomUUID } = require("node:crypto");
 
-const TERMINAL_TASK_STATUSES = new Set(["done", "error", "canceled", "terminated"]);
-const EDITABLE_LEDGER_STATUSES = new Set(["pending", "completed", "failed", "canceled"]);
+const TERMINAL_TASK_STATUSES = new Set(["done", "error", "canceled", "terminated", "blocked", "needs_input"]);
+const EDITABLE_LEDGER_STATUSES = new Set(["pending", "completed", "failed", "canceled", "blocked", "needs_input"]);
 
 function deriveTitle(prompt) {
   const raw = String(prompt || "").trim();
@@ -12,14 +12,36 @@ function deriveTitle(prompt) {
   return firstLine.trim().slice(0, 120);
 }
 
+function normalizeSource(source) {
+  if (!source || typeof source !== "object") return null;
+
+  const kind = String(source.kind || "").trim();
+  const label = String(source.label || "").trim();
+  const referenceId = String(source.referenceId || "").trim();
+
+  if (!kind && !label && !referenceId) return null;
+
+  return {
+    kind: kind || "external",
+    label: label || null,
+    referenceId: referenceId || null
+  };
+}
+
 function buildTaskLedgerTaskPrompt(entry) {
   const workspace = String(entry.workspace || "").trim();
   const title = String(entry.title || deriveTitle(entry.prompt) || "Ledger task").trim();
+  const sourceKind = String(entry.source?.kind || "").trim();
+  const sourceLabel = String(entry.source?.label || "").trim();
+  const sourceReferenceId = String(entry.source?.referenceId || "").trim();
 
   return [
     "This task was assigned from Ender's global task ledger.",
     "",
     `Ledger entry: ${title}`,
+    sourceKind || sourceLabel || sourceReferenceId
+      ? `Source: ${[sourceKind, sourceLabel, sourceReferenceId].filter(Boolean).join(" · ")}`
+      : "Source: manual",
     workspace ? `Assigned workspace: ${workspace}` : "Assigned workspace: use the task workspace provided by Ender.",
     "",
     "Required procedure:",
@@ -28,6 +50,8 @@ function buildTaskLedgerTaskPrompt(entry) {
     "3. Implement the full plan end-to-end unless you hit a real blocker.",
     "4. If you change code, add tests when practical. If a full test is too heavy, run or create the lightest useful verification command/script and report it.",
     "5. Before finishing, summarize what changed, how you verified it, and any remaining risks or follow-ups.",
+    "6. Do not stop by asking the operator how to proceed. Make reasonable decisions yourself unless required information is genuinely missing.",
+    "7. If the task cannot continue because information is missing, finish with status=needs_input. If an external blocker prevents completion, finish with status=blocked.",
     "",
     "Original task request:",
     String(entry.prompt || "").trim()
@@ -91,6 +115,7 @@ class TaskLedgerManager {
       prompt: validation.value.prompt,
       workspace: validation.value.workspace,
       autoRun: validation.value.autoRun,
+      source: validation.value.source,
       createdByTaskId: validation.value.createdByTaskId,
       createdAt: now,
       updatedAt: now,
@@ -130,6 +155,7 @@ class TaskLedgerManager {
     if (validation.value.prompt !== undefined) entry.prompt = validation.value.prompt;
     if (validation.value.workspace !== undefined) entry.workspace = validation.value.workspace;
     if (validation.value.autoRun !== undefined) entry.autoRun = validation.value.autoRun;
+    if (validation.value.source !== undefined) entry.source = validation.value.source;
 
     if (validation.value.status && validation.value.status !== entry.status) {
       if (entry.status === "running") {
@@ -253,6 +279,12 @@ class TaskLedgerManager {
       if (task.status === "done") {
         entry.status = "completed";
         entry.lastError = null;
+      } else if (task.status === "needs_input") {
+        entry.status = "needs_input";
+        entry.lastError = "Linked task needs additional information before it can continue.";
+      } else if (task.status === "blocked") {
+        entry.status = "blocked";
+        entry.lastError = "Linked task hit a blocker and could not complete autonomously.";
       } else if (task.status === "canceled" || task.status === "terminated") {
         entry.status = "canceled";
         entry.lastError = task.status === "terminated"
@@ -316,7 +348,8 @@ class TaskLedgerManager {
 
     const started = this.taskManager?.start?.(
       buildTaskLedgerTaskPrompt(entry),
-      entry.workspace || undefined
+      entry.workspace || undefined,
+      { ledgerEntryId: entry.id }
     );
 
     if (!started || !started.ok) {
@@ -354,6 +387,7 @@ class TaskLedgerManager {
     const workspaceRaw = input?.workspace;
     const workspace = workspaceRaw == null ? null : String(workspaceRaw).trim() || null;
     const autoRun = input?.autoRun !== false;
+    const source = normalizeSource(input?.source);
     const createdByTaskId = input?.createdByTaskId ? String(input.createdByTaskId).trim() : null;
 
     if (!prompt) {
@@ -370,6 +404,7 @@ class TaskLedgerManager {
         prompt,
         workspace,
         autoRun,
+        source,
         createdByTaskId
       }
     };
@@ -398,13 +433,17 @@ class TaskLedgerManager {
       next.autoRun = Boolean(input.autoRun);
     }
 
+    if (Object.prototype.hasOwnProperty.call(input || {}, "source")) {
+      next.source = normalizeSource(input?.source);
+    }
+
     if (Object.prototype.hasOwnProperty.call(input || {}, "status")) {
       const status = String(input?.status || "").trim().toLowerCase();
       if (!EDITABLE_LEDGER_STATUSES.has(status)) {
         return {
           ok: false,
           error: "invalid_status",
-          message: "status must be one of pending, completed, failed, or canceled"
+          message: "status must be one of pending, completed, failed, canceled, blocked, or needs_input"
         };
       }
       next.status = status;
@@ -432,6 +471,7 @@ class TaskLedgerManager {
       prompt: entry.prompt,
       workspace: entry.workspace || null,
       autoRun: Boolean(entry.autoRun),
+      source: entry.source || null,
       createdByTaskId: entry.createdByTaskId || null,
       createdAt: entry.createdAt,
       updatedAt: entry.updatedAt,
@@ -466,6 +506,7 @@ class TaskLedgerManager {
           prompt: String(data.prompt || ""),
           workspace: data.workspace ? String(data.workspace) : null,
           autoRun: data.autoRun !== false,
+          source: normalizeSource(data.source),
           createdByTaskId: data.createdByTaskId ? String(data.createdByTaskId) : null,
           createdAt: data.createdAt || new Date().toISOString(),
           updatedAt: data.updatedAt || data.createdAt || new Date().toISOString(),

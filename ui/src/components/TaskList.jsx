@@ -5,6 +5,8 @@ function getStatusTone(status) {
   if (normalized === "running") return "running";
   if (normalized === "awaiting_approval") return "approval";
   if (normalized === "done") return "success";
+  if (normalized === "needs_input") return "warning";
+  if (normalized === "blocked") return "danger";
   if (normalized === "error") return "danger";
   if (normalized === "terminated" || normalized === "canceled") return "warning";
   return "neutral";
@@ -14,11 +16,12 @@ function getStatusLabel(status) {
   if (!status) return "idle";
   if (status === "awaiting_approval") return "approval needed";
   if (status === "done") return "completed";
+  if (status === "needs_input") return "needs input";
   return String(status).replaceAll("_", " ");
 }
 
 function isActive(status) {
-  return !["done", "error", "canceled", "terminated"].includes(status);
+  return !["done", "error", "canceled", "terminated", "blocked", "needs_input"].includes(status);
 }
 
 function formatTimestamp(value) {
