@@ -148,6 +148,10 @@ export function runTaskLedgerEntryNow(id) {
   return request(`/task-ledger/${id}/run`, { method: "POST" });
 }
 
+export function deleteTaskLedgerEntry(id) {
+  return request(`/task-ledger/${id}`, { method: "DELETE" });
+}
+
 export function createSchedule(input) {
   return request("/schedules", {
     method: "POST",

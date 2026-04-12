@@ -418,6 +418,30 @@ class TaskLedgerManager {
     return { ok: true, entry: this._serialize(this.entries.get(entry.id) || entry) };
   }
 
+  async delete(id) {
+    const entryId = String(id);
+    const entry = this.entries.get(entryId);
+    if (!entry) return { ok: false, error: "not_found" };
+
+    if (entry.status === "running") {
+      return {
+        ok: false,
+        error: "entry_running",
+        message: "Running ledger entries cannot be deleted until their linked task finishes."
+      };
+    }
+
+    this.entries.delete(entryId);
+    const target = this._entryFile(entryId);
+    const removeEntry = async () => {
+      await fs.rm(target, { force: true });
+    };
+
+    this._persistQueue = this._persistQueue.catch(() => {}).then(removeEntry);
+    await this._persistQueue;
+    return { ok: true, id: entryId };
+  }
+
   async runNow(id) {
     const entry = this.entries.get(String(id));
     if (!entry) return { ok: false, error: "not_found" };

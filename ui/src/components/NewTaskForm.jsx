@@ -25,13 +25,14 @@ export default function NewTaskForm({
   onStarted,
   serverName,
   serverUrl,
+  serverWorkspacePath,
   readinessChecks,
   selfWorkspacePath,
   selfUpdateReady,
   selfUpdateHint
 }) {
   const [goal, setGoal] = useState("");
-  const [workspace, setWorkspace] = useState("");
+  const [workspace, setWorkspace] = useState(String(serverWorkspacePath || "").trim());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -40,6 +41,7 @@ export default function NewTaskForm({
   const [pickerItems, setPickerItems] = useState([]);
   const [pickerLoading, setPickerLoading] = useState(false);
   const taRef = useRef(null);
+  const lastWorkspaceDefaultRef = useRef(String(serverWorkspacePath || "").trim());
 
   const autosize = () => {
     const el = taRef.current;
@@ -68,6 +70,15 @@ export default function NewTaskForm({
     loadDirs(workspace || "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pickerOpen]);
+
+  useEffect(() => {
+    const nextDefault = String(serverWorkspacePath || "").trim();
+    if (!nextDefault) return;
+    if (!workspace || workspace === lastWorkspaceDefaultRef.current) {
+      setWorkspace(nextDefault);
+    }
+    lastWorkspaceDefaultRef.current = nextDefault;
+  }, [serverWorkspacePath, workspace]);
 
   const submit = async (event) => {
     event?.preventDefault?.();
@@ -152,7 +163,7 @@ export default function NewTaskForm({
 
               <label className="launchField">
                 <span className="fieldLabel">Workspace</span>
-                <span className="fieldHint">Optional path if this run should stay inside a repo or folder.</span>
+                <span className="fieldHint">Defaults to the server workspace directory. Change it if this run should stay inside a narrower repo or folder.</span>
                 <div className="workspacePickerRow">
                   <input
                     className="consoleInput"
@@ -164,17 +175,6 @@ export default function NewTaskForm({
                     {pickerOpen ? "Close picker" : "Browse"}
                   </button>
                 </div>
-                {selfWorkspacePath ? (
-                  <div className="workflowActionBar">
-                    <button
-                      type="button"
-                      className="secondaryButton"
-                      onClick={() => setWorkspace(selfWorkspacePath)}
-                    >
-                      Use Ender repo
-                    </button>
-                  </div>
-                ) : null}
               </label>
 
               {pickerOpen ? (
@@ -232,14 +232,14 @@ export default function NewTaskForm({
               <div className="launchSummaryValue">{serverName}</div>
               <div className="launchSummaryMeta mono">{serverUrl}</div>
 
-              {selfWorkspacePath ? (
+              {serverWorkspacePath ? (
                 <div className="launchContextBlock">
-                  <span className="launchSummaryLabel">Self workspace</span>
-                  <div className="sidePanelValue mono" title={selfWorkspacePath}>{selfWorkspacePath}</div>
+                  <span className="launchSummaryLabel">Server workspace</span>
+                  <div className="sidePanelValue mono" title={serverWorkspacePath}>{serverWorkspacePath}</div>
                   <div className="panelNote">
-                    {selfUpdateReady
+                    {selfWorkspacePath && selfUpdateReady
                       ? "Supervised self-update is available for the Ender repo workspace."
-                      : selfUpdateHint || "The Ender repo workspace is available, but supervised self-update is not ready."}
+                      : selfUpdateHint || "This is the default workspace root for new supervised runs."}
                   </div>
                 </div>
               ) : null}

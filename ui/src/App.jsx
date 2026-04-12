@@ -4,6 +4,7 @@ import {
   continueTask,
   createTaskLedgerEntry,
   createSchedule,
+  deleteTaskLedgerEntry,
   getTaskCodeServer,
   createWorkflowSession,
   deleteSchedule,
@@ -698,6 +699,7 @@ export default function App() {
   );
   const headerModeCopy = getModeCopy(activeMode);
   const selfWorkspacePath = String(health?.services?.selfUpdate?.rootDir || "").trim() || "";
+  const serverWorkspacePath = String(health?.paths?.workspaceRoot || "").trim() || "";
   const selfUpdateReady = Boolean(health?.services?.selfUpdate?.ready);
   const selfUpdateHint = health?.setupHints?.selfUpdate || "";
   const codeServerReady = Boolean(health?.services?.codeServer?.ready);
@@ -980,6 +982,21 @@ export default function App() {
       }
     } catch (err) {
       setLedgerError(err.message || "Unable to run task ledger entry");
+    } finally {
+      setLedgerBusy(false);
+    }
+  };
+
+  const deleteLedgerEntry = async (id) => {
+    const confirmed = window.confirm("Delete this ledger entry?");
+    if (!confirmed) return;
+    setLedgerBusy(true);
+    setLedgerError("");
+    try {
+      await deleteTaskLedgerEntry(id);
+      await refreshTaskLedger();
+    } catch (err) {
+      setLedgerError(err.message || "Unable to delete task ledger entry");
     } finally {
       setLedgerBusy(false);
     }
@@ -1344,7 +1361,9 @@ export default function App() {
           entries={ledgerEntries}
           busy={ledgerBusy}
           error={ledgerError}
+          serverWorkspacePath={serverWorkspacePath}
           onCreate={createLedgerEntry}
+          onDelete={deleteLedgerEntry}
           onRunNow={runLedgerEntryNow}
           onOpenTask={openTaskFromLedger}
         />
@@ -1388,6 +1407,7 @@ export default function App() {
         onStarted={onStarted}
         serverName={currentServer?.name || "Direct connection"}
         serverUrl={serverUrl}
+        serverWorkspacePath={serverWorkspacePath}
         readinessChecks={readinessChecks}
         selfWorkspacePath={selfWorkspacePath}
         selfUpdateReady={selfUpdateReady}
@@ -1441,6 +1461,7 @@ export default function App() {
                 <div>
                   <div className="sectionLabel">Current server</div>
                   <div className="serverNameDisplay">{currentServer?.name || "Direct endpoint"}</div>
+                  <div className="serverEndpointDisplay mono">{serverUrl}</div>
                 </div>
                 <div className="serverSummaryActions">
                   <div className={`connectionStatus ${health?.ok ? "ready" : "notReady"}`}>
@@ -1461,17 +1482,19 @@ export default function App() {
 
               {reconnectNotice ? <div className="panelNote">{reconnectNotice}</div> : null}
 
-              <div className="serverSummaryMetaRow">
-                <span className="serverSummaryMetaChip mono">{health?.ok ? "connected" : "offline"}</span>
-                <span className="serverSummaryMetaChip mono">{tasks.length} threads</span>
-                {selfWorkspacePath ? (
-                  <span className="serverSummaryMetaChip mono">{selfUpdateReady ? "self-update ready" : "self-update unavailable"}</span>
-                ) : null}
-              </div>
-
               {!serverSummaryCollapsed ? (
                 <>
-                  <div className="serverEndpointDisplay mono">{serverUrl}</div>
+                  <div className="serverSummaryMetaRow">
+                    <span className="serverSummaryMetaChip mono">{tasks.length} threads</span>
+                    {selfWorkspacePath ? (
+                      <span className="serverSummaryMetaChip mono">{selfUpdateReady ? "self-update ready" : "self-update unavailable"}</span>
+                    ) : null}
+                  </div>
+                  {serverWorkspacePath ? (
+                    <div className="readinessMeta">
+                      Workspace root: {formatPathTail(serverWorkspacePath, 5)}
+                    </div>
+                  ) : null}
                   {selfWorkspacePath ? (
                     <div className="readinessMeta">
                       Self workspace: {formatPathTail(selfWorkspacePath, 5)} {selfUpdateReady ? "· supervisor ready" : "· supervisor unavailable"}

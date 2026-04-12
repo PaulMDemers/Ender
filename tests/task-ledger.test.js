@@ -500,6 +500,13 @@ test("task ledger API exposes create, list, and run endpoints", async (t) => {
         entry: { id, title: "Queued", status: "running" },
         startedTaskId: "task-123"
       };
+    },
+    async delete(id) {
+      calls.push({ kind: "delete", id });
+      return {
+        ok: true,
+        id
+      };
     }
   };
 
@@ -541,8 +548,41 @@ test("task ledger API exposes create, list, and run endpoints", async (t) => {
   const runBody = await runRes.json();
   assert.equal(runBody.startedTaskId, "task-123");
 
+  const deleteRes = await fetch(`${baseUrl}/task-ledger/entry-1`, { method: "DELETE" });
+  assert.equal(deleteRes.status, 200);
+  const deleteBody = await deleteRes.json();
+  assert.equal(deleteBody.id, "entry-1");
+
   assert.deepEqual(calls, [
     { kind: "create", input: { title: "New ledger item", prompt: "Do the work" } },
-    { kind: "runNow", id: "entry-1" }
+    { kind: "runNow", id: "entry-1" },
+    { kind: "delete", id: "entry-1" }
   ]);
+});
+
+test("TaskLedgerManager deletes non-running ledger entries", async (t) => {
+  const root = await makeTempDir();
+  t.after(async () => {
+    await fs.rm(root, { recursive: true, force: true });
+  });
+
+  const manager = new TaskLedgerManager({
+    config: {
+      taskLedgerDir: path.join(root, "task-ledger"),
+      taskLedgerPollIntervalMs: 0,
+      taskLedgerMaxAutoAgents: 0
+    },
+    taskManager: createTaskManagerDouble()
+  });
+
+  await manager.init();
+  const created = await manager.create({
+    title: "Delete me",
+    prompt: "This entry should be removable."
+  });
+
+  const result = await manager.delete(created.entry.id);
+  assert.equal(result.ok, true);
+  assert.equal(manager.get(created.entry.id), null);
+  await assert.rejects(fs.stat(path.join(root, "task-ledger", `${created.entry.id}.json`)));
 });

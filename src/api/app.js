@@ -207,6 +207,23 @@ function createApp(
     return res.status(201).json(result);
   });
 
+  app.delete("/task-ledger/:id", async (req, res) => {
+    if (!taskLedgerManager) {
+      return res.status(503).json({
+        ok: false,
+        error: "task_ledger_unavailable",
+        message: "Task ledger manager is not configured."
+      });
+    }
+
+    const result = await taskLedgerManager.delete(req.params.id);
+    if (!result.ok) {
+      const code = result.error === "not_found" ? 404 : result.error === "entry_running" ? 409 : 400;
+      return res.status(code).json(result);
+    }
+    return res.json(result);
+  });
+
   app.put("/schedules/:id", async (req, res) => {
     const result = await scheduleManager.update(req.params.id, req.body || {});
     if (!result.ok) {

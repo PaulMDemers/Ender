@@ -641,7 +641,7 @@ body::before {
 
 .railPrimaryActions {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 8px;
 }
 
@@ -657,14 +657,14 @@ body::before {
 
 .modeButton {
   display: grid;
-  gap: 4px;
-  justify-items: center;
-  align-content: center;
-  min-height: 72px;
-  padding: 12px 10px;
+  gap: 2px;
+  justify-items: start;
+  align-content: start;
+  min-height: auto;
+  padding: 12px 14px;
   border: 1px solid var(--line);
   border-radius: 18px;
-  text-align: center;
+  text-align: left;
   background: rgba(255, 255, 255, 0.025);
   transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease, transform 160ms ease;
 }
@@ -689,6 +689,7 @@ body::before {
 
 .modeButtonLabel {
   font-weight: 700;
+  font-size: 0.98rem;
 }
 
 .modeButtonMeta,
@@ -2559,6 +2560,16 @@ body.editorDockResizing {
   align-items: end;
 }
 
+.scheduleTopGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.72fr) minmax(0, 1.28fr);
+  gap: 12px;
+}
+
+.scheduleNameField {
+  align-self: start;
+}
+
 .scheduleActions {
   display: flex;
   align-items: center;
@@ -2775,6 +2786,7 @@ body.editorDockResizing {
   }
 
   .railPrimaryActions,
+  .scheduleTopGrid,
   .launchGrid,
   .workflowGrid,
   .serverForm,

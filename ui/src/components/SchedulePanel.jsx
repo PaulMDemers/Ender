@@ -288,8 +288,8 @@ export default function SchedulePanel({
           </div>
 
           <form className="workflowStep" onSubmit={submit}>
-            <div className="workflowGrid">
-              <label className="workflowField">
+            <div className="scheduleTopGrid">
+              <label className="workflowField scheduleNameField">
                 <span className="workflowFieldLabel">Name</span>
                 <input className="consoleInput" value={name} onChange={(event) => setName(event.target.value)} required />
               </label>
@@ -316,7 +316,9 @@ export default function SchedulePanel({
                   ))}
                 </div>
               </label>
+            </div>
 
+            <div className="workflowGrid">
               <label className="workflowField">
                 <span className="workflowFieldLabel">Target type</span>
                 <select

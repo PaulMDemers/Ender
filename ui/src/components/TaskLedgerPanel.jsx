@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const FINISHED_STATUSES = new Set(["completed", "failed", "canceled"]);
 const TASK_TYPE_OPTIONS = ["generic", "coding", "documentation", "research", "ops"];
@@ -51,14 +51,16 @@ export default function TaskLedgerPanel({
   entries,
   busy,
   error,
+  serverWorkspacePath,
   onCreate,
+  onDelete,
   onRunNow,
   onOpenTask
 }) {
   const [title, setTitle] = useState("");
   const [prompt, setPrompt] = useState("");
   const [taskType, setTaskType] = useState("generic");
-  const [workspace, setWorkspace] = useState("");
+  const [workspace, setWorkspace] = useState(String(serverWorkspacePath || "").trim());
   const [autoRun, setAutoRun] = useState(true);
   const [sourceKind, setSourceKind] = useState("");
   const [sourceLabel, setSourceLabel] = useState("");
@@ -67,8 +69,10 @@ export default function TaskLedgerPanel({
   const [constraintsText, setConstraintsText] = useState("");
   const [verificationPlanText, setVerificationPlanText] = useState("");
   const [showFinished, setShowFinished] = useState(false);
+  const [showOptions, setShowOptions] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [localError, setLocalError] = useState("");
+  const lastWorkspaceDefaultRef = useRef(String(serverWorkspacePath || "").trim());
 
   const openEntries = useMemo(
     () => (entries || []).filter((entry) => !FINISHED_STATUSES.has(entry.status)),
@@ -79,6 +83,15 @@ export default function TaskLedgerPanel({
     [entries]
   );
   const visibleEntries = showFinished ? (entries || []) : openEntries;
+
+  useEffect(() => {
+    const nextDefault = String(serverWorkspacePath || "").trim();
+    if (!nextDefault) return;
+    if (!workspace || workspace === lastWorkspaceDefaultRef.current) {
+      setWorkspace(nextDefault);
+    }
+    lastWorkspaceDefaultRef.current = nextDefault;
+  }, [serverWorkspacePath, workspace, lastWorkspaceDefaultRef]);
 
   const submit = async (event) => {
     event?.preventDefault?.();
@@ -105,7 +118,7 @@ export default function TaskLedgerPanel({
       setTitle("");
       setPrompt("");
       setTaskType("generic");
-      setWorkspace("");
+      setWorkspace(String(serverWorkspacePath || "").trim());
       setAutoRun(true);
       setSourceKind("");
       setSourceLabel("");
@@ -113,6 +126,7 @@ export default function TaskLedgerPanel({
       setSuccessCriteriaText("");
       setConstraintsText("");
       setVerificationPlanText("");
+      setShowOptions(false);
     } catch (err) {
       setLocalError(err.message || "Unable to add ledger item");
     } finally {
@@ -154,62 +168,11 @@ export default function TaskLedgerPanel({
               <span className="workflowBadge">NEW ENTRY</span>
               <div className="launchTitle">Add work to the ledger</div>
               <div className="launchDescription">
-                Keep entries source-agnostic. Source fields are optional metadata for future feeders and operator context.
+                Keep it lightweight by default. Task details, workspace, and source metadata are available when you need them.
               </div>
             </div>
 
             <form className="workflowStep" onSubmit={submit}>
-              <div className="workflowGrid">
-                <label className="workflowField">
-                  <span className="workflowFieldLabel">Title</span>
-                  <input
-                    className="consoleInput"
-                    value={title}
-                    onChange={(event) => setTitle(event.target.value)}
-                    placeholder="Short label for the queued work"
-                  />
-                </label>
-
-                <label className="workflowField">
-                  <span className="workflowFieldLabel">Workspace</span>
-                  <input
-                    className="consoleInput mono"
-                    value={workspace}
-                    onChange={(event) => setWorkspace(event.target.value)}
-                    placeholder="/path/to/repo or project"
-                  />
-                </label>
-
-                <label className="workflowField">
-                  <span className="workflowFieldLabel">Task Type</span>
-                  <select className="consoleInput" value={taskType} onChange={(event) => setTaskType(event.target.value)}>
-                    {TASK_TYPE_OPTIONS.map((option) => (
-                      <option key={option} value={option}>{option}</option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="workflowField">
-                  <span className="workflowFieldLabel">Source Kind</span>
-                  <input
-                    className="consoleInput"
-                    value={sourceKind}
-                    onChange={(event) => setSourceKind(event.target.value)}
-                    placeholder="manual, jira, github, api..."
-                  />
-                </label>
-
-                <label className="workflowField">
-                  <span className="workflowFieldLabel">Source Label / Ref</span>
-                  <input
-                    className="consoleInput"
-                    value={sourceLabel}
-                    onChange={(event) => setSourceLabel(event.target.value)}
-                    placeholder="ABC-123 or inbound webhook"
-                  />
-                </label>
-              </div>
-
               <label className="workflowField">
                 <span className="workflowFieldLabel">Task Request</span>
                 <textarea
@@ -221,58 +184,117 @@ export default function TaskLedgerPanel({
                 />
               </label>
 
-              <div className="workflowGrid">
-                <label className="workflowField">
-                  <span className="workflowFieldLabel">Success Criteria</span>
-                  <textarea
-                    className="consoleTextarea compact"
-                    value={successCriteriaText}
-                    onChange={(event) => setSuccessCriteriaText(event.target.value)}
-                    placeholder={"One item per line\nTests pass\nFeature behaves as requested"}
-                  />
-                </label>
-
-                <label className="workflowField">
-                  <span className="workflowFieldLabel">Constraints</span>
-                  <textarea
-                    className="consoleTextarea compact"
-                    value={constraintsText}
-                    onChange={(event) => setConstraintsText(event.target.value)}
-                    placeholder={"One item per line\nDo not touch production config\nStay inside this workspace"}
-                  />
-                </label>
+              <div className="workflowActionBar scheduleAdvancedToggleRow">
+                <button type="button" className="secondaryButton" onClick={() => setShowOptions((value) => !value)}>
+                  {showOptions ? "Hide more options" : "Show more options"}
+                </button>
               </div>
 
-              <label className="workflowField">
-                <span className="workflowFieldLabel">Verification Plan</span>
-                <textarea
-                  className="consoleTextarea compact"
-                  value={verificationPlanText}
-                  onChange={(event) => setVerificationPlanText(event.target.value)}
-                  placeholder={"One item per line\nnpm test\nnpm run build\nmanual check of generated file"}
-                />
-              </label>
+              {showOptions ? (
+                <>
+                  <div className="workflowGrid">
+                    <label className="workflowField">
+                      <span className="workflowFieldLabel">Title</span>
+                      <input
+                        className="consoleInput"
+                        value={title}
+                        onChange={(event) => setTitle(event.target.value)}
+                        placeholder="Optional short label"
+                      />
+                    </label>
 
-              <div className="workflowGrid scheduleAdvancedGrid">
-                <label className="workflowField">
-                  <span className="workflowFieldLabel">External Reference</span>
-                  <input
-                    className="consoleInput mono"
-                    value={sourceReferenceId}
-                    onChange={(event) => setSourceReferenceId(event.target.value)}
-                    placeholder="Optional durable source id"
-                  />
-                </label>
+                    <label className="workflowField">
+                      <span className="workflowFieldLabel">Workspace</span>
+                      <input
+                        className="consoleInput mono"
+                        value={workspace}
+                        onChange={(event) => setWorkspace(event.target.value)}
+                        placeholder="/path/to/repo or project"
+                      />
+                    </label>
 
-                <label className="workflowField toggleField">
-                  <input
-                    type="checkbox"
-                    checked={autoRun}
-                    onChange={(event) => setAutoRun(event.target.checked)}
-                  />
-                  <span>Auto-run when a worker slot is available</span>
-                </label>
-              </div>
+                    <label className="workflowField">
+                      <span className="workflowFieldLabel">Task Type</span>
+                      <select className="consoleInput" value={taskType} onChange={(event) => setTaskType(event.target.value)}>
+                        {TASK_TYPE_OPTIONS.map((option) => (
+                          <option key={option} value={option}>{option}</option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="workflowField toggleField">
+                      <input
+                        type="checkbox"
+                        checked={autoRun}
+                        onChange={(event) => setAutoRun(event.target.checked)}
+                      />
+                      <span>Auto-run when a worker slot is available</span>
+                    </label>
+
+                    <label className="workflowField">
+                      <span className="workflowFieldLabel">Source Kind</span>
+                      <input
+                        className="consoleInput"
+                        value={sourceKind}
+                        onChange={(event) => setSourceKind(event.target.value)}
+                        placeholder="manual, jira, github, api..."
+                      />
+                    </label>
+
+                    <label className="workflowField">
+                      <span className="workflowFieldLabel">Source Label / Ref</span>
+                      <input
+                        className="consoleInput"
+                        value={sourceLabel}
+                        onChange={(event) => setSourceLabel(event.target.value)}
+                        placeholder="ABC-123 or inbound webhook"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="workflowGrid">
+                    <label className="workflowField">
+                      <span className="workflowFieldLabel">Success Criteria</span>
+                      <textarea
+                        className="consoleTextarea compact"
+                        value={successCriteriaText}
+                        onChange={(event) => setSuccessCriteriaText(event.target.value)}
+                        placeholder={"One item per line\nTests pass\nFeature behaves as requested"}
+                      />
+                    </label>
+
+                    <label className="workflowField">
+                      <span className="workflowFieldLabel">Constraints</span>
+                      <textarea
+                        className="consoleTextarea compact"
+                        value={constraintsText}
+                        onChange={(event) => setConstraintsText(event.target.value)}
+                        placeholder={"One item per line\nDo not touch production config\nStay inside this workspace"}
+                      />
+                    </label>
+                  </div>
+
+                  <label className="workflowField">
+                    <span className="workflowFieldLabel">Verification Plan</span>
+                    <textarea
+                      className="consoleTextarea compact"
+                      value={verificationPlanText}
+                      onChange={(event) => setVerificationPlanText(event.target.value)}
+                      placeholder={"One item per line\nnpm test\nnpm run build\nmanual check of generated file"}
+                    />
+                  </label>
+
+                  <label className="workflowField">
+                    <span className="workflowFieldLabel">External Reference</span>
+                    <input
+                      className="consoleInput mono"
+                      value={sourceReferenceId}
+                      onChange={(event) => setSourceReferenceId(event.target.value)}
+                      placeholder="Optional durable source id"
+                    />
+                  </label>
+                </>
+              ) : null}
 
               <div className="workflowActionBar">
                 <button className="primaryButton workflowAction" disabled={submitting || !prompt.trim()}>
@@ -324,6 +346,7 @@ export default function TaskLedgerPanel({
             {visibleEntries.map((entry) => {
               const taskId = linkedTaskId(entry);
               const runnable = entry.status !== "running";
+              const deletable = entry.status !== "running";
               const runLabel = entry.status === "completed" ? "Run again" : "Run now";
 
               return (
@@ -348,6 +371,11 @@ export default function TaskLedgerPanel({
                       {runnable ? (
                         <button type="button" className="miniButton" onClick={() => onRunNow?.(entry.id)}>
                           {runLabel}
+                        </button>
+                      ) : null}
+                      {deletable ? (
+                        <button type="button" className="miniButton" onClick={() => onDelete?.(entry.id)}>
+                          Delete
                         </button>
                       ) : null}
                     </div>
