@@ -2505,6 +2505,17 @@ body.editorDockResizing {
   overflow-wrap: anywhere;
 }
 
+.taskLedgerDetailBlock {
+  display: grid;
+  gap: 8px;
+}
+
+.taskLedgerTagList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .taskLedgerMetaGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

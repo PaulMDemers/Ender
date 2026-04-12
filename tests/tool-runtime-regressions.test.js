@@ -23,6 +23,7 @@ const { createEmailTools } = require("../src/tools/emailTools");
 const { createLedger } = require("../src/state/ledger");
 const { createLedgerTools } = require("../src/tools/ledgerTools");
 const { createSelfUpdateTools } = require("../src/tools/selfUpdateTools");
+const { createTaskLedgerRuntimeTools } = require("../src/tools/taskLedgerRuntimeTools");
 const { createThreadTools } = require("../src/tools/threadTools");
 
 function getToolMap(tools) {
@@ -89,6 +90,16 @@ test("tool schemas compile cleanly through the OpenAI zod helper", async () => {
       { getTaskSummary: () => null, waitForTask: async () => ({ ok: true }), startChildTask: () => ({ ok: true, id: "child" }) },
       { taskId: "task-1", onLog: () => {} }
     ));
+    const taskLedgerRuntimeTools = getToolMap(createTaskLedgerRuntimeTools(
+      {
+        recordStage: async () => ({ ok: true }),
+        reportFeasibility: async () => ({ ok: true }),
+        savePlan: async () => ({ ok: true }),
+        reportVerification: async () => ({ ok: true })
+      },
+      { getTaskSummary: () => ({ ledgerEntryId: "ledger-1" }) },
+      { taskId: "task-1", onLog: () => {} }
+    ));
     const selfUpdateTools = getToolMap(createSelfUpdateTools(
       { config: { selfUpdate: { rootDir: tmpRoot, verifyCommand: "npm test" } }, isConfigured: () => true },
       { requestApproval: async () => false, onLog: () => {}, activeWorkdir: tmpRoot }
@@ -107,6 +118,7 @@ test("tool schemas compile cleanly through the OpenAI zod helper", async () => {
       ...Object.values(emailTools),
       ...Object.values(cronTools),
       ...Object.values(threadTools),
+      ...Object.values(taskLedgerRuntimeTools),
       ...Object.values(selfUpdateTools),
       execTool,
       ...Object.values(ledgerTools)
@@ -253,4 +265,76 @@ test("runAgentLoop preserves multimodal thread messages when replaying conversat
 
   assert.equal(result.stopReason, "no_tool_calls");
   assert.equal(result.result, "DONE:\nthread replay preserved multimodal content");
+});
+
+test("task ledger runtime tools persist lifecycle updates through the current task context", async () => {
+  const calls = [];
+  const taskLedgerManager = {
+    async recordStage(id, input) {
+      calls.push({ kind: "stage", id, input });
+      return { ok: true };
+    },
+    async reportFeasibility(id, input) {
+      calls.push({ kind: "feasibility", id, input });
+      return { ok: true };
+    },
+    async savePlan(id, input) {
+      calls.push({ kind: "plan", id, input });
+      return { ok: true };
+    },
+    async reportVerification(id, input) {
+      calls.push({ kind: "verification", id, input });
+      return { ok: true };
+    }
+  };
+
+  const tools = getToolMap(createTaskLedgerRuntimeTools(
+    taskLedgerManager,
+    { getTaskSummary: () => ({ ledgerEntryId: "ledger-42" }) },
+    { taskId: "task-42", onLog: () => {} }
+  ));
+
+  await tools.ledger_set_stage.invoke({ stage: "workspace_scan", summary: "Located the mock files." });
+  await tools.ledger_report_feasibility.invoke({ outcome: "ready", summary: "Task is feasible." });
+  await tools.ledger_save_plan.invoke({
+    summary: "Implement and verify the mock task.",
+    checklist: ["Update the file", "Review the result"],
+    verificationSteps: ["Read the generated output"]
+  });
+  await tools.ledger_report_verification.invoke({
+    status: "passed",
+    summary: "Mock verification succeeded.",
+    evidence: ["workspace/task-ledger-smoke-coding/src/index.js"]
+  });
+
+  assert.deepEqual(calls, [
+    {
+      kind: "stage",
+      id: "ledger-42",
+      input: { stage: "workspace_scan", summary: "Located the mock files." }
+    },
+    {
+      kind: "feasibility",
+      id: "ledger-42",
+      input: { outcome: "ready", summary: "Task is feasible." }
+    },
+    {
+      kind: "plan",
+      id: "ledger-42",
+      input: {
+        summary: "Implement and verify the mock task.",
+        checklist: ["Update the file", "Review the result"],
+        verificationSteps: ["Read the generated output"]
+      }
+    },
+    {
+      kind: "verification",
+      id: "ledger-42",
+      input: {
+        status: "passed",
+        summary: "Mock verification succeeded.",
+        evidence: ["workspace/task-ledger-smoke-coding/src/index.js"]
+      }
+    }
+  ]);
 });

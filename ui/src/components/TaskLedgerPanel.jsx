@@ -1,6 +1,14 @@
 import { useMemo, useState } from "react";
 
 const FINISHED_STATUSES = new Set(["completed", "failed", "canceled"]);
+const TASK_TYPE_OPTIONS = ["generic", "coding", "documentation", "research", "ops"];
+
+function parseLines(value) {
+  return String(value || "")
+    .split("\n")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
 
 function formatTimestamp(value) {
   if (!value) return "Never";
@@ -49,11 +57,15 @@ export default function TaskLedgerPanel({
 }) {
   const [title, setTitle] = useState("");
   const [prompt, setPrompt] = useState("");
+  const [taskType, setTaskType] = useState("generic");
   const [workspace, setWorkspace] = useState("");
   const [autoRun, setAutoRun] = useState(true);
   const [sourceKind, setSourceKind] = useState("");
   const [sourceLabel, setSourceLabel] = useState("");
   const [sourceReferenceId, setSourceReferenceId] = useState("");
+  const [successCriteriaText, setSuccessCriteriaText] = useState("");
+  const [constraintsText, setConstraintsText] = useState("");
+  const [verificationPlanText, setVerificationPlanText] = useState("");
   const [showFinished, setShowFinished] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [localError, setLocalError] = useState("");
@@ -78,21 +90,29 @@ export default function TaskLedgerPanel({
       await onCreate?.({
         title: title.trim() || undefined,
         prompt: prompt.trim(),
+        taskType,
         workspace: workspace.trim() || null,
         autoRun,
         source: {
           kind: sourceKind.trim() || null,
           label: sourceLabel.trim() || null,
           referenceId: sourceReferenceId.trim() || null
-        }
+        },
+        successCriteria: parseLines(successCriteriaText),
+        constraints: parseLines(constraintsText),
+        verificationPlan: parseLines(verificationPlanText)
       });
       setTitle("");
       setPrompt("");
+      setTaskType("generic");
       setWorkspace("");
       setAutoRun(true);
       setSourceKind("");
       setSourceLabel("");
       setSourceReferenceId("");
+      setSuccessCriteriaText("");
+      setConstraintsText("");
+      setVerificationPlanText("");
     } catch (err) {
       setLocalError(err.message || "Unable to add ledger item");
     } finally {
@@ -161,6 +181,15 @@ export default function TaskLedgerPanel({
                 </label>
 
                 <label className="workflowField">
+                  <span className="workflowFieldLabel">Task Type</span>
+                  <select className="consoleInput" value={taskType} onChange={(event) => setTaskType(event.target.value)}>
+                    {TASK_TYPE_OPTIONS.map((option) => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="workflowField">
                   <span className="workflowFieldLabel">Source Kind</span>
                   <input
                     className="consoleInput"
@@ -189,6 +218,38 @@ export default function TaskLedgerPanel({
                   onChange={(event) => setPrompt(event.target.value)}
                   placeholder="Describe the work the next available agent should complete."
                   required
+                />
+              </label>
+
+              <div className="workflowGrid">
+                <label className="workflowField">
+                  <span className="workflowFieldLabel">Success Criteria</span>
+                  <textarea
+                    className="consoleTextarea compact"
+                    value={successCriteriaText}
+                    onChange={(event) => setSuccessCriteriaText(event.target.value)}
+                    placeholder={"One item per line\nTests pass\nFeature behaves as requested"}
+                  />
+                </label>
+
+                <label className="workflowField">
+                  <span className="workflowFieldLabel">Constraints</span>
+                  <textarea
+                    className="consoleTextarea compact"
+                    value={constraintsText}
+                    onChange={(event) => setConstraintsText(event.target.value)}
+                    placeholder={"One item per line\nDo not touch production config\nStay inside this workspace"}
+                  />
+                </label>
+              </div>
+
+              <label className="workflowField">
+                <span className="workflowFieldLabel">Verification Plan</span>
+                <textarea
+                  className="consoleTextarea compact"
+                  value={verificationPlanText}
+                  onChange={(event) => setVerificationPlanText(event.target.value)}
+                  placeholder={"One item per line\nnpm test\nnpm run build\nmanual check of generated file"}
                 />
               </label>
 
@@ -271,6 +332,7 @@ export default function TaskLedgerPanel({
                     <div className="taskLedgerRowTitleBlock">
                       <div className="workflowCardHeader">
                         <span className={`statusPill ${getStatusTone(entry.status)}`}>{getStatusLabel(entry.status)}</span>
+                        <span className="scheduleMetaChip mono">{entry.taskType || "generic"}</span>
                         <span className="scheduleMetaChip mono">{sourceSummary(entry)}</span>
                       </div>
                       <div className="workflowName">{entry.title || "Untitled ledger entry"}</div>
@@ -295,6 +357,9 @@ export default function TaskLedgerPanel({
                     <span className="scheduleMetaChip mono">{`entry ${entry.id.slice(0, 8)}`}</span>
                     <span className="scheduleMetaChip mono">{entry.autoRun ? "auto-run enabled" : "manual dispatch"}</span>
                     <span className="scheduleMetaChip mono">{`attempts ${entry.attemptCount || 0}`}</span>
+                    {entry.lifecycle?.currentStage ? (
+                      <span className="scheduleMetaChip mono">{`stage ${entry.lifecycle.currentStage}`}</span>
+                    ) : null}
                     {entry.workspace ? <span className="scheduleMetaChip mono" title={entry.workspace}>{entry.workspace}</span> : null}
                     {entry.startedTaskId ? (
                       <span className="scheduleMetaChip mono">{`thread ${entry.startedTaskId.slice(0, 8)}`}</span>
@@ -311,14 +376,78 @@ export default function TaskLedgerPanel({
                       <span className="metaValue mono">{formatTimestamp(entry.updatedAt)}</span>
                     </div>
                     <div className="metaRow">
-                      <span className="metaLabel">Source</span>
-                      <span className="metaValue mono">{sourceSummary(entry)}</span>
+                      <span className="metaLabel">Feasibility</span>
+                      <span className="metaValue mono">{entry.lifecycle?.feasibility?.outcome || "unknown"}</span>
                     </div>
                     <div className="metaRow">
-                      <span className="metaLabel">Result</span>
-                      <span className="metaValue">{entry.result ? "Recorded" : entry.lastError || "In progress"}</span>
+                      <span className="metaLabel">Verification</span>
+                      <span className="metaValue mono">{entry.lifecycle?.verification?.status || "pending"}</span>
                     </div>
                   </div>
+
+                  {entry.successCriteria?.length ? (
+                    <div className="taskLedgerDetailBlock">
+                      <span className="metaLabel">Success Criteria</span>
+                      <div className="taskLedgerTagList">
+                        {entry.successCriteria.map((item) => (
+                          <span key={item} className="scheduleMetaChip">{item}</span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {entry.constraints?.length ? (
+                    <div className="taskLedgerDetailBlock">
+                      <span className="metaLabel">Constraints</span>
+                      <div className="taskLedgerTagList">
+                        {entry.constraints.map((item) => (
+                          <span key={item} className="scheduleMetaChip">{item}</span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {entry.lifecycle?.plan?.checklist?.length ? (
+                    <div className="taskLedgerDetailBlock">
+                      <span className="metaLabel">Checklist</span>
+                      <div className="taskLedgerTagList">
+                        {entry.lifecycle.plan.checklist.map((item) => (
+                          <span key={item} className="scheduleMetaChip">{item}</span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {entry.verificationPlan?.length ? (
+                    <div className="taskLedgerDetailBlock">
+                      <span className="metaLabel">Verification Plan</span>
+                      <div className="taskLedgerTagList">
+                        {entry.verificationPlan.map((item) => (
+                          <span key={item} className="scheduleMetaChip">{item}</span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {entry.lifecycle?.verification?.evidence?.length ? (
+                    <div className="taskLedgerDetailBlock">
+                      <span className="metaLabel">Verification Evidence</span>
+                      <div className="taskLedgerTagList">
+                        {entry.lifecycle.verification.evidence.map((item) => (
+                          <span key={item} className="scheduleMetaChip">{item}</span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {entry.result || entry.lastError || entry.lifecycle?.stageSummary ? (
+                    <div className="taskLedgerDetailBlock">
+                      <span className="metaLabel">Summary</span>
+                      <div className="panelNote">
+                        {entry.lifecycle?.outcome?.summary || entry.lifecycle?.stageSummary || entry.lastError || entry.result}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               );
             })}

@@ -24,6 +24,7 @@ async function main() {
   await codeServerManager.init();
   taskManager.setScheduleManager(scheduleManager);
   taskManager.setSelfUpdateManager(selfUpdateManager);
+  taskManager.setTaskLedgerManager(taskLedgerManager);
   const app = createApp(
     taskManager,
     workflowManager,

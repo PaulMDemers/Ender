@@ -15,6 +15,7 @@ const { createThreadTools } = require("../tools/threadTools");
 const { createConfluenceTools } = require("../tools/confluenceTools");
 const { createGoogleDriveTools } = require("../tools/googleDriveTools");
 const { createSelfUpdateTools } = require("../tools/selfUpdateTools");
+const { createTaskLedgerRuntimeTools } = require("../tools/taskLedgerRuntimeTools");
 const { runAgentLoop } = require("./runAgentLoop");
 const { SYSTEM_PROMPT } = require("../agents/systemPrompt");
 const { validateToolSchemasForBackend } = require("../llm/toolSchemaPreflight");
@@ -57,7 +58,10 @@ function buildLedgerTaskSystemPrompt(basePrompt) {
     "- Only end with finalize status=completed when the requested work is actually fulfilled.",
     "- If required information is genuinely missing and the task cannot continue, call finalize with status=needs_input and explain exactly what information is missing.",
     "- If the task cannot be fulfilled because of an external constraint, missing dependency, permission boundary, or hard blocker, call finalize with status=blocked and explain the blocker clearly.",
-    "- Do not treat a request for operator guidance as successful completion."
+    "- Do not treat a request for operator guidance as successful completion.",
+    "- Use the dedicated ledger tools to keep the entry updated as you move through intake, feasibility_check, workspace_scan, plan, implement, verify, and finalize.",
+    "- Before implementation begins, you must save a concrete plan and checklist into the ledger.",
+    "- For coding tasks, verification is required unless impossible; record the reason if verification must be skipped."
   ].join("\n");
 }
 
@@ -71,7 +75,8 @@ async function runTask({
   taskId,
   scheduleManager,
   taskManager,
-  selfUpdateManager
+  selfUpdateManager,
+  taskLedgerManager
 }) {
   const activeWorkdir = workspaceDir || config.workdir;
   await fs.mkdir(activeWorkdir, { recursive: true });
@@ -95,6 +100,9 @@ async function runTask({
     ...(scheduleManager ? createCronTools(scheduleManager, { taskId, requestApproval, onLog }) : []),
     ...(taskManager ? createThreadTools(taskManager, { taskId, onLog }) : []),
     ...(selfUpdateManager ? createSelfUpdateTools(selfUpdateManager, { requestApproval, onLog, activeWorkdir }) : []),
+    ...(isLedgerTask && taskLedgerManager && taskManager
+      ? createTaskLedgerRuntimeTools(taskLedgerManager, taskManager, { taskId, onLog })
+      : []),
     createExecTool(activeWorkdir, { requestApproval, onLog }),
     ...createLedgerTools(ledger, {
       onFinalize(outcome) {

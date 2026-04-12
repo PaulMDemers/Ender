@@ -4,6 +4,18 @@ const { randomUUID } = require("node:crypto");
 
 const TERMINAL_TASK_STATUSES = new Set(["done", "error", "canceled", "terminated", "blocked", "needs_input"]);
 const EDITABLE_LEDGER_STATUSES = new Set(["pending", "completed", "failed", "canceled", "blocked", "needs_input"]);
+const LEDGER_STAGE_VALUES = new Set([
+  "queued",
+  "intake",
+  "feasibility_check",
+  "workspace_scan",
+  "plan",
+  "implement",
+  "verify",
+  "finalize"
+]);
+const FEASIBILITY_VALUES = new Set(["unknown", "ready", "needs_input", "blocked", "rejected"]);
+const VERIFICATION_VALUES = new Set(["pending", "running", "passed", "failed", "skipped"]);
 
 function deriveTitle(prompt) {
   const raw = String(prompt || "").trim();
@@ -28,12 +40,130 @@ function normalizeSource(source) {
   };
 }
 
+function normalizeTaskType(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  return raw || "generic";
+}
+
+function normalizeStringArray(value) {
+  const source = Array.isArray(value)
+    ? value
+    : typeof value === "string"
+      ? value.split("\n")
+      : [];
+
+  const seen = new Set();
+  const items = [];
+  for (const item of source) {
+    const normalized = String(item || "").trim();
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    items.push(normalized);
+  }
+  return items;
+}
+
+function createLifecycle(now, historySummary = "Entry created") {
+  return {
+    currentStage: "queued",
+    stageSummary: historySummary,
+    stageUpdatedAt: now,
+    history: [{
+      stage: "queued",
+      summary: historySummary,
+      at: now
+    }],
+    feasibility: {
+      outcome: "unknown",
+      summary: null,
+      updatedAt: null
+    },
+    plan: {
+      summary: null,
+      checklist: [],
+      verificationSteps: [],
+      updatedAt: null
+    },
+    verification: {
+      status: "pending",
+      summary: null,
+      evidence: [],
+      updatedAt: null
+    },
+    outcome: {
+      status: null,
+      summary: null,
+      updatedAt: null
+    }
+  };
+}
+
+function ensureLifecycle(lifecycle, fallbackNow) {
+  const base = lifecycle && typeof lifecycle === "object" ? lifecycle : {};
+  const history = Array.isArray(base.history) ? base.history : [];
+
+  return {
+    currentStage: LEDGER_STAGE_VALUES.has(base.currentStage) ? base.currentStage : "queued",
+    stageSummary: base.stageSummary ? String(base.stageSummary) : "Entry created",
+    stageUpdatedAt: base.stageUpdatedAt || fallbackNow,
+    history: history.map((item) => ({
+      stage: LEDGER_STAGE_VALUES.has(item?.stage) ? item.stage : "queued",
+      summary: item?.summary ? String(item.summary) : "",
+      at: item?.at || fallbackNow
+    })),
+    feasibility: {
+      outcome: FEASIBILITY_VALUES.has(base.feasibility?.outcome) ? base.feasibility.outcome : "unknown",
+      summary: base.feasibility?.summary ? String(base.feasibility.summary) : null,
+      updatedAt: base.feasibility?.updatedAt || null
+    },
+    plan: {
+      summary: base.plan?.summary ? String(base.plan.summary) : null,
+      checklist: normalizeStringArray(base.plan?.checklist),
+      verificationSteps: normalizeStringArray(base.plan?.verificationSteps),
+      updatedAt: base.plan?.updatedAt || null
+    },
+    verification: {
+      status: VERIFICATION_VALUES.has(base.verification?.status) ? base.verification.status : "pending",
+      summary: base.verification?.summary ? String(base.verification.summary) : null,
+      evidence: normalizeStringArray(base.verification?.evidence),
+      updatedAt: base.verification?.updatedAt || null
+    },
+    outcome: {
+      status: base.outcome?.status ? String(base.outcome.status) : null,
+      summary: base.outcome?.summary ? String(base.outcome.summary) : null,
+      updatedAt: base.outcome?.updatedAt || null
+    }
+  };
+}
+
+function appendStageHistory(lifecycle, stage, summary, at) {
+  lifecycle.currentStage = stage;
+  lifecycle.stageSummary = summary || null;
+  lifecycle.stageUpdatedAt = at;
+  lifecycle.history.push({
+    stage,
+    summary: summary || "",
+    at
+  });
+}
+
 function buildTaskLedgerTaskPrompt(entry) {
   const workspace = String(entry.workspace || "").trim();
   const title = String(entry.title || deriveTitle(entry.prompt) || "Ledger task").trim();
   const sourceKind = String(entry.source?.kind || "").trim();
   const sourceLabel = String(entry.source?.label || "").trim();
   const sourceReferenceId = String(entry.source?.referenceId || "").trim();
+  const envelope = {
+    ledgerEntryId: entry.id,
+    taskType: entry.taskType || "generic",
+    title,
+    goal: String(entry.prompt || "").trim(),
+    workspace: workspace || null,
+    source: entry.source || { kind: "manual" },
+    successCriteria: Array.isArray(entry.successCriteria) ? entry.successCriteria : [],
+    constraints: Array.isArray(entry.constraints) ? entry.constraints : [],
+    verificationPlan: Array.isArray(entry.verificationPlan) ? entry.verificationPlan : []
+  };
 
   return [
     "This task was assigned from Ender's global task ledger.",
@@ -44,14 +174,17 @@ function buildTaskLedgerTaskPrompt(entry) {
       : "Source: manual",
     workspace ? `Assigned workspace: ${workspace}` : "Assigned workspace: use the task workspace provided by Ender.",
     "",
-    "Required procedure:",
-    "1. Inspect the workspace first. Start with high-signal guidance and light reading, then go deeper only where needed.",
-    "2. Build a concrete plan and a checklist before making changes.",
-    "3. Implement the full plan end-to-end unless you hit a real blocker.",
-    "4. If you change code, add tests when practical. If a full test is too heavy, run or create the lightest useful verification command/script and report it.",
-    "5. Before finishing, summarize what changed, how you verified it, and any remaining risks or follow-ups.",
-    "6. Do not stop by asking the operator how to proceed. Make reasonable decisions yourself unless required information is genuinely missing.",
-    "7. If the task cannot continue because information is missing, finish with status=needs_input. If an external blocker prevents completion, finish with status=blocked.",
+    "Task envelope:",
+    JSON.stringify(envelope, null, 2),
+    "",
+    "Required procedure and execution lifecycle:",
+    "1. intake: read the task envelope, restate the objective, and call ledger_set_stage(stage=intake, ...).",
+    "2. feasibility_check: evaluate whether the task can be accomplished with the current workspace, information, permissions, and constraints, then call ledger_report_feasibility(...).",
+    "3. workspace_scan: inspect the workspace first for the files, scripts, or artifacts needed for the task, then call ledger_set_stage(stage=workspace_scan, ...).",
+    "4. plan: build a concrete plan and a checklist, define verification steps, and call ledger_save_plan(...).",
+    "5. implement: for coding tasks, identify the likely affected files and verification commands before editing. Then perform the requested work end to end and call ledger_set_stage(stage=implement, ...) when execution begins.",
+    "6. verify: add tests when practical, or at minimum run the lightest useful verification commands or checks, then call ledger_report_verification(...).",
+    "7. finalize: only use finalize status=completed when the success criteria are actually satisfied. If required information is missing, use finalize status=needs_input. If autonomy truly cannot continue because of a blocker, use finalize status=blocked.",
     "",
     "Original task request:",
     String(entry.prompt || "").trim()
@@ -104,6 +237,84 @@ class TaskLedgerManager {
     return entry ? this._serialize(entry) : null;
   }
 
+  async recordStage(id, input) {
+    const entry = this.entries.get(String(id));
+    if (!entry) return { ok: false, error: "not_found" };
+
+    const stage = String(input?.stage || "").trim();
+    if (!LEDGER_STAGE_VALUES.has(stage)) {
+      return { ok: false, error: "invalid_stage", message: "stage is invalid" };
+    }
+
+    const summary = String(input?.summary || "").trim() || null;
+    const now = new Date().toISOString();
+    appendStageHistory(entry.lifecycle, stage, summary, now);
+    entry.updatedAt = now;
+    await this._persistEntry(entry);
+    return { ok: true, entry: this._serialize(entry) };
+  }
+
+  async reportFeasibility(id, input) {
+    const entry = this.entries.get(String(id));
+    if (!entry) return { ok: false, error: "not_found" };
+
+    const outcome = String(input?.outcome || "").trim().toLowerCase();
+    if (!FEASIBILITY_VALUES.has(outcome)) {
+      return { ok: false, error: "invalid_feasibility", message: "feasibility outcome is invalid" };
+    }
+
+    const summary = String(input?.summary || "").trim() || null;
+    const now = new Date().toISOString();
+    entry.lifecycle.feasibility = {
+      outcome,
+      summary,
+      updatedAt: now
+    };
+    appendStageHistory(entry.lifecycle, "feasibility_check", summary, now);
+    entry.updatedAt = now;
+    await this._persistEntry(entry);
+    return { ok: true, entry: this._serialize(entry) };
+  }
+
+  async savePlan(id, input) {
+    const entry = this.entries.get(String(id));
+    if (!entry) return { ok: false, error: "not_found" };
+
+    const now = new Date().toISOString();
+    entry.lifecycle.plan = {
+      summary: String(input?.summary || "").trim() || null,
+      checklist: normalizeStringArray(input?.checklist),
+      verificationSteps: normalizeStringArray(input?.verificationSteps),
+      updatedAt: now
+    };
+    appendStageHistory(entry.lifecycle, "plan", entry.lifecycle.plan.summary, now);
+    entry.updatedAt = now;
+    await this._persistEntry(entry);
+    return { ok: true, entry: this._serialize(entry) };
+  }
+
+  async reportVerification(id, input) {
+    const entry = this.entries.get(String(id));
+    if (!entry) return { ok: false, error: "not_found" };
+
+    const status = String(input?.status || "").trim().toLowerCase();
+    if (!VERIFICATION_VALUES.has(status)) {
+      return { ok: false, error: "invalid_verification_status", message: "verification status is invalid" };
+    }
+
+    const now = new Date().toISOString();
+    entry.lifecycle.verification = {
+      status,
+      summary: String(input?.summary || "").trim() || null,
+      evidence: normalizeStringArray(input?.evidence),
+      updatedAt: now
+    };
+    appendStageHistory(entry.lifecycle, "verify", entry.lifecycle.verification.summary, now);
+    entry.updatedAt = now;
+    await this._persistEntry(entry);
+    return { ok: true, entry: this._serialize(entry) };
+  }
+
   async create(input) {
     const validation = this._validateCreate(input);
     if (!validation.ok) return validation;
@@ -113,9 +324,13 @@ class TaskLedgerManager {
       id: this._createEntryId(),
       title: validation.value.title,
       prompt: validation.value.prompt,
+      taskType: validation.value.taskType,
       workspace: validation.value.workspace,
       autoRun: validation.value.autoRun,
       source: validation.value.source,
+      successCriteria: validation.value.successCriteria,
+      constraints: validation.value.constraints,
+      verificationPlan: validation.value.verificationPlan,
       createdByTaskId: validation.value.createdByTaskId,
       createdAt: now,
       updatedAt: now,
@@ -127,7 +342,8 @@ class TaskLedgerManager {
       attemptCount: 0,
       lastTaskStatus: null,
       lastError: null,
-      result: null
+      result: null,
+      lifecycle: createLifecycle(now)
     };
 
     this.entries.set(entry.id, entry);
@@ -153,9 +369,13 @@ class TaskLedgerManager {
 
     if (validation.value.title !== undefined) entry.title = validation.value.title;
     if (validation.value.prompt !== undefined) entry.prompt = validation.value.prompt;
+    if (validation.value.taskType !== undefined) entry.taskType = validation.value.taskType;
     if (validation.value.workspace !== undefined) entry.workspace = validation.value.workspace;
     if (validation.value.autoRun !== undefined) entry.autoRun = validation.value.autoRun;
     if (validation.value.source !== undefined) entry.source = validation.value.source;
+    if (validation.value.successCriteria !== undefined) entry.successCriteria = validation.value.successCriteria;
+    if (validation.value.constraints !== undefined) entry.constraints = validation.value.constraints;
+    if (validation.value.verificationPlan !== undefined) entry.verificationPlan = validation.value.verificationPlan;
 
     if (validation.value.status && validation.value.status !== entry.status) {
       if (entry.status === "running") {
@@ -175,6 +395,12 @@ class TaskLedgerManager {
         entry.lastTaskStatus = null;
         entry.lastError = null;
         entry.result = null;
+        entry.lifecycle.outcome = {
+          status: null,
+          summary: null,
+          updatedAt: null
+        };
+        appendStageHistory(entry.lifecycle, "queued", "Ledger entry reset to pending", new Date().toISOString());
       }
 
       if (validation.value.status === "canceled") {
@@ -297,6 +523,15 @@ class TaskLedgerManager {
           : `Linked task ended with status ${task.status}.`;
       }
 
+      entry.lifecycle.outcome = {
+        status: entry.status,
+        summary: typeof entry.result === "string" && entry.result.trim()
+          ? entry.result.trim()
+          : entry.lastError || null,
+        updatedAt: entry.updatedAt
+      };
+      appendStageHistory(entry.lifecycle, "finalize", entry.lifecycle.outcome.summary, entry.updatedAt);
+
       await this._persistEntry(entry);
     }
   }
@@ -376,6 +611,12 @@ class TaskLedgerManager {
     entry.lastError = null;
     entry.result = null;
     entry.attemptCount = Number.isFinite(entry.attemptCount) ? entry.attemptCount + 1 : 1;
+    entry.lifecycle.outcome = {
+      status: null,
+      summary: null,
+      updatedAt: null
+    };
+    appendStageHistory(entry.lifecycle, "intake", `Dispatched to thread ${started.id}`, entry.updatedAt);
     await this._persistEntry(entry);
 
     return { ok: true, entry, startedTaskId: started.id };
@@ -384,10 +625,14 @@ class TaskLedgerManager {
   _validateCreate(input) {
     const prompt = String(input?.prompt || "").trim();
     const title = String(input?.title || deriveTitle(prompt)).trim();
+    const taskType = normalizeTaskType(input?.taskType);
     const workspaceRaw = input?.workspace;
     const workspace = workspaceRaw == null ? null : String(workspaceRaw).trim() || null;
     const autoRun = input?.autoRun !== false;
     const source = normalizeSource(input?.source);
+    const successCriteria = normalizeStringArray(input?.successCriteria);
+    const constraints = normalizeStringArray(input?.constraints);
+    const verificationPlan = normalizeStringArray(input?.verificationPlan);
     const createdByTaskId = input?.createdByTaskId ? String(input.createdByTaskId).trim() : null;
 
     if (!prompt) {
@@ -402,9 +647,13 @@ class TaskLedgerManager {
       value: {
         title,
         prompt,
+        taskType,
         workspace,
         autoRun,
         source,
+        successCriteria,
+        constraints,
+        verificationPlan,
         createdByTaskId
       }
     };
@@ -425,6 +674,10 @@ class TaskLedgerManager {
       next.prompt = prompt;
     }
 
+    if (Object.prototype.hasOwnProperty.call(input || {}, "taskType")) {
+      next.taskType = normalizeTaskType(input?.taskType);
+    }
+
     if (Object.prototype.hasOwnProperty.call(input || {}, "workspace")) {
       next.workspace = input?.workspace == null ? null : String(input.workspace).trim() || null;
     }
@@ -435,6 +688,18 @@ class TaskLedgerManager {
 
     if (Object.prototype.hasOwnProperty.call(input || {}, "source")) {
       next.source = normalizeSource(input?.source);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input || {}, "successCriteria")) {
+      next.successCriteria = normalizeStringArray(input?.successCriteria);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input || {}, "constraints")) {
+      next.constraints = normalizeStringArray(input?.constraints);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input || {}, "verificationPlan")) {
+      next.verificationPlan = normalizeStringArray(input?.verificationPlan);
     }
 
     if (Object.prototype.hasOwnProperty.call(input || {}, "status")) {
@@ -469,9 +734,13 @@ class TaskLedgerManager {
       id: entry.id,
       title: entry.title,
       prompt: entry.prompt,
+      taskType: entry.taskType || "generic",
       workspace: entry.workspace || null,
       autoRun: Boolean(entry.autoRun),
       source: entry.source || null,
+      successCriteria: Array.isArray(entry.successCriteria) ? entry.successCriteria : [],
+      constraints: Array.isArray(entry.constraints) ? entry.constraints : [],
+      verificationPlan: Array.isArray(entry.verificationPlan) ? entry.verificationPlan : [],
       createdByTaskId: entry.createdByTaskId || null,
       createdAt: entry.createdAt,
       updatedAt: entry.updatedAt,
@@ -483,7 +752,8 @@ class TaskLedgerManager {
       attemptCount: Number.isFinite(entry.attemptCount) ? entry.attemptCount : 0,
       lastTaskStatus: entry.lastTaskStatus || null,
       lastError: entry.lastError || null,
-      result: entry.result ?? null
+      result: entry.result ?? null,
+      lifecycle: ensureLifecycle(entry.lifecycle, entry.updatedAt || entry.createdAt || new Date().toISOString())
     };
   }
 
@@ -504,9 +774,13 @@ class TaskLedgerManager {
           id: String(data.id),
           title: String(data.title || deriveTitle(data.prompt || "")),
           prompt: String(data.prompt || ""),
+          taskType: normalizeTaskType(data.taskType),
           workspace: data.workspace ? String(data.workspace) : null,
           autoRun: data.autoRun !== false,
           source: normalizeSource(data.source),
+          successCriteria: normalizeStringArray(data.successCriteria),
+          constraints: normalizeStringArray(data.constraints),
+          verificationPlan: normalizeStringArray(data.verificationPlan),
           createdByTaskId: data.createdByTaskId ? String(data.createdByTaskId) : null,
           createdAt: data.createdAt || new Date().toISOString(),
           updatedAt: data.updatedAt || data.createdAt || new Date().toISOString(),
@@ -518,7 +792,8 @@ class TaskLedgerManager {
           attemptCount: Number.isFinite(data.attemptCount) ? data.attemptCount : 0,
           lastTaskStatus: data.lastTaskStatus ? String(data.lastTaskStatus) : null,
           lastError: data.lastError ? String(data.lastError) : null,
-          result: data.result ?? null
+          result: data.result ?? null,
+          lifecycle: ensureLifecycle(data.lifecycle, data.updatedAt || data.createdAt || new Date().toISOString())
         });
       } catch (err) {
         console.warn(`Failed to load task ledger entry ${filePath}: ${err.message || String(err)}`);
