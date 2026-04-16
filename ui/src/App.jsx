@@ -37,6 +37,7 @@ import ServerModal from "./components/ServerModal";
 import WorkflowPanel from "./components/WorkflowPanel";
 import SchedulePanel from "./components/SchedulePanel";
 import TaskLedgerPanel from "./components/TaskLedgerPanel";
+import SimpleTaskLedgerView from "./components/SimpleTaskLedgerView";
 
 const logoIcon = "/icons/icon-rounded-master.png";
 
@@ -282,6 +283,14 @@ function getModeCopy(mode) {
   };
 }
 
+function getStandaloneViewFromHash() {
+  const hash = String(window.location.hash || "").trim().toLowerCase();
+  if (hash === "#task-ledger" || hash === "#/task-ledger") {
+    return "ledger";
+  }
+  return null;
+}
+
 export default function App() {
   const [tasks, setTasks] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
@@ -292,6 +301,7 @@ export default function App() {
   const [serverModalOpen, setServerModalOpen] = useState(false);
   const [serverBootstrapMode, setServerBootstrapMode] = useState("saved");
   const [composeMode, setComposeMode] = useState("new");
+  const [standaloneView, setStandaloneView] = useState(() => getStandaloneViewFromHash());
   const [workflows, setWorkflows] = useState([]);
   const [workflowLoading, setWorkflowLoading] = useState(false);
   const [workflowError, setWorkflowError] = useState("");
@@ -319,6 +329,17 @@ export default function App() {
   const [codeServerError, setCodeServerError] = useState("");
   const [editorSurface, setEditorSurface] = useState(null);
   const [editorFrameKey, setEditorFrameKey] = useState(0);
+
+  useEffect(() => {
+    const onHashChange = () => {
+      setStandaloneView(getStandaloneViewFromHash());
+    };
+
+    window.addEventListener("hashchange", onHashChange);
+    return () => {
+      window.removeEventListener("hashchange", onHashChange);
+    };
+  }, []);
   const [editorDockWidth, setEditorDockWidth] = useState(640);
   const [editorDetailsCollapsed, setEditorDetailsCollapsed] = useState(true);
   const [threadFocusRequested, setThreadFocusRequested] = useState(false);
@@ -443,7 +464,7 @@ export default function App() {
   }, [composeMode, serverUrl]);
 
   useEffect(() => {
-    if (composeMode !== "ledger") return;
+    if (composeMode !== "ledger" && standaloneView !== "ledger") return;
     let live = true;
 
     const loadLedger = async () => {
@@ -468,7 +489,7 @@ export default function App() {
       live = false;
       clearInterval(id);
     };
-  }, [composeMode, serverUrl]);
+  }, [composeMode, serverUrl, standaloneView]);
 
   useEffect(() => {
     let live = true;
@@ -1009,6 +1030,26 @@ export default function App() {
     setRailOpen(false);
   };
 
+  const openLedgerStandaloneView = () => {
+    window.location.hash = "/task-ledger";
+  };
+
+  const openFullConsole = () => {
+    if (!window.location.hash) return;
+    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+    setStandaloneView(null);
+  };
+
+  const openEntryFromStandaloneLedger = async (entry) => {
+    const taskId = entry?.completedTaskId || entry?.startedTaskId || null;
+    openFullConsole();
+    if (taskId) {
+      await openTaskFromLedger(taskId);
+      return;
+    }
+    setComposeMode("ledger");
+  };
+
   const onTerminate = async (id) => {
     await terminateTask(id);
     await refresh();
@@ -1364,6 +1405,7 @@ export default function App() {
           serverWorkspacePath={serverWorkspacePath}
           onCreate={createLedgerEntry}
           onDelete={deleteLedgerEntry}
+          onOpenIsolatedView={openLedgerStandaloneView}
           onRunNow={runLedgerEntryNow}
           onOpenTask={openTaskFromLedger}
         />
@@ -1415,6 +1457,21 @@ export default function App() {
       />
     );
   };
+
+  if (standaloneView === "ledger") {
+    return (
+      <SimpleTaskLedgerView
+        entries={ledgerEntries}
+        busy={ledgerBusy}
+        error={ledgerError}
+        serverName={currentServer?.name || "Direct endpoint"}
+        serverUrl={serverUrl}
+        onCreate={createLedgerEntry}
+        onOpenEntry={openEntryFromStandaloneLedger}
+        onOpenFullConsole={openFullConsole}
+      />
+    );
+  }
 
   return (
     <>

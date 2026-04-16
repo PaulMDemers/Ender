@@ -54,6 +54,7 @@ export default function TaskLedgerPanel({
   serverWorkspacePath,
   onCreate,
   onDelete,
+  onOpenIsolatedView,
   onRunNow,
   onOpenTask
 }) {
@@ -150,6 +151,13 @@ export default function TaskLedgerPanel({
             {openEntries.length} open · {finishedEntries.length} finished · {(entries || []).length} total
           </div>
           <div className="workflowActionBar">
+            <button
+              type="button"
+              className="secondaryButton"
+              onClick={() => onOpenIsolatedView?.()}
+            >
+              Open isolated view
+            </button>
             <button
               type="button"
               className={`secondaryButton ${showFinished ? "schedulePresetActive" : ""}`.trim()}
