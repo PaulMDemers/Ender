@@ -1,6 +1,7 @@
 require("dotenv").config();
 
 const { loadConfig } = require("./config");
+const { ensureRuntimeDirectories } = require("./startup/ensureRuntimeDirectories");
 const { TaskManager } = require("./runtime/taskManager");
 const { ScheduleManager } = require("./runtime/scheduleManager");
 const { createApp } = require("./api/app");
@@ -11,6 +12,7 @@ const { TaskLedgerManager } = require("./runtime/taskLedgerManager");
 
 async function main() {
   const config = loadConfig(process.env);
+  await ensureRuntimeDirectories(config);
   const taskManager = new TaskManager(config);
   await taskManager.init();
   const workflowManager = new WorkflowManager({ config, taskManager });
