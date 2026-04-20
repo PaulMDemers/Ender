@@ -13,16 +13,16 @@
     "electron:dist": "npm run build && electron-builder"
   },
   "dependencies": {
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^5.0.0",
+    "@vitejs/plugin-react": "^5.2.0",
     "concurrently": "^9.2.1",
     "cross-env": "^7.0.3",
     "electron": "^37.2.4",
     "electron-builder": "^26.0.12",
-    "vite": "^7.1.2",
+    "vite": "^7.3.2",
     "wait-on": "^8.0.5"
   },
   "build": {
