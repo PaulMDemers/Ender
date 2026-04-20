@@ -7,6 +7,7 @@ const { z } = require("zod");
 const { tool } = require("@langchain/core/tools");
 const { zodFunction } = require("openai/helpers/zod");
 
+const { createChatModel } = require("../src/llm/factory");
 const { runAgentLoop } = require("../src/runtime/runAgentLoop");
 const { validateToolSchemasForBackend } = require("../src/llm/toolSchemaPreflight");
 const { createCronTools } = require("../src/tools/cronTools");
@@ -29,6 +30,51 @@ const { createThreadTools } = require("../src/tools/threadTools");
 function getToolMap(tools) {
   return Object.fromEntries(tools.map((entry) => [entry.name, entry]));
 }
+
+test("createChatModel constructs upgraded LangChain backends", () => {
+  const configs = [
+    {
+      backend: "openai",
+      openai: { apiKey: "test-key", model: "gpt-4.1-mini" },
+      bedrock: {},
+      azure: {},
+      ollama: {}
+    },
+    {
+      backend: "bedrock",
+      openai: {},
+      bedrock: { region: "us-east-1", model: "anthropic.claude-3-5-sonnet-20240620-v1:0" },
+      azure: {},
+      ollama: {}
+    },
+    {
+      backend: "ollama",
+      openai: {},
+      bedrock: {},
+      azure: {},
+      ollama: { baseUrl: "http://127.0.0.1:11434", model: "llama3.1:8b" }
+    },
+    {
+      backend: "azure",
+      openai: {},
+      bedrock: {},
+      azure: {
+        apiKey: "test-key",
+        instanceName: "demo-instance",
+        deploymentName: "demo-deployment",
+        apiVersion: "2024-10-21",
+        basePath: null
+      },
+      ollama: {}
+    }
+  ];
+
+  for (const config of configs) {
+    const model = createChatModel(config);
+    assert.equal(typeof model?.invoke, "function", `${config.backend} should expose invoke()`);
+    assert.equal(typeof model?.bindTools, "function", `${config.backend} should expose bindTools()`);
+  }
+});
 
 test("tool schemas accept provider-safe null placeholders", async () => {
   const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "ender-tool-schema-"));

@@ -17,13 +17,13 @@
     "react-dom": "^19.2.5"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^5.2.0",
+    "@vitejs/plugin-react": "^6.0.1",
     "concurrently": "^9.2.1",
-    "cross-env": "^7.0.3",
-    "electron": "^37.2.4",
+    "cross-env": "^10.1.0",
+    "electron": "^41.2.1",
     "electron-builder": "^26.0.12",
-    "vite": "^7.3.2",
-    "wait-on": "^8.0.5"
+    "vite": "^8.0.9",
+    "wait-on": "^9.0.5"
   },
   "build": {
     "appId": "com.ender.ui",
