@@ -1,6 +1,9 @@
 const { z } = require("zod");
 const { tool } = require("@langchain/core/tools");
 
+const workflowInputValueSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
+const workflowInputSchema = z.object({}).catchall(workflowInputValueSchema);
+
 function getTimeSnapshot() {
   const now = new Date();
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -88,7 +91,7 @@ function createCronTools(scheduleManager, { taskId, requestApproval, onLog } = {
         workspace: z.string().nullable(),
         threadId: z.string().nullable(),
         workflowId: z.string().nullable(),
-        workflowInputs: z.array(z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]))).nullable()
+        workflowInputs: z.array(workflowInputSchema).nullable()
       })
     }
   );

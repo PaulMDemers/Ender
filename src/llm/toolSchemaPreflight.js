@@ -2,6 +2,7 @@ const { zodFunction } = require("openai/helpers/zod");
 
 const STRICT_BACKENDS = new Set(["openai", "azure"]);
 const UNSUPPORTED_FORMATS = new Set(["uri"]);
+const UNSUPPORTED_KEYWORDS = new Set(["propertyNames"]);
 
 function traverseSchema(node, visit, path = []) {
   if (!node || typeof node !== "object") {
@@ -52,6 +53,23 @@ function collectSchemaProblems(name, compiled, warnings) {
   }
 
   traverseSchema(jsonSchema, (node, path) => {
+    for (const keyword of UNSUPPORTED_KEYWORDS) {
+      if (Object.prototype.hasOwnProperty.call(node, keyword)) {
+        problems.push(`${name}: schema node at ${path.join(".") || "<root>"} uses unsupported keyword '${keyword}'`);
+      }
+    }
+
+    if (node.type === "object" && node.properties && !Array.isArray(node.properties)) {
+      const propertyNames = Object.keys(node.properties);
+      const required = Array.isArray(node.required) ? node.required : [];
+      const missingRequired = propertyNames.filter((property) => !required.includes(property));
+      if (missingRequired.length) {
+        problems.push(
+          `${name}: schema node at ${path.join(".") || "<root>"} is missing required entries for ${missingRequired.join(", ")}`
+        );
+      }
+    }
+
     if (Object.prototype.hasOwnProperty.call(node, "not") && typeof node.type !== "string") {
       problems.push(`${name}: schema node at ${path.join(".") || "<root>"} has 'not' without a string type`);
     }

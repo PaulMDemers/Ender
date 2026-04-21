@@ -29,7 +29,7 @@ function createTaskLedgerRuntimeTools(taskLedgerManager, taskManager, { taskId, 
       description: "Purpose: Record the current ledger task lifecycle stage. When to use: At the start of each major phase such as intake, workspace_scan, implement, or finalize. Constraints: Only use valid lifecycle stages and keep summaries concise. Side effects: updates the global task ledger entry for the current task. Requires explicit user intent: no. Output: updated ledger entry snapshot.",
       schema: z.object({
         stage: z.enum(["intake", "feasibility_check", "workspace_scan", "plan", "implement", "verify", "finalize"]),
-        summary: z.string().nullable().optional()
+        summary: z.string().nullable()
       })
     }
   );
@@ -66,9 +66,9 @@ function createTaskLedgerRuntimeTools(taskLedgerManager, taskManager, { taskId, 
       name: "ledger_save_plan",
       description: "Purpose: Save the concrete implementation plan for the current ledger task. When to use: Once the task is feasible and before editing or making durable changes. Constraints: checklist and verification steps should be concise, actionable items. Side effects: updates the global task ledger entry. Requires explicit user intent: no. Output: updated ledger entry snapshot.",
       schema: z.object({
-        summary: z.string().nullable().optional(),
-        checklist: z.array(z.string()).nullable().optional(),
-        verificationSteps: z.array(z.string()).nullable().optional()
+        summary: z.string().nullable(),
+        checklist: z.array(z.string()).nullable(),
+        verificationSteps: z.array(z.string()).nullable()
       })
     }
   );
@@ -89,8 +89,8 @@ function createTaskLedgerRuntimeTools(taskLedgerManager, taskManager, { taskId, 
       description: "Purpose: Record the verification result for the current ledger task. When to use: After running tests, checks, builds, or other validation steps. Constraints: evidence should list commands, files, or observable checks used to validate the work. Side effects: updates the global task ledger entry. Requires explicit user intent: no. Output: updated ledger entry snapshot.",
       schema: z.object({
         status: z.enum(["pending", "running", "passed", "failed", "skipped"]),
-        summary: z.string().nullable().optional(),
-        evidence: z.array(z.string()).nullable().optional()
+        summary: z.string().nullable(),
+        evidence: z.array(z.string()).nullable()
       })
     }
   );

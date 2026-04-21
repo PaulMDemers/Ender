@@ -60,7 +60,7 @@ function createLedgerTools(ledger, options = {}) {
       description: "Purpose: End the current task run and emit the final user-visible response. When to use: Use status=completed only when the task is fully fulfilled. Use status=needs_input when required information is missing. Use status=blocked when an external precondition or hard constraint prevents completion. Constraints: note must begin with DONE:; if it does not, the tool will normalize it. Side effects: ends the task. Requires explicit user intent: no. Output: final completion message.",
       schema: z.object({
         note: z.string().nullable(),
-        status: finalizeStatusSchema.nullable().optional()
+        status: finalizeStatusSchema.nullable()
       })
     }
   );

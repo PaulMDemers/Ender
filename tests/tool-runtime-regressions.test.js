@@ -104,7 +104,7 @@ test("tool schemas accept provider-safe null placeholders", async () => {
     assert.equal(gitlabTools.gitlab_list_projects.schema.safeParse({ membership: null, owned: null, search: null, perPage: null, page: null }).success, true);
     assert.equal(jiraTools.jira_get_issue.schema.safeParse({ issueKey: "ABC-123", fields: null }).success, true);
     assert.equal(emailTools.email_send.schema.safeParse({ to: "a@example.com", subject: "hi", text: null, html: null }).success, true);
-    assert.equal(ledgerTools.finalize.schema.safeParse({ note: null }).success, true);
+    assert.equal(ledgerTools.finalize.schema.safeParse({ note: null, status: null }).success, true);
   } finally {
     await fs.rm(tmpRoot, { recursive: true, force: true });
   }
@@ -185,6 +185,16 @@ test("tool schemas compile cleanly through the OpenAI zod helper", async () => {
         const rendered = JSON.stringify(parameters);
         assert.ok(rendered);
         assert.ok(!rendered.includes("\"format\":\"uri\""), `${toolDef.name} should not emit uri format`);
+        assert.ok(!rendered.includes("\"propertyNames\""), `${toolDef.name} should not emit propertyNames`);
+        if (parameters?.type === "object" && parameters.properties) {
+          const props = Object.keys(parameters.properties);
+          const required = new Set(parameters.required || []);
+          assert.deepEqual(
+            props.filter((name) => !required.has(name)),
+            [],
+            `${toolDef.name} should require every top-level property for OpenAI compatibility`
+          );
+        }
       }
     } finally {
       console.warn = originalWarn;
@@ -194,6 +204,43 @@ test("tool schemas compile cleanly through the OpenAI zod helper", async () => {
   } finally {
     await fs.rm(tmpRoot, { recursive: true, force: true });
   }
+});
+
+test("tool schema preflight rejects propertyNames for strict backends", () => {
+  const brokenTool = tool(
+    async () => "ok",
+    {
+      name: "broken_record_tool",
+      description: "Synthetic test tool",
+      schema: z.object({
+        input: z.record(z.string(), z.string())
+      })
+    }
+  );
+
+  assert.throws(
+    () => validateToolSchemasForBackend("openai", [brokenTool], { onLog: () => {} }),
+    /unsupported keyword 'propertyNames'/
+  );
+});
+
+test("tool schema preflight rejects object properties omitted from required", () => {
+  const brokenTool = tool(
+    async () => "ok",
+    {
+      name: "broken_optional_tool",
+      description: "Synthetic test tool",
+      schema: z.object({
+        note: z.string(),
+        status: z.string().optional()
+      })
+    }
+  );
+
+  assert.throws(
+    () => validateToolSchemasForBackend("openai", [brokenTool], { onLog: () => {} }),
+    /all-fields-must-be-required|missing required entries for status/
+  );
 });
 
 test("runAgentLoop sends multimodal tool results back in a provider-safe shape", async () => {

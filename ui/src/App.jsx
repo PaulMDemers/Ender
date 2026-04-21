@@ -34,6 +34,7 @@ import LogViewer from "./components/LogViewer";
 import ThreadComposer from "./components/ThreadComposer";
 import ApprovalPrompt from "./components/ApprovalPrompt";
 import ServerModal from "./components/ServerModal";
+import ServerPickerShell from "./components/ServerPickerShell";
 import WorkflowPanel from "./components/WorkflowPanel";
 import SchedulePanel from "./components/SchedulePanel";
 import TaskLedgerPanel from "./components/TaskLedgerPanel";
@@ -46,6 +47,7 @@ const TASK_UI_STATE_KEY = "ender_task_ui_state";
 const RAIL_COLLAPSED_KEY = "ender_rail_collapsed";
 const WORKFLOW_SESSION_KEY = "ender_workflow_sessions";
 const TASK_PAGE_SIZE = 12;
+const HAS_CONFIGURED_DEFAULT_API = Boolean(import.meta.env.VITE_ENDER_API);
 
 function compareTasksByNewest(a, b) {
   const aTime = new Date(a.finishedAt || a.startedAt || 0).getTime();
@@ -298,8 +300,9 @@ export default function App() {
   const [loadError, setLoadError] = useState("");
   const [serverUrl, setServerUrl] = useState(getApiBase());
   const [savedServers, setSavedServers] = useState([]);
+  const [connectionRequested, setConnectionRequested] = useState(HAS_CONFIGURED_DEFAULT_API);
+  const [connectedOnce, setConnectedOnce] = useState(false);
   const [serverModalOpen, setServerModalOpen] = useState(false);
-  const [serverBootstrapMode, setServerBootstrapMode] = useState("saved");
   const [composeMode, setComposeMode] = useState("new");
   const [standaloneView, setStandaloneView] = useState(() => getStandaloneViewFromHash());
   const [workflows, setWorkflows] = useState([]);
@@ -363,11 +366,13 @@ export default function App() {
     if (saved) {
       const normalized = setApiBase(saved);
       setServerUrl(normalized);
-      setServerBootstrapMode("saved");
+      setConnectionRequested(true);
+      setLoading(true);
       setServerModalOpen(false);
     } else {
       setServerUrl(getApiBase());
-      setServerBootstrapMode("default");
+      setConnectionRequested(HAS_CONFIGURED_DEFAULT_API);
+      setLoading(HAS_CONFIGURED_DEFAULT_API);
       setServerModalOpen(false);
     }
   }, []);
@@ -384,6 +389,11 @@ export default function App() {
   }, [railCollapsed]);
 
   useEffect(() => {
+    if (!connectionRequested) {
+      setWorkflows([]);
+      setWorkflowLoading(false);
+      return;
+    }
     if (composeMode !== "workflow" && composeMode !== "schedule") return;
     let live = true;
     setWorkflowLoading(true);
@@ -404,9 +414,10 @@ export default function App() {
     return () => {
       live = false;
     };
-  }, [composeMode, serverUrl]);
+  }, [composeMode, serverUrl, connectionRequested]);
 
   useEffect(() => {
+    if (!connectionRequested) return;
     if (composeMode !== "workflow" || workflowSession) return;
     const savedSessionId = getSavedWorkflowSessionId(serverUrl);
     if (!savedSessionId) return;
@@ -430,7 +441,7 @@ export default function App() {
     return () => {
       live = false;
     };
-  }, [composeMode, serverUrl, workflowSession]);
+  }, [composeMode, serverUrl, workflowSession, connectionRequested]);
 
   useEffect(() => {
     if (workflowSession && workflowSession.mode === "interactive" && !workflowSession.startedTaskId) {
@@ -441,6 +452,11 @@ export default function App() {
   }, [serverUrl, workflowSession]);
 
   useEffect(() => {
+    if (!connectionRequested) {
+      setSchedules([]);
+      setScheduleBusy(false);
+      return;
+    }
     if (composeMode !== "schedule") return;
     let live = true;
     setScheduleBusy(true);
@@ -461,9 +477,14 @@ export default function App() {
     return () => {
       live = false;
     };
-  }, [composeMode, serverUrl]);
+  }, [composeMode, serverUrl, connectionRequested]);
 
   useEffect(() => {
+    if (!connectionRequested) {
+      setLedgerEntries([]);
+      setLedgerBusy(false);
+      return;
+    }
     if (composeMode !== "ledger" && standaloneView !== "ledger") return;
     let live = true;
 
@@ -489,9 +510,13 @@ export default function App() {
       live = false;
       clearInterval(id);
     };
-  }, [composeMode, serverUrl, standaloneView]);
+  }, [composeMode, serverUrl, standaloneView, connectionRequested]);
 
   useEffect(() => {
+    if (!connectionRequested) {
+      setHealth(null);
+      return undefined;
+    }
     let live = true;
 
     const loadHealth = async () => {
@@ -512,7 +537,7 @@ export default function App() {
       live = false;
       clearInterval(intervalId);
     };
-  }, [serverUrl]);
+  }, [serverUrl, connectionRequested]);
 
   useEffect(() => {
     const isOnline = Boolean(health?.ok);
@@ -635,12 +660,21 @@ export default function App() {
   }, [editorSurface]);
 
   useEffect(() => {
+    if (!connectionRequested) {
+      setLoading(false);
+      setLoadError("");
+      setTasks([]);
+      setSelectedId(null);
+      return undefined;
+    }
+
     let live = true;
     const load = async () => {
       try {
         const data = await listTasks();
         if (!live) return;
         setLoadError("");
+        setConnectedOnce(true);
         setTasks(data.items || []);
         if (!selectedId && composeMode === "thread" && data.items?.length) {
           setSelectedId([...data.items].sort(compareTasksByNewest)[0].id);
@@ -650,9 +684,6 @@ export default function App() {
         setLoadError(err.message || "Unable to reach server");
         setTasks([]);
         setSelectedId(null);
-        if (serverBootstrapMode === "default" && savedServers.length === 0) {
-          setServerModalOpen(true);
-        }
       } finally {
         if (live) setLoading(false);
       }
@@ -664,7 +695,7 @@ export default function App() {
       live = false;
       clearInterval(id);
     };
-  }, [selectedId, serverUrl, composeMode, savedServers.length, serverBootstrapMode]);
+  }, [selectedId, serverUrl, composeMode, connectionRequested]);
 
   const activeTasks = useMemo(() => {
     const pinned = [];
@@ -699,6 +730,7 @@ export default function App() {
     () => savedServers.find((server) => server.endpoint === serverUrl) || null,
     [savedServers, serverUrl]
   );
+  const showConnectionShell = !connectedOnce;
 
   const discardWorkflowSession = () => {
     setWorkflowSession(null);
@@ -775,9 +807,11 @@ export default function App() {
   }
 
   const refresh = async () => {
+    if (!connectionRequested) return [];
     try {
       const data = await listTasks();
       setLoadError("");
+      setConnectedOnce(true);
       const items = data.items || [];
       setTasks(items);
       setSelectedId((current) => {
@@ -810,8 +844,11 @@ export default function App() {
       setSavedServers(nextSavedServers);
       localStorage.setItem("ender_api_base", normalized);
       setServerUrl(normalized);
-      setServerBootstrapMode("saved");
+      setConnectionRequested(true);
+      setConnectedOnce(false);
       setLoading(true);
+      setHealth(null);
+      setLoadError("");
       setTasks([]);
       setSelectedId(null);
       setComposeMode("new");
@@ -838,6 +875,13 @@ export default function App() {
       saveServers(next);
       return next;
     });
+    if (endpoint === serverUrl) {
+      localStorage.removeItem("ender_api_base");
+      if (!connectedOnce) {
+        setConnectionRequested(false);
+        setLoadError("");
+      }
+    }
   };
 
   const openMode = (nextMode) => {
@@ -1457,6 +1501,21 @@ export default function App() {
       />
     );
   };
+
+  if (showConnectionShell) {
+    return (
+      <ServerPickerShell
+        currentEndpoint={serverUrl}
+        currentServerName={currentServer?.name || ""}
+        servers={savedServers}
+        busy={connectionRequested && loading}
+        error={loadError}
+        onConnect={applyServer}
+        onToggleFavorite={toggleFavoriteServer}
+        onRemove={removeServer}
+      />
+    );
+  }
 
   if (standaloneView === "ledger") {
     return (
