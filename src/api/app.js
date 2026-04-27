@@ -1,14 +1,19 @@
 const express = require("express");
 const cors = require("cors");
 const { getReadiness } = require("../health/readiness");
+const { createCodeServerProxy } = require("./codeServerProxy");
 
 function getRequestOrigin(req, config) {
   const explicitHost = String(config?.codeServer?.publicHost || "").trim();
   const explicitProtocol = String(config?.codeServer?.publicProtocol || "").trim();
   if (explicitHost) {
+    const hostHeader = String(req.get("x-forwarded-host") || req.get("host") || "").trim();
     return {
       protocol: explicitProtocol || req.protocol || "http",
-      hostname: explicitHost
+      hostname: explicitHost.replace(/:\d+$/, ""),
+      host: explicitHost,
+      proxyHost: hostHeader || explicitHost,
+      proxyProtocol: req.protocol || "http"
     };
   }
 
@@ -16,7 +21,10 @@ function getRequestOrigin(req, config) {
   if (!hostHeader) {
     return {
       protocol: req.protocol || "http",
-      hostname: "localhost"
+      hostname: "localhost",
+      host: "localhost",
+      proxyHost: "localhost",
+      proxyProtocol: req.protocol || "http"
     };
   }
 
@@ -24,12 +32,18 @@ function getRequestOrigin(req, config) {
     const u = new URL(`${req.protocol || "http"}://${hostHeader}`);
     return {
       protocol: explicitProtocol || u.protocol.replace(/:$/, ""),
-      hostname: u.hostname
+      hostname: u.hostname,
+      host: hostHeader,
+      proxyHost: hostHeader,
+      proxyProtocol: u.protocol.replace(/:$/, "") || req.protocol || "http"
     };
   } catch {
     return {
       protocol: explicitProtocol || req.protocol || "http",
-      hostname: hostHeader.replace(/:\d+$/, "")
+      hostname: hostHeader.replace(/:\d+$/, ""),
+      host: hostHeader,
+      proxyHost: hostHeader,
+      proxyProtocol: req.protocol || "http"
     };
   }
 }
@@ -47,6 +61,8 @@ function createApp(
   llmProfileManager = null
 ) {
   const app = express();
+  const codeServerProxy = createCodeServerProxy({ taskManager, codeServerManager });
+  app.locals.handleCodeServerProxyUpgrade = codeServerProxy.handleUpgrade;
   app.use(cors());
   app.use(express.json({ limit: "12mb" }));
 
@@ -393,6 +409,8 @@ function createApp(
     }
     return res.json(result);
   });
+
+  app.use("/tasks/:id/code-server/proxy", codeServerProxy.handleHttp);
 
   app.post("/tasks/:id/code-server", async (req, res) => {
     if (!codeServerManager) {

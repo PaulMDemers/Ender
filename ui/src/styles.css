@@ -1161,6 +1161,72 @@ body::before {
   margin-top: 2px;
 }
 
+.editorPasswordButton {
+  min-width: 0;
+  max-width: min(100%, 390px);
+  min-height: 32px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.editorModalActions .editorPasswordButton,
+.editorDockActions .editorPasswordButton {
+  flex: 1 1 250px;
+}
+
+.editorPasswordButton:hover,
+.editorCredentialButton:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.editorPasswordButton.copied,
+.editorCredentialButton.copied {
+  border-color: rgba(110, 231, 183, 0.4);
+  background: rgba(110, 231, 183, 0.1);
+}
+
+.editorPasswordValue {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.76rem;
+}
+
+.editorPasswordState {
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.editorCredentialButton {
+  width: 100%;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.editorCredentialCopyRow {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
 .editorModal {
   width: min(1420px, 96vw);
   height: min(92vh, 100%);
@@ -1208,6 +1274,7 @@ body::before {
 }
 
 .editorFrameShell {
+  position: relative;
   min-height: 0;
   overflow: hidden;
   border: 1px solid var(--line);
@@ -1221,6 +1288,48 @@ body::before {
   height: 100%;
   border: 0;
   background: #fff;
+}
+
+.editorFrameOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
+  background: rgba(10, 12, 18, 0.9);
+  color: var(--ink);
+  pointer-events: none;
+}
+
+.editorFrameSpinner {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: 3px solid rgba(255, 255, 255, 0.18);
+  border-top-color: #e58cff;
+  animation: editorSpinner 900ms linear infinite;
+}
+
+.editorFrameOverlayTitle {
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+
+.editorFrameOverlayText {
+  max-width: 34ch;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+@keyframes editorSpinner {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .editorDock {

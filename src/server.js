@@ -51,7 +51,7 @@ async function main() {
     llmProfileManager
   );
 
-  app.listen(config.port, () => {
+  const server = app.listen(config.port, () => {
     console.log(`Ender server listening on http://localhost:${config.port}`);
     console.log(`backend=${config.backend} workdir=${config.workdir}`);
     console.log(`runtimeOs=${config.runtimeOs}`);
@@ -68,6 +68,13 @@ async function main() {
       + ` mode=${config.codeServer?.mode || "auto"}`
       + ` bindHost=${config.codeServer?.bindHost || "n/a"}`
     );
+  });
+
+  server.on("upgrade", async (req, socket, head) => {
+    const handled = await app.locals.handleCodeServerProxyUpgrade?.(req, socket, head);
+    if (!handled) {
+      socket.destroy();
+    }
   });
 }
 

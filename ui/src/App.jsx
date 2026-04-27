@@ -337,6 +337,9 @@ export default function App() {
   const [codeServerError, setCodeServerError] = useState("");
   const [editorSurface, setEditorSurface] = useState(null);
   const [editorFrameKey, setEditorFrameKey] = useState(0);
+  const [editorFrameStatus, setEditorFrameStatus] = useState("idle");
+  const [editorFrameReachable, setEditorFrameReachable] = useState(false);
+  const [copiedEditorPassword, setCopiedEditorPassword] = useState(false);
 
   useEffect(() => {
     const onHashChange = () => {
@@ -354,6 +357,7 @@ export default function App() {
   const [threadMobilePanel, setThreadMobilePanel] = useState("transcript");
 
   const wasOnlineRef = useRef(null);
+  const copiedEditorPasswordTimerRef = useRef(null);
   const dockRailRestoreRef = useRef(null);
   const dockResizeRef = useRef({
     active: false,
@@ -362,6 +366,7 @@ export default function App() {
   });
   const selectedTask = useMemo(() => tasks.find((task) => task.id === selectedId) || null, [tasks, selectedId]);
   const taskStateForServer = taskUiState[serverUrl] || {};
+  const codeServerEditorUrl = codeServerSession?.proxyUrl || codeServerSession?.url || "";
 
   useEffect(() => {
     const saved = localStorage.getItem("ender_api_base");
@@ -636,6 +641,75 @@ export default function App() {
     setEditorDetailsCollapsed(true);
     setThreadMobilePanel("transcript");
   }, [codeServerSession]);
+
+  useEffect(() => {
+    setCopiedEditorPassword(false);
+  }, [codeServerSession?.password]);
+
+  useEffect(() => {
+    if (!codeServerEditorUrl || !editorSurface) {
+      setEditorFrameStatus("idle");
+      setEditorFrameReachable(false);
+      return;
+    }
+
+    setEditorFrameStatus("connecting");
+    setEditorFrameReachable(false);
+  }, [codeServerEditorUrl, editorSurface]);
+
+  useEffect(() => {
+    if (!codeServerEditorUrl || !editorSurface) return;
+    setEditorFrameStatus("connecting");
+  }, [codeServerEditorUrl, editorSurface, editorFrameKey]);
+
+  useEffect(() => {
+    if (!codeServerEditorUrl || !editorSurface || editorFrameStatus === "loaded") {
+      return undefined;
+    }
+
+    let live = true;
+
+    const probeEditor = async () => {
+      try {
+        await fetch(codeServerEditorUrl, { mode: "no-cors", cache: "no-store" });
+        if (!live) return;
+        if (!editorFrameReachable) {
+          setEditorFrameKey((value) => value + 1);
+        }
+        setEditorFrameReachable(true);
+      } catch {
+        if (live) setEditorFrameReachable(false);
+      }
+    };
+
+    probeEditor();
+    const intervalId = window.setInterval(probeEditor, 2000);
+
+    return () => {
+      live = false;
+      window.clearInterval(intervalId);
+    };
+  }, [codeServerEditorUrl, editorSurface, editorFrameStatus, editorFrameReachable]);
+
+  useEffect(() => {
+    if (!codeServerEditorUrl || !editorSurface || editorFrameStatus !== "connecting") {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setEditorFrameKey((value) => value + 1);
+    }, 4500);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [codeServerEditorUrl, editorSurface, editorFrameStatus, editorFrameKey]);
+
+  useEffect(() => () => {
+    if (copiedEditorPasswordTimerRef.current) {
+      window.clearTimeout(copiedEditorPasswordTimerRef.current);
+    }
+  }, []);
 
   useEffect(() => {
     if (editorSurface !== "modal") return undefined;
@@ -1302,12 +1376,46 @@ export default function App() {
   };
 
   const openEditorTab = () => {
-    if (!codeServerSession?.url) return;
-    const nextWindow = window.open(codeServerSession.url, "_blank", "noopener,noreferrer");
+    if (!codeServerEditorUrl) return;
+    const nextWindow = window.open(codeServerEditorUrl, "_blank", "noopener,noreferrer");
     if (nextWindow) {
       setEditorSurface(null);
       setEditorDetailsCollapsed(true);
       setThreadMobilePanel("transcript");
+    }
+  };
+
+  const copyEditorPassword = async () => {
+    const password = codeServerSession?.password;
+    if (!password) return;
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(password);
+      } else {
+        const textarea = document.createElement("textarea");
+        try {
+          textarea.value = password;
+          textarea.setAttribute("readonly", "");
+          textarea.style.position = "fixed";
+          textarea.style.opacity = "0";
+          document.body.appendChild(textarea);
+          textarea.select();
+          document.execCommand("copy");
+        } finally {
+          textarea.remove();
+        }
+      }
+
+      setCopiedEditorPassword(true);
+      if (copiedEditorPasswordTimerRef.current) {
+        window.clearTimeout(copiedEditorPasswordTimerRef.current);
+      }
+      copiedEditorPasswordTimerRef.current = window.setTimeout(() => {
+        setCopiedEditorPassword(false);
+      }, 1600);
+    } catch {
+      setCodeServerError("Unable to copy the editor password.");
     }
   };
 
@@ -1418,6 +1526,66 @@ export default function App() {
     </div>
   );
 
+  const renderEditorPasswordButton = () => {
+    if (!codeServerSession?.password) return null;
+
+    return (
+      <button
+        type="button"
+        className={`editorPasswordButton ${copiedEditorPassword ? "copied" : ""}`}
+        onClick={copyEditorPassword}
+        title="Copy editor password"
+        aria-label="Copy editor password"
+      >
+        <span className="headerChipLabel">Password</span>
+        <span className="editorPasswordValue mono">{codeServerSession.password}</span>
+        <span className="editorPasswordState">{copiedEditorPassword ? "Copied" : "Copy"}</span>
+      </button>
+    );
+  };
+
+  const renderEditorPasswordCredential = () => {
+    if (!codeServerSession?.password) return null;
+
+    return (
+      <button
+        type="button"
+        className={`editorCredential editorCredentialButton ${copiedEditorPassword ? "copied" : ""}`}
+        onClick={copyEditorPassword}
+      >
+        <span className="headerChipLabel">Password</span>
+        <span className="editorCredentialCopyRow">
+          <span className="editorMetaValue mono">{codeServerSession.password}</span>
+          <span className="editorPasswordState">{copiedEditorPassword ? "Copied" : "Copy"}</span>
+        </span>
+      </button>
+    );
+  };
+
+  const renderEditorFrame = (surface, shellClassName = "") => {
+    if (!codeServerEditorUrl) return null;
+    const waiting = editorFrameStatus !== "loaded";
+
+    return (
+      <div className={`editorFrameShell ${shellClassName}`}>
+        {waiting ? (
+          <div className="editorFrameOverlay" role="status" aria-live="polite">
+            <div className="editorFrameSpinner" aria-hidden="true" />
+            <div className="editorFrameOverlayTitle">Waiting to connect</div>
+            <div className="editorFrameOverlayText">The workspace editor will reload automatically when it is ready.</div>
+          </div>
+        ) : null}
+        <iframe
+          key={`${surface}-${editorFrameKey}-${codeServerEditorUrl}`}
+          className="editorFrame"
+          src={codeServerEditorUrl}
+          title="Thread workspace editor"
+          onLoad={() => setEditorFrameStatus(editorFrameReachable ? "loaded" : "connecting")}
+        />
+      </div>
+    );
+  };
+
   const renderStackedEditor = () => {
     if (!codeServerSession?.url) return null;
 
@@ -1430,6 +1598,7 @@ export default function App() {
           </div>
           <div className="editorDockActions threadEditorStackActions">
             <span className="statusPill success">running</span>
+            {renderEditorPasswordButton()}
             <button type="button" className="miniButton" onClick={() => setEditorDetailsCollapsed((value) => !value)}>
               {editorDetailsCollapsed ? "Show Details" : "Hide Details"}
             </button>
@@ -1447,25 +1616,15 @@ export default function App() {
             <div className="editorCredentials">
               <div className="editorCredential">
                 <span className="headerChipLabel">URL</span>
-                <a className="editorLink mono" href={codeServerSession.url} target="_blank" rel="noreferrer">
-                  {codeServerSession.url}
+                <a className="editorLink mono" href={codeServerEditorUrl} target="_blank" rel="noreferrer">
+                  {codeServerEditorUrl}
                 </a>
               </div>
-              <div className="editorCredential">
-                <span className="headerChipLabel">Password</span>
-                <span className="editorMetaValue mono">{codeServerSession.password}</span>
-              </div>
+              {renderEditorPasswordCredential()}
             </div>
           </div>
         ) : null}
-        <div className="editorFrameShell threadEditorStackViewport">
-          <iframe
-            key={`stacked-${editorFrameKey}-${codeServerSession.url}`}
-            className="editorFrame"
-            src={codeServerSession.url}
-            title="Thread workspace editor"
-          />
-        </div>
+        {renderEditorFrame("stacked", "threadEditorStackViewport")}
       </section>
     );
   };
@@ -1974,6 +2133,7 @@ export default function App() {
                 </div>
                 <div className="editorDockActions">
                   <span className="statusPill success">running</span>
+                  {renderEditorPasswordButton()}
                   <button type="button" className="miniButton" onClick={() => setEditorDetailsCollapsed((value) => !value)}>
                     {editorDetailsCollapsed ? "Show Details" : "Hide Details"}
                   </button>
@@ -1994,26 +2154,16 @@ export default function App() {
                   <div className="editorCredentials editorDockCredentials">
                     <div className="editorCredential">
                       <span className="headerChipLabel">URL</span>
-                      <a className="editorLink mono" href={codeServerSession.url} target="_blank" rel="noreferrer">
-                        {codeServerSession.url}
+                      <a className="editorLink mono" href={codeServerEditorUrl} target="_blank" rel="noreferrer">
+                        {codeServerEditorUrl}
                       </a>
                     </div>
-                    <div className="editorCredential">
-                      <span className="headerChipLabel">Password</span>
-                      <span className="editorMetaValue mono">{codeServerSession.password}</span>
-                    </div>
+                    {renderEditorPasswordCredential()}
                   </div>
                 </div>
               ) : null}
             </div>
-            <div className="editorFrameShell">
-              <iframe
-                key={`split-${editorFrameKey}-${codeServerSession.url}`}
-                className="editorFrame"
-                src={codeServerSession.url}
-                title="Thread workspace editor"
-              />
-            </div>
+            {renderEditorFrame("split")}
           </aside>
         ) : null}
       </div>
@@ -2067,18 +2217,16 @@ export default function App() {
                     <div className="editorCredentials">
                       <div className="editorCredential">
                         <span className="headerChipLabel">URL</span>
-                        <a className="editorLink mono" href={codeServerSession.url} target="_blank" rel="noreferrer">
-                          {codeServerSession.url}
+                        <a className="editorLink mono" href={codeServerEditorUrl} target="_blank" rel="noreferrer">
+                          {codeServerEditorUrl}
                         </a>
                       </div>
-                      <div className="editorCredential">
-                        <span className="headerChipLabel">Password</span>
-                        <span className="editorMetaValue mono">{codeServerSession.password}</span>
-                      </div>
+                      {renderEditorPasswordCredential()}
                     </div>
                   </>
                 ) : null}
                 <div className="editorModalActions">
+                  {renderEditorPasswordButton()}
                   <button type="button" className="miniButton" onClick={() => setEditorDetailsCollapsed((value) => !value)}>
                     {editorDetailsCollapsed ? "Show Details" : "Hide Details"}
                   </button>
@@ -2099,14 +2247,7 @@ export default function App() {
                 </div>
                 {codeServerError ? <div className="errorBanner editorErrorBanner">{codeServerError}</div> : null}
               </div>
-              <div className="editorFrameShell editorModalViewport">
-                <iframe
-                  key={`modal-${editorFrameKey}-${codeServerSession.url}`}
-                  className="editorFrame"
-                  src={codeServerSession.url}
-                  title="Thread workspace editor"
-                />
-              </div>
+              {renderEditorFrame("modal", "editorModalViewport")}
             </div>
           </div>
         </div>

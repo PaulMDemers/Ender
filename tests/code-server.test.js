@@ -61,8 +61,10 @@ test("launchTaskSession prefers a local npx launcher on macOS auto mode", async 
   assert.equal(result.created, true);
   assert.equal(result.session.mode, "local");
   assert.equal(result.session.url, "https://ender.local:13337/");
+  assert.equal(result.session.proxyUrl, "https://ignored.example/tasks/task-local-1/code-server/proxy/");
   assert.equal(spawnCall.command, "npx");
   assert.deepEqual(spawnCall.args.slice(0, 2), ["--yes", "code-server@4.113.0"]);
+  assert.equal(spawnCall.args.includes("--base-path"), false);
   assert.ok(spawnCall.args.includes(workspace));
   assert.equal(spawnCall.options.cwd, workspace);
   assert.equal(spawnCall.options.env.PORT, "13337");
@@ -193,6 +195,8 @@ test("launchTaskSession keeps docker workspace mapping available in docker mode"
   assert.equal(result.created, true);
   assert.equal(result.session.mode, "docker");
   assert.equal(result.session.url, "https://ender.local:14444/");
+  assert.equal(result.session.proxyUrl, "https://ignored.example/tasks/task-docker-1/code-server/proxy/");
+  assert.equal(runArgs.includes("--base-path"), false);
   assert.ok(runArgs.includes(`${path.join(stateDir, "task-docker-1")}:/config`));
   assert.ok(runArgs.includes(`${path.join(hostWorkdir, "project")}:/workspace`));
 });

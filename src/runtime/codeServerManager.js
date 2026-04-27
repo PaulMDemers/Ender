@@ -80,6 +80,10 @@ function getHealthCheckHost(bindHost) {
   return target;
 }
 
+function getProxyBasePath(taskId) {
+  return `/tasks/${encodeURIComponent(String(taskId || ""))}/code-server/proxy`;
+}
+
 function spawnDetachedProcess(command, args, options = {}) {
   return new Promise((resolve) => {
     const logFile = String(options.logFile || path.join(os.tmpdir(), "ender-code-server.log"));
@@ -312,6 +316,21 @@ class CodeServerManager {
     return {
       ok: true,
       session: this._buildSessionSummary(task, metadata, inspect, requestOrigin)
+    };
+  }
+
+  async getTaskProxyTarget(task) {
+    const result = await this.getTaskSession(task);
+    if (!result.ok || !result.session) return result;
+
+    return {
+      ok: true,
+      session: result.session,
+      target: {
+        protocol: "http:",
+        host: getHealthCheckHost(result.session.bindHost),
+        port: result.session.port
+      }
     };
   }
 
@@ -733,6 +752,7 @@ class CodeServerManager {
 
   _buildSessionSummary(task, metadata, inspect, requestOrigin) {
     const url = this._buildPublicUrl(inspect.hostPort, requestOrigin);
+    const proxyUrl = this._buildProxyUrl(task.id, requestOrigin);
     return {
       taskId: task.id,
       workspace: task.workspace,
@@ -740,11 +760,18 @@ class CodeServerManager {
       containerName: metadata.containerName || null,
       pid: metadata.pid || null,
       url,
+      proxyUrl,
       password: metadata.password,
       port: inspect.hostPort,
       startedAt: metadata.startedAt,
       bindHost: metadata.bindHost || this.codeServerConfig.bindHost || "127.0.0.1"
     };
+  }
+
+  _buildProxyUrl(taskId, requestOrigin) {
+    const protocol = requestOrigin?.proxyProtocol || requestOrigin?.protocol || "http";
+    const host = requestOrigin?.proxyHost || requestOrigin?.host || requestOrigin?.hostname || "localhost";
+    return `${protocol}://${host}${getProxyBasePath(taskId)}/`;
   }
 
   _buildPublicUrl(port, requestOrigin) {
