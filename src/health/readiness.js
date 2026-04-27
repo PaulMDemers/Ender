@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const { APP_NAME, APP_VERSION } = require("../version");
 
 function getBackendReadiness(config) {
   if (config.backend === "openai") {
@@ -230,6 +231,10 @@ function getReadiness(config) {
 
   return {
     ok: true,
+    app: {
+      name: APP_NAME,
+      version: APP_VERSION
+    },
     backend: config.backend,
     paths: {
       workspaceRoot: config.workdir,

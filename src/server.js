@@ -12,6 +12,7 @@ const { TaskLedgerManager } = require("./runtime/taskLedgerManager");
 const { ProjectManager } = require("./runtime/projectManager");
 const { MemoryManager } = require("./runtime/memoryManager");
 const { LlmProfileManager } = require("./llm/profileManager");
+const { APP_NAME, APP_VERSION } = require("./version");
 
 async function main() {
   const config = loadConfig(process.env);
@@ -52,7 +53,7 @@ async function main() {
   );
 
   const server = app.listen(config.port, () => {
-    console.log(`Ender server listening on http://localhost:${config.port}`);
+    console.log(`${APP_NAME} ${APP_VERSION} server listening on http://localhost:${config.port}`);
     console.log(`backend=${config.backend} workdir=${config.workdir}`);
     console.log(`runtimeOs=${config.runtimeOs}`);
     console.log(`threadsDir=${config.threadsDir}`);

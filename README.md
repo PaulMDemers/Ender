@@ -169,6 +169,41 @@ npm run verify
 - `npm run typecheck` runs the targeted TypeScript check for the migrated runtime slice.
 - `npm run verify` runs tests, typecheck, backend syntax checks, and the UI production build.
 
+## Contributing and Releases
+
+Ender uses a `dev`-based workflow. There is no separate long-lived `main` branch for normal development or releases.
+
+Contributors should:
+
+1. Branch from `dev`.
+2. Use Git flow-style branch names that describe the work:
+   - `feat/short-feature-name`
+   - `bug/short-bug-name`
+   - `doc/short-doc-change`
+   - `chore/short-maintenance-change`
+3. Open a pull request back into `dev`.
+4. Run the relevant quality gates before requesting review. For broad changes, prefer `npm run verify`.
+
+Releases are cut by tagging a known-good commit on `dev`. Release tags are the source of truth for published versions; no release branch is required unless a future maintenance need makes one necessary.
+
+### Versioning
+
+The repository version is stored in [`VERSION`](VERSION) and mirrored into the server package, UI package, lockfiles, and UI runtime version module.
+
+To update every component version:
+
+```bash
+npm run version:set -- 0.1.1
+```
+
+To verify that all version metadata is synchronized:
+
+```bash
+npm run version:check
+```
+
+The server exposes its version through `GET /health` as `app.version`. The UI exposes its own build version in the current server details and compares it with the connected server version.
+
 ## Desktop App
 
 The desktop app lives in [`ui/`](ui/) and packages the same React UI with Electron.

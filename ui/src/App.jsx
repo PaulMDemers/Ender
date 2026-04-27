@@ -41,6 +41,7 @@ import WorkflowPanel from "./components/WorkflowPanel";
 import SchedulePanel from "./components/SchedulePanel";
 import TaskLedgerPanel from "./components/TaskLedgerPanel";
 import SimpleTaskLedgerView from "./components/SimpleTaskLedgerView";
+import { APP_VERSION } from "./version";
 
 const logoIcon = "/icons/icon-rounded-master.png";
 
@@ -870,6 +871,7 @@ export default function App() {
   const selfUpdateReady = Boolean(health?.services?.selfUpdate?.ready);
   const selfUpdateHint = health?.setupHints?.selfUpdate || "";
   const codeServerReady = Boolean(health?.services?.codeServer?.ready);
+  const serverAppVersion = String(health?.app?.version || "").trim();
   const hasSplitEditor = editorSurface === "split" && Boolean(codeServerSession?.url);
   const hasStackedEditor = editorSurface === "stacked" && Boolean(codeServerSession?.url);
   const isThreadFocusMode = Boolean(selectedTask && composeMode === "thread" && (threadFocusRequested || hasSplitEditor));
@@ -1831,6 +1833,8 @@ export default function App() {
                 <>
                   <div className="serverSummaryMetaRow">
                     <span className="serverSummaryMetaChip mono">{tasks.length} threads</span>
+                    <span className="serverSummaryMetaChip mono">ui v{APP_VERSION}</span>
+                    <span className="serverSummaryMetaChip mono">server v{serverAppVersion || "unknown"}</span>
                     {selfWorkspacePath ? (
                       <span className="serverSummaryMetaChip mono">{selfUpdateReady ? "self-update ready" : "self-update unavailable"}</span>
                     ) : null}
