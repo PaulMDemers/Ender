@@ -10,6 +10,8 @@ const schema = z.object({
   AGENT_WORKDIR: z.string().optional(),
   AGENT_WORKSPACE_BASE: z.string().optional(),
   AGENT_THREADS_DIR: z.string().optional(),
+  AGENT_PROJECTS_DIR: z.string().optional(),
+  AGENT_MEMORIES_DIR: z.string().optional(),
   AGENT_SCHEDULES_DIR: z.string().optional(),
   AGENT_TASK_LEDGER_DIR: z.string().optional(),
   AGENT_WORKFLOW_SESSIONS_DIR: z.string().optional(),
@@ -34,6 +36,8 @@ const schema = z.object({
   CODE_SERVER_COMMAND: z.string().optional(),
   CODE_SERVER_NPX_PACKAGE: z.string().optional(),
   LLM_BACKEND: z.enum(["openai", "bedrock", "azure", "ollama"]).default("openai"),
+  LLM_PROFILES_JSON: z.string().optional(),
+  DEFAULT_LLM_PROFILE_ID: z.string().optional(),
 
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_MODEL: z.string().default("gpt-4.1-mini"),
@@ -113,6 +117,8 @@ function loadConfig(env = process.env) {
   const workdir = path.resolve(parsed.AGENT_WORKDIR || path.resolve(process.cwd(), "workspace"));
   const workspaceBase = path.resolve(parsed.AGENT_WORKSPACE_BASE || path.resolve(process.cwd(), ".."));
   const threadsDir = path.resolve(parsed.AGENT_THREADS_DIR || path.resolve(process.cwd(), "threads"));
+  const projectsDir = path.resolve(parsed.AGENT_PROJECTS_DIR || path.resolve(process.cwd(), "projects"));
+  const memoriesDir = path.resolve(parsed.AGENT_MEMORIES_DIR || path.resolve(process.cwd(), "memories"));
   const schedulesDir = path.resolve(parsed.AGENT_SCHEDULES_DIR || path.resolve(process.cwd(), "schedules"));
   const taskLedgerDir = path.resolve(parsed.AGENT_TASK_LEDGER_DIR || path.resolve(process.cwd(), "task-ledger"));
   const workflowSessionsDir = path.resolve(
@@ -200,11 +206,15 @@ function loadConfig(env = process.env) {
     maxSteps,
     stallLimit,
     backend: parsed.LLM_BACKEND,
+    llmProfilesJson: parsed.LLM_PROFILES_JSON,
+    defaultLlmProfileId: parsed.DEFAULT_LLM_PROFILE_ID,
     runtimeOs,
     systemPrompt: createSystemPrompt({ runtimeOs }),
     workdir,
     workspaceBase,
     threadsDir,
+    projectsDir,
+    memoriesDir,
     schedulesDir,
     taskLedgerDir,
     workflowSessionsDir,

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getHealth, listDirectories, startTask } from "../agentClient";
+import { createProject, getHealth, listDirectories, startTask } from "../agentClient";
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -29,10 +29,20 @@ export default function NewTaskForm({
   readinessChecks,
   selfWorkspacePath,
   selfUpdateReady,
-  selfUpdateHint
+  selfUpdateHint,
+  llmProfiles,
+  projects,
+  defaultLlmProfileId,
+  onProjectCreated
 }) {
   const [goal, setGoal] = useState("");
   const [workspace, setWorkspace] = useState(String(serverWorkspacePath || "").trim());
+  const [projectId, setProjectId] = useState("");
+  const [llmProfileId, setLlmProfileId] = useState(defaultLlmProfileId || "");
+  const [memoryMode, setMemoryMode] = useState("auto");
+  const [projectFormOpen, setProjectFormOpen] = useState(false);
+  const [projectName, setProjectName] = useState("");
+  const [projectRepoUrl, setProjectRepoUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -80,6 +90,32 @@ export default function NewTaskForm({
     lastWorkspaceDefaultRef.current = nextDefault;
   }, [serverWorkspacePath, workspace]);
 
+  useEffect(() => {
+    if (!llmProfileId && defaultLlmProfileId) setLlmProfileId(defaultLlmProfileId);
+  }, [defaultLlmProfileId, llmProfileId]);
+
+  const saveProject = async () => {
+    const name = projectName.trim();
+    if (!name || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const created = await createProject({
+        name,
+        repoUrl: projectRepoUrl.trim() || null
+      });
+      setProjectId(created.id);
+      setProjectFormOpen(false);
+      setProjectName("");
+      setProjectRepoUrl("");
+      onProjectCreated?.(created);
+    } catch (err) {
+      setError(err.message || "Unable to create project");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const submit = async (event) => {
     event?.preventDefault?.();
     const nextGoal = goal.trim();
@@ -96,8 +132,19 @@ export default function NewTaskForm({
           await sleep(getBackoffDelay(attempt - 1));
         }
 
-        const { id } = await startTask(nextGoal, workspace.trim() || undefined);
-        onStarted?.({ id, goal: nextGoal, workspace: workspace.trim() || undefined });
+        const { id } = await startTask(nextGoal, workspace.trim() || undefined, {
+          projectId: projectId || undefined,
+          llmProfileId: llmProfileId || undefined,
+          memoryMode
+        });
+        onStarted?.({
+          id,
+          goal: nextGoal,
+          workspace: workspace.trim() || undefined,
+          projectId: projectId || null,
+          llmProfileId: llmProfileId || null,
+          memoryMode
+        });
         setGoal("");
         if (taRef.current) taRef.current.style.height = "";
         setError("");
@@ -160,6 +207,52 @@ export default function NewTaskForm({
                   }}
                 />
               </label>
+
+              <div className="launchField">
+                <span className="fieldLabel">Project</span>
+                <span className="fieldHint">Attach reusable repo and resource context. If the workspace is missing, Ender will prepare it from the project repo.</span>
+                <div className="workspacePickerRow">
+                  <select
+                    className="consoleInput"
+                    value={projectId}
+                    onChange={(event) => setProjectId(event.target.value)}
+                  >
+                    <option value="">No project</option>
+                    {(projects || []).map((project) => (
+                      <option key={project.id} value={project.id}>{project.name}</option>
+                    ))}
+                  </select>
+                  <button type="button" className="secondaryButton pickerToggle" onClick={() => setProjectFormOpen((value) => !value)}>
+                    {projectFormOpen ? "Close" : "Add"}
+                  </button>
+                </div>
+              </div>
+
+              {projectFormOpen ? (
+                <div className="pickerBox">
+                  <label className="workflowField">
+                    <span className="workflowFieldLabel">Project name</span>
+                    <input
+                      className="consoleInput"
+                      value={projectName}
+                      onChange={(event) => setProjectName(event.target.value)}
+                      placeholder="Ender"
+                    />
+                  </label>
+                  <label className="workflowField">
+                    <span className="workflowFieldLabel">Repo URL</span>
+                    <input
+                      className="consoleInput mono"
+                      value={projectRepoUrl}
+                      onChange={(event) => setProjectRepoUrl(event.target.value)}
+                      placeholder="https://github.com/org/repo.git"
+                    />
+                  </label>
+                  <button type="button" className="miniButton" disabled={!projectName.trim() || busy} onClick={saveProject}>
+                    Save project
+                  </button>
+                </div>
+              ) : null}
 
               <label className="launchField">
                 <span className="fieldLabel">Workspace</span>
@@ -225,6 +318,35 @@ export default function NewTaskForm({
                   </div>
                 </div>
               ) : null}
+
+              <div className="launchWorkspace">
+                <label className="launchField">
+                  <span className="fieldLabel">Backend profile</span>
+                  <select
+                    className="consoleInput"
+                    value={llmProfileId}
+                    onChange={(event) => setLlmProfileId(event.target.value)}
+                  >
+                    {(llmProfiles || []).map((profile) => (
+                      <option key={profile.id} value={profile.id}>
+                        {profile.label} · {profile.backend}{profile.model ? ` · ${profile.model}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="launchField">
+                  <span className="fieldLabel">Memory loading</span>
+                  <select
+                    className="consoleInput"
+                    value={memoryMode}
+                    onChange={(event) => setMemoryMode(event.target.value)}
+                  >
+                    <option value="auto">Auto</option>
+                    <option value="manual">Manual tools only</option>
+                    <option value="off">Off</option>
+                  </select>
+                </label>
+              </div>
             </div>
 
             <aside className="sidePanel launchSidePanel">

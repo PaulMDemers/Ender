@@ -35,7 +35,8 @@ sequenceDiagram
 [`src/runtime/runTask.js`](../../src/runtime/runTask.js) constructs the execution environment for each task:
 
 - active workspace directory
-- model chosen by `src/llm/factory.js`
+- model chosen by the thread's `llmProfileId` and `src/llm/factory.js`
+- optional project and memory context
 - tool inventory
 - system prompt
 - callbacks for logs and approvals
@@ -49,6 +50,7 @@ The tool inventory includes:
 - Jira, Confluence, Google Drive, and email tools
 - schedule tools
 - child-thread tools
+- project and memory tools
 - shell execution
 - ledger tools
 
@@ -104,6 +106,6 @@ When the last pending approval is resolved, the task returns to `running`.
 - logs
 - result
 - workspace metadata
+- project id, model profile id, and memory loading mode
 
 Workflow sessions are separate and are not persisted here.
-

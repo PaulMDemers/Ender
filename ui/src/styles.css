@@ -275,6 +275,11 @@ body::before {
   gap: 12px;
 }
 
+.composerInlineField {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
 .railSectionHeader,
 .connectionRow,
 .sectionHeading,

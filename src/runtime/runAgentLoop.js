@@ -68,11 +68,27 @@ function normalizeToolInvokeResult(result, name) {
   };
 }
 
-async function runAgentLoop({ model, tools, systemPrompt, userPrompt, thread = null, maxSteps = null, stallLimit = 4, onLog }) {
+async function runAgentLoop({
+  model,
+  tools,
+  systemPrompt,
+  runtimeContext = "",
+  userPrompt,
+  thread = null,
+  maxSteps = null,
+  stallLimit = 4,
+  onLog
+}) {
   const conversation = Array.isArray(thread) && thread.length
     ? thread.map(toConversationMessage).filter(Boolean)
     : [new HumanMessage({ content: sanitizeString(userPrompt) })];
-  const messages = [new SystemMessage(sanitizeString(systemPrompt)), ...conversation];
+  const messages = [
+    new SystemMessage(sanitizeString(systemPrompt)),
+    ...(String(runtimeContext || "").trim()
+      ? [new SystemMessage(`Ender runtime context:\n${sanitizeString(runtimeContext)}`)]
+      : []),
+    ...conversation
+  ];
   const toolsByName = Object.fromEntries(tools.map((t) => [t.name, t]));
   const bound = model.bindTools(tools);
   let step = 0;

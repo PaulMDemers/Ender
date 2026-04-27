@@ -105,7 +105,9 @@ function normalizeContinueTaskInput(input) {
   if (input && typeof input === "object") {
     return {
       prompt: typeof input.prompt === "string" ? input.prompt : "",
-      content: Array.isArray(input.content) ? input.content : null
+      content: Array.isArray(input.content) ? input.content : null,
+      llmProfileId: input.llmProfileId ? String(input.llmProfileId).trim() : null,
+      memoryMode: input.memoryMode ? String(input.memoryMode).trim() : null
     };
   }
 
@@ -118,6 +120,9 @@ class TaskManager {
     this.scheduleManager = null;
     this.selfUpdateManager = null;
     this.taskLedgerManager = null;
+    this.projectManager = null;
+    this.memoryManager = null;
+    this.llmProfileManager = null;
     this.tasks = new Map();
     this.maxLogs = 5000;
     this.threadsDir = path.resolve(this.config.threadsDir || path.resolve(process.cwd(), "threads"));
@@ -148,6 +153,18 @@ class TaskManager {
 
   setTaskLedgerManager(taskLedgerManager) {
     this.taskLedgerManager = taskLedgerManager || null;
+  }
+
+  setProjectManager(projectManager) {
+    this.projectManager = projectManager || null;
+  }
+
+  setMemoryManager(memoryManager) {
+    this.memoryManager = memoryManager || null;
+  }
+
+  setLlmProfileManager(llmProfileManager) {
+    this.llmProfileManager = llmProfileManager || null;
   }
 
   async listWorkspaces() {
@@ -204,6 +221,9 @@ class TaskManager {
       pendingApprovalCount: t.pendingApprovals.size,
       workspace: t.workspace,
       workspaceLabel: t.workspaceLabel,
+      projectId: t.projectId || null,
+      llmProfileId: t.llmProfileId || null,
+      memoryMode: t.memoryMode || "auto",
       ledgerEntryId: t.ledgerEntryId || null,
       parentTaskId: t.parentTaskId || null,
       childTaskIds: Array.isArray(t.childTaskIds) ? [...t.childTaskIds] : []
@@ -224,6 +244,9 @@ class TaskManager {
       runCount: t.runCount,
       workspace: t.workspace,
       workspaceLabel: t.workspaceLabel,
+      projectId: t.projectId || null,
+      llmProfileId: t.llmProfileId || null,
+      memoryMode: t.memoryMode || "auto",
       ledgerEntryId: t.ledgerEntryId || null,
       parentTaskId: t.parentTaskId || null,
       childTaskIds: Array.isArray(t.childTaskIds) ? [...t.childTaskIds] : [],
@@ -250,6 +273,17 @@ class TaskManager {
     const task = this.tasks.get(id);
     if (!task) return null;
     return this._taskSummary(task, options);
+  }
+
+  getTaskForContext(id) {
+    const task = this.tasks.get(id);
+    if (!task) return null;
+    return {
+      ...this._taskSummary(task, { includeLogs: false }),
+      thread: Array.isArray(task.thread) ? sanitizeJsonValue(task.thread) : [],
+      latestPrompt: task.latestPrompt || task.goal,
+      initialGoal: task.initialGoal || task.goal
+    };
   }
 
   async waitForTask(id, options = {}) {
@@ -311,7 +345,11 @@ class TaskManager {
     const t = this.tasks.get(id);
     if (!t) return { ok: false, error: "not_found" };
     const rerunGoal = String(t.initialGoal || t.goal || "").trim();
-    const started = this.start(rerunGoal, t.workspaceLabel || t.workspace);
+    const started = this.start(rerunGoal, t.workspaceLabel || t.workspace, {
+      projectId: t.projectId || null,
+      llmProfileId: t.llmProfileId || null,
+      memoryMode: t.memoryMode || "auto"
+    });
     if (!started.ok) return started;
     return { ok: true, id: started.id };
   }
@@ -323,10 +361,12 @@ class TaskManager {
       return { ok: false, error: "task_busy" };
     }
 
-    const { prompt, content } = normalizeContinueTaskInput(input);
+    const { prompt, content, llmProfileId, memoryMode } = normalizeContinueTaskInput(input);
     const messageContent = buildUserMessageContent(prompt, content);
     if (!hasThreadContent(messageContent)) return { ok: false, error: "prompt_required" };
 
+    if (llmProfileId) t.llmProfileId = llmProfileId;
+    if (["auto", "off", "manual"].includes(memoryMode)) t.memoryMode = memoryMode;
     t.latestPrompt = summarizeUserMessageContent(messageContent) || t.latestPrompt || t.goal;
     t.thread.push({ role: "user", content: messageContent });
     this._push(t, { level: "info", data: { kind: "chat", role: "user", content: messageContent } });
@@ -422,6 +462,8 @@ class TaskManager {
     if (deleteWorkspace && workspacePath) {
       if (!this._canDeleteWorkspace(workspacePath)) {
         workspaceDeletion.reason = "protected_workspace";
+      } else if (this.projectManager?.ownsWorkspace?.(workspacePath)) {
+        workspaceDeletion.reason = "project_workspace";
       } else if (this._isWorkspaceInUseByOtherTask(id, workspacePath)) {
         workspaceDeletion.reason = "still_in_use";
       } else {
@@ -477,6 +519,13 @@ class TaskManager {
       pendingApprovals: new Map(),
       workspace,
       workspaceLabel,
+      projectId: options.projectId ? String(options.projectId) : null,
+      llmProfileId: options.llmProfileId
+        ? String(options.llmProfileId)
+        : this.llmProfileManager?.defaultProfileId || this.config.defaultLlmProfileId || this.config.backend || null,
+      memoryMode: ["auto", "manual", "off"].includes(String(options.memoryMode || ""))
+        ? String(options.memoryMode)
+        : "auto",
       ledgerEntryId: options.ledgerEntryId ? String(options.ledgerEntryId) : null,
       parentTaskId: options.parentTaskId ? String(options.parentTaskId) : null,
       childTaskIds: [],
@@ -504,7 +553,12 @@ class TaskManager {
     const parent = this.tasks.get(parentTaskId);
     if (!parent) return { ok: false, error: "parent_not_found" };
 
-    const started = this.start(goal, workspaceInput || parent.workspace, { parentTaskId });
+    const started = this.start(goal, workspaceInput || parent.workspace, {
+      parentTaskId,
+      projectId: parent.projectId || null,
+      llmProfileId: parent.llmProfileId || null,
+      memoryMode: parent.memoryMode || "auto"
+    });
     if (!started.ok) return started;
 
     const child = this.tasks.get(started.id);
@@ -693,18 +747,35 @@ class TaskManager {
     (async () => {
       try {
         const { runTask } = require("./runTask");
+        if (task.projectId && this.projectManager?.ensureWorkspace) {
+          const ensured = await this.projectManager.ensureWorkspace(task.projectId);
+          if (!ensured.ok) {
+            throw new Error(ensured.message || ensured.error || "Unable to prepare project workspace");
+          }
+          if (ensured.workspacePath && ensured.workspacePath !== task.workspace) {
+            task.workspace = ensured.workspacePath;
+            task.workspaceLabel = ensured.workspacePath;
+            this._schedulePersist(task);
+          }
+        }
+        const runConfig = this.llmProfileManager?.buildRunConfig
+          ? this.llmProfileManager.buildRunConfig(task.llmProfileId)
+          : this.config;
         const { result, outcomeStatus } = await runTask({
           goal,
           thread,
-          config: this.config,
+          config: runConfig,
           onLog,
           requestApproval,
           workspaceDir: task.workspace,
           taskId: task.id,
+          taskMeta: this.getTaskForContext(task.id),
           scheduleManager: this.scheduleManager,
           taskManager: this,
           selfUpdateManager: this.selfUpdateManager,
-          taskLedgerManager: this.taskLedgerManager
+          taskLedgerManager: this.taskLedgerManager,
+          projectManager: this.projectManager,
+          memoryManager: this.memoryManager
         });
 
         if (task.deleted || task.status === "canceled" || task.status === "terminated") return;
@@ -825,6 +896,9 @@ class TaskManager {
       runCount: Number.isFinite(task.runCount) ? task.runCount : 0,
       workspace: task.workspace,
       workspaceLabel: task.workspaceLabel || task.workspace,
+      projectId: task.projectId || null,
+      llmProfileId: task.llmProfileId || null,
+      memoryMode: task.memoryMode || "auto",
       ledgerEntryId: task.ledgerEntryId || null,
       parentTaskId: task.parentTaskId || null,
       childTaskIds: Array.isArray(task.childTaskIds) ? [...task.childTaskIds] : [],
@@ -865,6 +939,9 @@ class TaskManager {
       thread: Array.isArray(task.thread) ? task.thread : [],
       workspace: task.workspace,
       workspaceLabel: task.workspaceLabel || task.workspace,
+      projectId: task.projectId || null,
+      llmProfileId: task.llmProfileId || null,
+      memoryMode: task.memoryMode || "auto",
       ledgerEntryId: task.ledgerEntryId || null,
       parentTaskId: task.parentTaskId || null,
       childTaskIds: Array.isArray(task.childTaskIds) ? task.childTaskIds : [],
@@ -897,6 +974,11 @@ class TaskManager {
       pendingApprovals: new Map(),
       workspace: String(data.workspace || this.config.workdir),
       workspaceLabel: String(data.workspaceLabel || data.workspace || this.config.workdir),
+      projectId: data.projectId ? String(data.projectId) : null,
+      llmProfileId: data.llmProfileId ? String(data.llmProfileId) : this.llmProfileManager?.defaultProfileId || null,
+      memoryMode: ["auto", "manual", "off"].includes(String(data.memoryMode || ""))
+        ? String(data.memoryMode)
+        : "auto",
       ledgerEntryId: data.ledgerEntryId ? String(data.ledgerEntryId) : null,
       parentTaskId: data.parentTaskId ? String(data.parentTaskId) : null,
       childTaskIds: Array.isArray(data.childTaskIds) ? data.childTaskIds.map((id) => String(id)) : [],

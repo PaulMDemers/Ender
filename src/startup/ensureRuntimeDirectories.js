@@ -6,6 +6,8 @@ function collectRuntimeDirectories(config = {}) {
     config.workdir,
     config.workspaceBase,
     config.threadsDir,
+    config.projectsDir,
+    config.memoriesDir,
     config.schedulesDir,
     config.taskLedgerDir,
     config.workflowSessionsDir,

@@ -234,6 +234,8 @@ function getReadiness(config) {
     paths: {
       workspaceRoot: config.workdir,
       threadsDir: config.threadsDir,
+      projectsDir: config.projectsDir,
+      memoriesDir: config.memoriesDir,
       schedulesDir: config.schedulesDir,
       workflowSessionsDir: config.workflowSessionsDir
     },

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MAX_ATTACHMENTS, prepareMessageAttachments } from "../utils/messageAttachments";
 
 function getStatusLabel(status) {
@@ -14,15 +14,34 @@ function getAttachmentLabel(attachment) {
   return "file";
 }
 
-export default function ThreadComposer({ disabled, onSend, workspace, taskId, status }) {
+export default function ThreadComposer({
+  disabled,
+  onSend,
+  workspace,
+  taskId,
+  status,
+  llmProfiles,
+  currentLlmProfileId,
+  currentMemoryMode
+}) {
   const [text, setText] = useState("");
   const [attachments, setAttachments] = useState([]);
+  const [llmProfileId, setLlmProfileId] = useState(currentLlmProfileId || "");
+  const [memoryMode, setMemoryMode] = useState(currentMemoryMode || "auto");
   const [attachmentError, setAttachmentError] = useState("");
   const [attachmentBusy, setAttachmentBusy] = useState(false);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
 
   const canSend = Boolean(text.trim() || attachments.length);
+
+  useEffect(() => {
+    setLlmProfileId(currentLlmProfileId || "");
+  }, [currentLlmProfileId]);
+
+  useEffect(() => {
+    setMemoryMode(currentMemoryMode || "auto");
+  }, [currentMemoryMode]);
 
   const submit = async (event) => {
     event?.preventDefault?.();
@@ -32,7 +51,9 @@ export default function ThreadComposer({ disabled, onSend, workspace, taskId, st
     const content = attachments.flatMap((attachment) => attachment.blocks || []);
     await onSend?.({
       prompt,
-      ...(content.length ? { content } : {})
+      ...(content.length ? { content } : {}),
+      ...(llmProfileId ? { llmProfileId } : {}),
+      memoryMode
     });
     setText("");
     setAttachments([]);
@@ -76,6 +97,27 @@ export default function ThreadComposer({ disabled, onSend, workspace, taskId, st
           </div>
         </div>
         <div className="composerContext mono">{workspace || "No workspace scope"}</div>
+      </div>
+
+      <div className="composerTop">
+        <label className="workflowField composerInlineField">
+          <span className="workflowFieldLabel">Backend profile</span>
+          <select className="consoleInput" value={llmProfileId} onChange={(event) => setLlmProfileId(event.target.value)}>
+            {(llmProfiles || []).map((profile) => (
+              <option key={profile.id} value={profile.id}>
+                {profile.label} · {profile.backend}{profile.model ? ` · ${profile.model}` : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="workflowField composerInlineField">
+          <span className="workflowFieldLabel">Memory</span>
+          <select className="consoleInput" value={memoryMode} onChange={(event) => setMemoryMode(event.target.value)}>
+            <option value="auto">Auto</option>
+            <option value="manual">Manual tools only</option>
+            <option value="off">Off</option>
+          </select>
+        </label>
       </div>
 
       <input

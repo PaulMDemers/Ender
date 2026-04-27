@@ -7,6 +7,9 @@ const path = require("node:path");
 const { WorkflowManager } = require("../src/workflows/workflowManager");
 const { ScheduleManager } = require("../src/runtime/scheduleManager");
 const { TaskManager } = require("../src/runtime/taskManager");
+const { ProjectManager } = require("../src/runtime/projectManager");
+const { MemoryManager } = require("../src/runtime/memoryManager");
+const { LlmProfileManager } = require("../src/llm/profileManager");
 const runTaskModule = require("../src/runtime/runTask");
 
 async function makeTempDir() {
@@ -151,6 +154,103 @@ test("ScheduleManager persists run status for prompt schedules", async (t) => {
   const schedule = reloaded.get(created.schedule.id);
   assert.ok(schedule);
   assert.equal(schedule.lastRunStatus, "ok");
+});
+
+test("LlmProfileManager exposes configured profiles and builds run configs", () => {
+  const manager = new LlmProfileManager({
+    backend: "openai",
+    openai: { apiKey: "openai-key", model: "gpt-default" },
+    bedrock: { region: "us-east-1", model: "bedrock-default" },
+    azure: {},
+    ollama: { baseUrl: "http://127.0.0.1:11434", model: "llama3.1" },
+    llmProfilesJson: JSON.stringify([
+      { id: "fast", label: "Fast OpenAI", backend: "openai", model: "gpt-fast" },
+      { id: "local", label: "Local", backend: "ollama", model: "qwen" }
+    ]),
+    defaultLlmProfileId: "local"
+  });
+
+  assert.equal(manager.defaultProfileId, "local");
+  assert.deepEqual(manager.list().map((profile) => profile.id), ["fast", "local"]);
+  const runConfig = manager.buildRunConfig("fast");
+  assert.equal(runConfig.backend, "openai");
+  assert.equal(runConfig.openai.model, "gpt-fast");
+  assert.equal(runConfig.openai.apiKey, "openai-key");
+});
+
+test("ProjectManager persists projects and ensures missing workspaces with clone", async (t) => {
+  const root = await makeTempDir();
+  t.after(async () => {
+    await fs.rm(root, { recursive: true, force: true });
+  });
+
+  let cloneArgs = null;
+  const manager = new ProjectManager({
+    config: {
+      workdir: path.join(root, "workspace"),
+      projectsDir: path.join(root, "projects"),
+      github: {}
+    },
+    cloneRepositoryImpl: async (args) => {
+      cloneArgs = args;
+      await fs.mkdir(path.join(args.rootDir, args.directory), { recursive: true });
+      return { ok: true, code: 0, stdout: "", stderr: "" };
+    }
+  });
+  await manager.init();
+
+  const created = await manager.create({
+    name: "Ender App",
+    repoUrl: "https://github.com/acme/ender.git"
+  });
+  assert.equal(created.ok, true);
+
+  const ensured = await manager.ensureWorkspace(created.project.id);
+  assert.equal(ensured.ok, true);
+  assert.equal(ensured.created, true);
+  assert.equal(cloneArgs.repoUrl, "https://github.com/acme/ender.git");
+  assert.equal(cloneArgs.directory, "ender");
+  assert.equal(manager.ownsWorkspace(ensured.workspacePath), true);
+});
+
+test("MemoryManager creates searchable memories and builds scoped context packs", async (t) => {
+  const root = await makeTempDir();
+  t.after(async () => {
+    await fs.rm(root, { recursive: true, force: true });
+  });
+
+  const manager = new MemoryManager({
+    config: { memoriesDir: path.join(root, "memories") }
+  });
+  await manager.init();
+
+  const global = await manager.create({
+    scope: "global",
+    kind: "preference",
+    title: "Review style",
+    body: "Prefer concise code review findings before summaries.",
+    loadPolicy: "pinned"
+  });
+  const project = await manager.create({
+    scope: "project",
+    kind: "fact",
+    title: "Ender repo",
+    body: "Ender uses JSON files for runtime persistence.",
+    projectId: "ender",
+    loadPolicy: "auto"
+  });
+
+  assert.equal(global.ok, true);
+  assert.equal(project.ok, true);
+  assert.equal(manager.search({ query: "runtime persistence", projectId: "ender" }).items.length, 2);
+
+  const pack = manager.buildContextPack({
+    task: { id: "task-1", goal: "Work on runtime persistence", projectId: "ender", memoryMode: "auto" },
+    project: { id: "ender", name: "Ender", repoUrl: "https://github.com/acme/ender.git" },
+    memoryMode: "auto"
+  });
+  assert.match(pack.text, /Review style/);
+  assert.match(pack.text, /Ender repo/);
 });
 
 test("TaskManager marks interrupted running tasks as error on restart by default", async (t) => {

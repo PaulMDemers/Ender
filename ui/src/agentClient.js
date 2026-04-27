@@ -23,6 +23,16 @@ async function request(path, init) {
   if (!res.ok) {
     throw new Error(`${init?.method || "GET"} ${path} failed (${res.status})`);
   }
+  const contentType = String(res.headers.get("content-type") || "").toLowerCase();
+  if (!contentType.includes("application/json")) {
+    const body = await res.text();
+    const preview = body.trim().slice(0, 80).replace(/\s+/g, " ");
+    throw new Error(
+      `${init?.method || "GET"} ${path} expected JSON from ${currentApiBase}, `
+      + `but received ${contentType || "unknown content type"}`
+      + (preview ? ` (${preview})` : "")
+    );
+  }
   return res.json();
 }
 
@@ -36,6 +46,40 @@ export function getHealth() {
 
 export function listWorkspaces() {
   return request("/workspaces");
+}
+
+export function listLlmProfiles() {
+  return request("/llm-profiles");
+}
+
+export function listProjects(query = "") {
+  const qs = query ? `?q=${encodeURIComponent(query)}` : "";
+  return request(`/projects${qs}`);
+}
+
+export function createProject(input) {
+  return request("/projects", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input || {})
+  });
+}
+
+export function listMemories(input = {}) {
+  const params = new URLSearchParams();
+  if (input.query) params.set("q", input.query);
+  if (input.scope) params.set("scope", input.scope);
+  if (input.projectId) params.set("projectId", input.projectId);
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  return request(`/memories${qs}`);
+}
+
+export function createMemory(input) {
+  return request("/memories", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input || {})
+  });
 }
 
 export function listDirectories(pathValue) {
@@ -59,11 +103,17 @@ export function stopTaskCodeServer(id) {
   return request(`/tasks/${id}/code-server`, { method: "DELETE" });
 }
 
-export function startTask(goal, workspace) {
+export function startTask(goal, workspace, options = {}) {
   return request("/tasks", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ goal, workspace })
+    body: JSON.stringify({
+      goal,
+      workspace,
+      projectId: options.projectId || null,
+      llmProfileId: options.llmProfileId || null,
+      memoryMode: options.memoryMode || "auto"
+    })
   });
 }
 
@@ -72,7 +122,9 @@ export function continueTask(id, input) {
     ? { prompt: input }
     : {
       prompt: typeof input?.prompt === "string" ? input.prompt : "",
-      ...(Array.isArray(input?.content) ? { content: input.content } : {})
+      ...(Array.isArray(input?.content) ? { content: input.content } : {}),
+      ...(input?.llmProfileId ? { llmProfileId: input.llmProfileId } : {}),
+      ...(input?.memoryMode ? { memoryMode: input.memoryMode } : {})
     };
 
   return request(`/tasks/${id}/messages`, {

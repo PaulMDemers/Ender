@@ -16,6 +16,8 @@ const { createConfluenceTools } = require("../tools/confluenceTools");
 const { createGoogleDriveTools } = require("../tools/googleDriveTools");
 const { createSelfUpdateTools } = require("../tools/selfUpdateTools");
 const { createTaskLedgerRuntimeTools } = require("../tools/taskLedgerRuntimeTools");
+const { createMemoryTools } = require("../tools/memoryTools");
+const { createProjectTools } = require("../tools/projectTools");
 const { runAgentLoop } = require("./runAgentLoop");
 const { SYSTEM_PROMPT } = require("../agents/systemPrompt");
 const { validateToolSchemasForBackend } = require("../llm/toolSchemaPreflight");
@@ -73,10 +75,13 @@ async function runTask({
   requestApproval,
   workspaceDir,
   taskId,
+  taskMeta,
   scheduleManager,
   taskManager,
   selfUpdateManager,
-  taskLedgerManager
+  taskLedgerManager,
+  projectManager,
+  memoryManager
 }) {
   const activeWorkdir = workspaceDir || config.workdir;
   await fs.mkdir(activeWorkdir, { recursive: true });
@@ -85,6 +90,14 @@ async function runTask({
   const model = createChatModel(config);
   const taskSummary = taskId && taskManager?.getTaskSummary ? taskManager.getTaskSummary(taskId) : null;
   const isLedgerTask = Boolean(taskSummary?.ledgerEntryId);
+  const project = taskSummary?.projectId && projectManager?.get ? projectManager.get(taskSummary.projectId) : null;
+  const memoryContext = memoryManager?.buildContextPack
+    ? memoryManager.buildContextPack({
+      task: taskMeta || taskSummary,
+      project,
+      memoryMode: taskSummary?.memoryMode || "auto"
+    })
+    : { items: [], text: "" };
   let finalizedOutcome = null;
 
   const tools = [
@@ -100,6 +113,13 @@ async function runTask({
     ...(scheduleManager ? createCronTools(scheduleManager, { taskId, requestApproval, onLog }) : []),
     ...(taskManager ? createThreadTools(taskManager, { taskId, onLog }) : []),
     ...(selfUpdateManager ? createSelfUpdateTools(selfUpdateManager, { requestApproval, onLog, activeWorkdir }) : []),
+    ...(projectManager ? createProjectTools(projectManager, { onLog }) : []),
+    ...(memoryManager ? createMemoryTools(memoryManager, {
+      taskId,
+      taskManager,
+      projectId: taskSummary?.projectId || null,
+      onLog
+    }) : []),
     ...(isLedgerTask && taskLedgerManager && taskManager
       ? createTaskLedgerRuntimeTools(taskLedgerManager, taskManager, { taskId, onLog })
       : []),
@@ -113,8 +133,13 @@ async function runTask({
 
   validateToolSchemasForBackend(config.backend, tools, { onLog });
 
-  onLog({ level: "info", data: `backend=${config.backend}` });
+  onLog({
+    level: "info",
+    data: `backend=${config.backend}${config.activeLlmProfileId ? ` profile=${config.activeLlmProfileId}` : ""}`
+  });
   onLog({ level: "info", data: `workspace=${activeWorkdir}` });
+  if (project) onLog({ level: "info", data: `project=${project.id}` });
+  if (memoryContext.items.length) onLog({ level: "info", data: `memories_loaded=${memoryContext.items.length}` });
 
   const result = await runAgentLoop({
     model,
@@ -122,6 +147,7 @@ async function runTask({
     systemPrompt: isLedgerTask
       ? buildLedgerTaskSystemPrompt(config.systemPrompt || SYSTEM_PROMPT)
       : (config.systemPrompt || SYSTEM_PROMPT),
+    runtimeContext: memoryContext.text,
     userPrompt: goal,
     thread,
     maxSteps: config.maxSteps,

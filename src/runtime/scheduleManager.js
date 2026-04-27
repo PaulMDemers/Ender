@@ -121,7 +121,11 @@ class ScheduleManager {
     let result;
     try {
       if (schedule.target.kind === "prompt") {
-        result = this.taskManager.start(schedule.target.prompt, schedule.target.workspace || undefined);
+        result = this.taskManager.start(schedule.target.prompt, schedule.target.workspace || undefined, {
+          projectId: schedule.target.projectId || null,
+          llmProfileId: schedule.target.llmProfileId || null,
+          memoryMode: schedule.target.memoryMode || "auto"
+        });
         if (!result.ok) {
           throw new Error(result.message || result.error || "prompt schedule failed");
         }
@@ -218,6 +222,9 @@ class ScheduleManager {
         kind: String(target.kind || "").trim(),
         prompt: target.prompt ? String(target.prompt).trim() : undefined,
         workspace: target.workspace ? String(target.workspace).trim() : null,
+        projectId: target.projectId ? String(target.projectId).trim() : null,
+        llmProfileId: target.llmProfileId ? String(target.llmProfileId).trim() : null,
+        memoryMode: target.memoryMode ? String(target.memoryMode).trim() : undefined,
         threadId: target.threadId ? String(target.threadId).trim() : undefined,
         workflowId: target.workflowId ? String(target.workflowId).trim() : undefined,
         inputs: Array.isArray(target.inputs) ? target.inputs : []

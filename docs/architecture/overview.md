@@ -15,10 +15,15 @@ flowchart LR
     API --> TM["TaskManager"]
     API --> WM["WorkflowManager"]
     API --> SM["ScheduleManager"]
+    API --> PM["ProjectManager"]
+    API --> MM["MemoryManager"]
     TM --> Loop["runTask / runAgentLoop"]
     Loop --> LLM["LLM Backend"]
+    Loop --> Memories["Memory context pack"]
     Loop --> Tools["Tool Modules"]
     TM --> Threads["threads/*.json"]
+    PM --> Projects["projects/*.json"]
+    MM --> MemoryFiles["memories/*.json"]
     SM --> Schedules["schedules/*.json"]
     Loop --> Workspace["workspace/ or selected workspace"]
 ```
@@ -33,6 +38,8 @@ flowchart LR
 - approvals
 - workflow sessions
 - schedules
+- projects
+- memories
 - readiness and workspace browsing
 
 ### Task runtime
@@ -44,6 +51,22 @@ flowchart LR
 - approval resolution
 - persistence to disk
 - reruns and follow-up prompts
+- per-thread model profile, project, and memory-mode metadata
+
+### Project layer
+
+[`src/runtime/projectManager.js`](../../src/runtime/projectManager.js) owns reusable project records:
+
+- project names and aliases
+- repo URLs and resource links
+- local workspace paths
+- workspace preparation by cloning the configured repo when missing
+
+Threads can attach a `projectId`; project workspaces are protected from thread-delete workspace cleanup.
+
+### Memory layer
+
+[`src/runtime/memoryManager.js`](../../src/runtime/memoryManager.js) owns durable global, project, and thread memories. `runTask(...)` asks it for a bounded context pack based on the thread's `memoryMode`, project, and current goal. Memory records remain separate from prompt text so they can be searched, edited, archived, or loaded selectively.
 
 ### Workflow layer
 
@@ -79,6 +102,8 @@ The React app in `ui/src/` acts as the operator console for:
 Persisted:
 
 - threads
+- projects
+- memories
 - schedules
 - workflow sessions
 

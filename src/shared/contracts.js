@@ -22,7 +22,10 @@ const scheduleTargetSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("prompt"),
     prompt: z.string().trim().min(1),
-    workspace: z.string().trim().nullable().optional()
+    workspace: z.string().trim().nullable().optional(),
+    projectId: z.string().trim().nullable().optional(),
+    llmProfileId: z.string().trim().nullable().optional(),
+    memoryMode: z.enum(["auto", "manual", "off"]).optional()
   }),
   z.object({
     kind: z.literal("thread"),

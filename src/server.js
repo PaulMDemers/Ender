@@ -9,11 +9,22 @@ const { WorkflowManager } = require("./workflows/workflowManager");
 const { SelfUpdateManager } = require("./selfUpdate/manager");
 const { CodeServerManager } = require("./runtime/codeServerManager");
 const { TaskLedgerManager } = require("./runtime/taskLedgerManager");
+const { ProjectManager } = require("./runtime/projectManager");
+const { MemoryManager } = require("./runtime/memoryManager");
+const { LlmProfileManager } = require("./llm/profileManager");
 
 async function main() {
   const config = loadConfig(process.env);
   await ensureRuntimeDirectories(config);
+  const llmProfileManager = new LlmProfileManager(config);
+  const projectManager = new ProjectManager({ config });
+  const memoryManager = new MemoryManager({ config });
   const taskManager = new TaskManager(config);
+  taskManager.setLlmProfileManager(llmProfileManager);
+  taskManager.setProjectManager(projectManager);
+  taskManager.setMemoryManager(memoryManager);
+  await projectManager.init();
+  await memoryManager.init();
   await taskManager.init();
   const workflowManager = new WorkflowManager({ config, taskManager });
   await workflowManager.init();
@@ -34,7 +45,10 @@ async function main() {
     config,
     selfUpdateManager,
     codeServerManager,
-    taskLedgerManager
+    taskLedgerManager,
+    projectManager,
+    memoryManager,
+    llmProfileManager
   );
 
   app.listen(config.port, () => {
@@ -42,6 +56,9 @@ async function main() {
     console.log(`backend=${config.backend} workdir=${config.workdir}`);
     console.log(`runtimeOs=${config.runtimeOs}`);
     console.log(`threadsDir=${config.threadsDir}`);
+    console.log(`projectsDir=${config.projectsDir}`);
+    console.log(`memoriesDir=${config.memoriesDir}`);
+    console.log(`llmProfiles=${llmProfileManager.list().map((profile) => profile.id).join(",")}`);
     console.log(`taskLedgerDir=${config.taskLedgerDir}`);
     console.log(
       `taskLedgerPollIntervalMs=${config.taskLedgerPollIntervalMs} maxAutoAgents=${config.taskLedgerMaxAutoAgents}`

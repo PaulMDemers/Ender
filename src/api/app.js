@@ -41,7 +41,10 @@ function createApp(
   config,
   selfUpdateManager = null,
   codeServerManager = null,
-  taskLedgerManager = null
+  taskLedgerManager = null,
+  projectManager = null,
+  memoryManager = null,
+  llmProfileManager = null
 ) {
   const app = express();
   app.use(cors());
@@ -58,6 +61,86 @@ function createApp(
     } catch (err) {
       return res.status(500).json({ ok: false, error: "workspace_list_failed", message: err.message || String(err) });
     }
+  });
+
+  app.get("/llm-profiles", (_req, res) => {
+    return res.json({
+      items: llmProfileManager?.list ? llmProfileManager.list() : [],
+      defaultProfileId: llmProfileManager?.defaultProfileId || null
+    });
+  });
+
+  app.get("/projects", (req, res) => {
+    if (!projectManager) {
+      return res.status(503).json({ ok: false, error: "projects_unavailable" });
+    }
+    return res.json({ items: projectManager.list(String(req.query.q || "")) });
+  });
+
+  app.post("/projects", async (req, res) => {
+    if (!projectManager) {
+      return res.status(503).json({ ok: false, error: "projects_unavailable" });
+    }
+    const result = await projectManager.create(req.body || {});
+    if (!result.ok) return res.status(400).json(result);
+    return res.status(201).json(result.project);
+  });
+
+  app.put("/projects/:id", async (req, res) => {
+    if (!projectManager) {
+      return res.status(503).json({ ok: false, error: "projects_unavailable" });
+    }
+    const result = await projectManager.update(req.params.id, req.body || {});
+    if (!result.ok) return res.status(result.error === "not_found" ? 404 : 400).json(result);
+    return res.json(result.project);
+  });
+
+  app.post("/projects/:id/ensure-workspace", async (req, res) => {
+    if (!projectManager) {
+      return res.status(503).json({ ok: false, error: "projects_unavailable" });
+    }
+    const result = await projectManager.ensureWorkspace(req.params.id);
+    if (!result.ok) return res.status(result.error === "not_found" ? 404 : 400).json(result);
+    return res.status(result.created ? 201 : 200).json(result);
+  });
+
+  app.get("/memories", (req, res) => {
+    if (!memoryManager) {
+      return res.status(503).json({ ok: false, error: "memories_unavailable" });
+    }
+    return res.json(memoryManager.search({
+      query: String(req.query.q || ""),
+      scope: req.query.scope ? String(req.query.scope) : null,
+      projectId: req.query.projectId ? String(req.query.projectId) : null,
+      limit: req.query.limit ? Number(req.query.limit) : 100
+    }));
+  });
+
+  app.post("/memories", async (req, res) => {
+    if (!memoryManager) {
+      return res.status(503).json({ ok: false, error: "memories_unavailable" });
+    }
+    const result = await memoryManager.create(req.body || {});
+    if (!result.ok) return res.status(400).json(result);
+    return res.status(201).json(result.memory);
+  });
+
+  app.put("/memories/:id", async (req, res) => {
+    if (!memoryManager) {
+      return res.status(503).json({ ok: false, error: "memories_unavailable" });
+    }
+    const result = await memoryManager.update(req.params.id, req.body || {});
+    if (!result.ok) return res.status(result.error === "not_found" ? 404 : 400).json(result);
+    return res.json(result.memory);
+  });
+
+  app.delete("/memories/:id", async (req, res) => {
+    if (!memoryManager) {
+      return res.status(503).json({ ok: false, error: "memories_unavailable" });
+    }
+    const result = await memoryManager.archive(req.params.id);
+    if (!result.ok) return res.status(result.error === "not_found" ? 404 : 400).json(result);
+    return res.json(result.memory);
   });
 
   app.get("/filesystem/directories", async (req, res) => {
@@ -361,13 +444,27 @@ function createApp(
     return res.json(result);
   });
 
-  app.post("/tasks", (req, res) => {
+  app.post("/tasks", async (req, res) => {
     const goal = String(req.body && req.body.goal ? req.body.goal : "").trim();
-    const workspace = String(req.body && req.body.workspace ? req.body.workspace : "").trim();
+    let workspace = String(req.body && req.body.workspace ? req.body.workspace : "").trim();
+    const projectId = String(req.body?.projectId || "").trim();
+    const llmProfileId = String(req.body?.llmProfileId || "").trim();
+    const memoryMode = String(req.body?.memoryMode || "auto").trim();
     if (!goal) {
       return res.status(400).json({ error: "goal_required" });
     }
-    const started = taskManager.start(goal, workspace || undefined);
+    if (projectId && projectManager) {
+      const ensured = await projectManager.ensureWorkspace(projectId);
+      if (!ensured.ok) {
+        return res.status(400).json(ensured);
+      }
+      workspace = ensured.workspacePath || workspace;
+    }
+    const started = taskManager.start(goal, workspace || undefined, {
+      projectId: projectId || null,
+      llmProfileId: llmProfileId || null,
+      memoryMode
+    });
     if (!started.ok) {
       return res.status(started.error === "invalid_workspace" ? 400 : 500).json(started);
     }
@@ -408,7 +505,12 @@ function createApp(
   app.post("/tasks/:id/messages", (req, res) => {
     const prompt = typeof req.body?.prompt === "string" ? req.body.prompt : "";
     const content = Array.isArray(req.body?.content) ? req.body.content : undefined;
-    const result = taskManager.continueTask(req.params.id, { prompt, content });
+    const result = taskManager.continueTask(req.params.id, {
+      prompt,
+      content,
+      llmProfileId: req.body?.llmProfileId,
+      memoryMode: req.body?.memoryMode
+    });
     if (!result.ok) {
       const code = result.error === "not_found" ? 404 : result.error === "prompt_required" ? 400 : 409;
       return res.status(code).json(result);

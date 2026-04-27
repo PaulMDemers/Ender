@@ -3,6 +3,8 @@ import {
   advanceWorkflowSession,
   continueTask,
   createTaskLedgerEntry,
+  listLlmProfiles,
+  listProjects,
   createSchedule,
   deleteTaskLedgerEntry,
   getTaskCodeServer,
@@ -314,6 +316,9 @@ export default function App() {
   const [scheduleBusy, setScheduleBusy] = useState(false);
   const [scheduleError, setScheduleError] = useState("");
   const [ledgerEntries, setLedgerEntries] = useState([]);
+  const [llmProfiles, setLlmProfiles] = useState([]);
+  const [defaultLlmProfileId, setDefaultLlmProfileId] = useState("");
+  const [projects, setProjects] = useState([]);
   const [ledgerBusy, setLedgerBusy] = useState(false);
   const [ledgerError, setLedgerError] = useState("");
   const [health, setHealth] = useState(null);
@@ -533,6 +538,41 @@ export default function App() {
     loadHealth();
     const intervalId = setInterval(loadHealth, 15000);
 
+    return () => {
+      live = false;
+      clearInterval(intervalId);
+    };
+  }, [serverUrl, connectionRequested]);
+
+  useEffect(() => {
+    if (!connectionRequested) {
+      setLlmProfiles([]);
+      setDefaultLlmProfileId("");
+      setProjects([]);
+      return undefined;
+    }
+    let live = true;
+
+    const loadRuntimeCatalogs = async () => {
+      try {
+        const [profilesData, projectsData] = await Promise.all([
+          listLlmProfiles(),
+          listProjects()
+        ]);
+        if (!live) return;
+        setLlmProfiles(profilesData.items || []);
+        setDefaultLlmProfileId(profilesData.defaultProfileId || profilesData.items?.[0]?.id || "");
+        setProjects(projectsData.items || []);
+      } catch {
+        if (!live) return;
+        setLlmProfiles([]);
+        setDefaultLlmProfileId("");
+        setProjects([]);
+      }
+    };
+
+    loadRuntimeCatalogs();
+    const intervalId = setInterval(loadRuntimeCatalogs, 15000);
     return () => {
       live = false;
       clearInterval(intervalId);
@@ -847,7 +887,10 @@ export default function App() {
       setConnectionRequested(true);
       setConnectedOnce(false);
       setLoading(true);
-      setHealth(null);
+    setHealth(null);
+    setLlmProfiles([]);
+    setDefaultLlmProfileId("");
+    setProjects([]);
       setLoadError("");
       setTasks([]);
       setSelectedId(null);
@@ -893,11 +936,14 @@ export default function App() {
     setRailOpen(false);
   };
 
-  const onStarted = ({ id, goal, workspace }) => {
+  const onStarted = ({ id, goal, workspace, projectId, llmProfileId, memoryMode }) => {
     setTasks((prev) => [...prev, {
       id,
       goal,
       workspace: workspace || null,
+      projectId: projectId || null,
+      llmProfileId: llmProfileId || defaultLlmProfileId || null,
+      memoryMode: memoryMode || "auto",
       status: "running",
       startedAt: new Date().toISOString(),
       logCount: 0,
@@ -907,6 +953,11 @@ export default function App() {
     setSelectedId(id);
     setComposeMode("thread");
     setRailOpen(false);
+  };
+
+  const refreshProjects = async () => {
+    const data = await listProjects();
+    setProjects(data.items || []);
   };
 
   const startWorkflow = async (workflowId) => {
@@ -1124,6 +1175,8 @@ export default function App() {
         window.alert(`Thread deleted. Workspace left on disk because it is still in use by another thread:\n${workspaceDeletion.path}`);
       } else if (workspaceDeletion.reason === "protected_workspace") {
         window.alert(`Thread deleted. Workspace was not deleted because it is not an eligible workspace subdirectory:\n${workspaceDeletion.path}`);
+      } else if (workspaceDeletion.reason === "project_workspace") {
+        window.alert(`Thread deleted. Workspace left on disk because it belongs to a saved project:\n${workspaceDeletion.path}`);
       }
     }
 
@@ -1173,7 +1226,14 @@ export default function App() {
     const task = tasks.find((item) => item.id === id);
     if (!task) return;
     const result = await rerunTask(id);
-    onStarted({ id: result.id, goal: task.goal, workspace: task.workspace });
+    onStarted({
+      id: result.id,
+      goal: task.goal,
+      workspace: task.workspace,
+      projectId: task.projectId || null,
+      llmProfileId: task.llmProfileId || null,
+      memoryMode: task.memoryMode || "auto"
+    });
     setTimeout(() => {
       refresh();
     }, 250);
@@ -1185,7 +1245,13 @@ export default function App() {
     await continueTask(selectedTask.id, input);
     setTasks((prev) =>
       prev.map((task) => (task.id === selectedTask.id
-        ? { ...task, status: "running", runCount: (task.runCount || 0) + 1 }
+        ? {
+            ...task,
+            status: "running",
+            runCount: (task.runCount || 0) + 1,
+            llmProfileId: input?.llmProfileId || task.llmProfileId,
+            memoryMode: input?.memoryMode || task.memoryMode || "auto"
+          }
         : task))
     );
     setTimeout(() => {
@@ -1498,6 +1564,10 @@ export default function App() {
         selfWorkspacePath={selfWorkspacePath}
         selfUpdateReady={selfUpdateReady}
         selfUpdateHint={selfUpdateHint}
+        llmProfiles={llmProfiles}
+        projects={projects}
+        defaultLlmProfileId={defaultLlmProfileId}
+        onProjectCreated={refreshProjects}
       />
     );
   };
@@ -1880,6 +1950,9 @@ export default function App() {
                 onSend={sendNextPrompt}
                 workspace={selectedTask.workspace}
                 taskId={selectedTask.id}
+                llmProfiles={llmProfiles}
+                currentLlmProfileId={selectedTask.llmProfileId || defaultLlmProfileId}
+                currentMemoryMode={selectedTask.memoryMode || "auto"}
               />
             )
           ) : null}

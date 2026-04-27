@@ -94,6 +94,7 @@ export default function TaskList({
                   <span>{String(task.id).slice(0, 8)}</span>
                   <span>runs {task.runCount || 1}</span>
                   <span>logs {task.logCount || 0}</span>
+                  {task.projectId ? <span>{task.projectId}</span> : null}
                 </div>
               ) : null}
             </button>
@@ -115,6 +116,8 @@ export default function TaskList({
                     <span className="mono">{task.id}</span>
                     <span className="mono">runs {task.runCount || 1}</span>
                     <span className="mono">logs {task.logCount || 0}</span>
+                    {task.llmProfileId ? <span className="mono">profile {task.llmProfileId}</span> : null}
+                    {task.memoryMode ? <span className="mono">memory {task.memoryMode}</span> : null}
                   </div>
 
                   {task.workspace ? <div className="threadCardWorkspace mono">{task.workspace}</div> : null}
