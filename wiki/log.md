@@ -23,3 +23,6 @@
 
 ## [2026-05-14] update | Wiki index
 - Updated: Ender Overview (Updated date refreshed)
+
+## [2026-05-14] lint | 1 issues found, 1 auto-fixed
+- Auto-fixed: missing cross-reference added to self-update.md (was missing Runtime Loop link)
