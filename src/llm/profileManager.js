@@ -1,6 +1,6 @@
 const crypto = require("node:crypto");
 
-const BACKEND_VALUES = new Set(["openai", "bedrock", "azure", "ollama"]);
+const BACKEND_VALUES = new Set(["openai", "bedrock", "azure", "ollama", "acp"]);
 
 function slugify(value, fallback) {
   const slug = String(value || "")
@@ -57,6 +57,10 @@ function normalizeProfile(input, baseConfig, index = 0) {
     ollama: compactObject({
       baseUrl: item.baseUrl || item.ollama?.baseUrl || baseConfig.ollama?.baseUrl,
       model: model || item.ollama?.model || baseConfig.ollama?.model
+    }),
+    acp: compactObject({
+      command: item.acp?.command || item.command || baseConfig.acp?.command || null,
+      args: item.acp?.args || item.args || baseConfig.acp?.args || ["acp"]
     })
   };
 }
@@ -139,7 +143,8 @@ class LlmProfileManager {
       openai: { ...(this.config.openai || {}), ...(profile.openai || {}) },
       bedrock: { ...(this.config.bedrock || {}), ...(profile.bedrock || {}) },
       azure: { ...(this.config.azure || {}), ...(profile.azure || {}) },
-      ollama: { ...(this.config.ollama || {}), ...(profile.ollama || {}) }
+      ollama: { ...(this.config.ollama || {}), ...(profile.ollama || {}) },
+      acp: { ...(this.config.acp || {}), ...(profile.acp || {}) }
     };
   }
 }
