@@ -35,7 +35,7 @@ const schema = z.object({
   CODE_SERVER_STATE_DIR: z.string().optional(),
   CODE_SERVER_COMMAND: z.string().optional(),
   CODE_SERVER_NPX_PACKAGE: z.string().optional(),
-  LLM_BACKEND: z.enum(["openai", "bedrock", "azure", "ollama"]).default("openai"),
+  LLM_BACKEND: z.enum(["openai", "bedrock", "azure", "ollama", "acp"]).default("openai"),
   LLM_PROFILES_JSON: z.string().optional(),
   DEFAULT_LLM_PROFILE_ID: z.string().optional(),
 
@@ -53,6 +53,9 @@ const schema = z.object({
 
   OLLAMA_BASE_URL: z.string().default("http://127.0.0.1:11434"),
   OLLAMA_MODEL: z.string().default("llama3.1:8b"),
+
+  ACP_COMMAND: z.string().optional(),
+  ACP_ARGS: z.string().optional(),
 
   GITLAB_BASE_URL: z.string().optional(),
   GITLAB_TOKEN: z.string().optional(),
@@ -263,6 +266,11 @@ function loadConfig(env = process.env) {
     ollama: {
       baseUrl: parsed.OLLAMA_BASE_URL,
       model: parsed.OLLAMA_MODEL
+    },
+
+    acp: {
+      command: parsed.ACP_COMMAND ? String(parsed.ACP_COMMAND).trim() : null,
+      args: parsed.ACP_ARGS ? String(parsed.ACP_ARGS).trim().split(/\s+/).filter(Boolean) : ["acp"]
     },
 
     gitlab: {

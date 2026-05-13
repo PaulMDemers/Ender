@@ -17,7 +17,7 @@ It is designed for operator-driven work: launch a task against a workspace, watc
 - Persists threads, schedules, and workflow sessions to JSON on disk so they survive server restarts.
 - Supports guided workflows that gather structured inputs before starting work.
 - Supports recurring automation for three targets: start a new prompt, continue an existing thread, or run a workflow on a cron cadence.
-- Works with multiple LLM backends: OpenAI, AWS Bedrock, Azure OpenAI, and Ollama.
+- Works with multiple LLM backends: OpenAI, AWS Bedrock, Azure OpenAI, Ollama, and ACP-compliant agents (Claude Code, etc.)
 - Includes tools for files, shell execution, git, GitHub, GitLab, Jira, Confluence, Google Drive, email, browser capture, schedules, and child threads.
 
 ![Ender live thread view](docs/website/screenshots/hero-thread-view.jpg)
@@ -307,6 +307,22 @@ Ollama:
 
 - `OLLAMA_BASE_URL`
 - `OLLAMA_MODEL`
+
+ACP (Agent Client Protocol):
+
+- `ACP_COMMAND` — the agent binary to spawn (e.g. `claude-code`)
+- `ACP_ARGS` — CLI args passed to the agent (default: `acp`)
+
+The ACP backend runs an external ACP-compliant agent as a subprocess. When the agent requests permissions (file read/write, shell commands), Ender routes them through its own tool layer and approval system. This lets you use agents like Claude Code as the LLM backend while Ender handles tool execution, approvals, logging, and persistence.
+
+Example:
+```env
+LLM_BACKEND=acp
+ACP_COMMAND=claude-code
+ACP_ARGS=acp
+```
+
+ACP agents also support LLM profiles for different agent binaries or configurations.
 
 ### SCM and Knowledge Sources
 
