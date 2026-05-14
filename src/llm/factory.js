@@ -31,6 +31,10 @@ function validateConfig(config) {
       throw new Error("OLLAMA_MODEL is required when LLM_BACKEND=ollama");
     }
   }
+
+  if (config.backend === "acp" && !config.acp.command) {
+    throw new Error("ACP_COMMAND is required when LLM_BACKEND=acp");
+  }
 }
 
 function createChatModel(config) {

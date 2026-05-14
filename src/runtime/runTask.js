@@ -19,6 +19,7 @@ const { createTaskLedgerRuntimeTools } = require("../tools/taskLedgerRuntimeTool
 const { createMemoryTools } = require("../tools/memoryTools");
 const { createProjectTools } = require("../tools/projectTools");
 const { runAgentLoop } = require("./runAgentLoop");
+const { runAcpAgent } = require("../llm/acpAgentRunner");
 const { SYSTEM_PROMPT } = require("../agents/systemPrompt");
 const { validateToolSchemasForBackend } = require("../llm/toolSchemaPreflight");
 
@@ -87,7 +88,6 @@ async function runTask({
   await fs.mkdir(activeWorkdir, { recursive: true });
 
   const ledger = createLedger();
-  const model = createChatModel(config);
   const taskSummary = taskId && taskManager?.getTaskSummary ? taskManager.getTaskSummary(taskId) : null;
   const isLedgerTask = Boolean(taskSummary?.ledgerEntryId);
   const project = taskSummary?.projectId && projectManager?.get ? projectManager.get(taskSummary.projectId) : null;
@@ -140,6 +140,24 @@ async function runTask({
   onLog({ level: "info", data: `workspace=${activeWorkdir}` });
   if (project) onLog({ level: "info", data: `project=${project.id}` });
   if (memoryContext.items.length) onLog({ level: "info", data: `memories_loaded=${memoryContext.items.length}` });
+
+  if (config.backend === "acp") {
+    const acpResult = await runAcpAgent({
+      goal,
+      thread,
+      config,
+      onLog,
+      requestApproval,
+      workspaceDir: activeWorkdir,
+      tools
+    });
+    ledger.progress.turns = 1;
+    return {
+      result: acpResult.result,
+      ledger,
+      outcomeStatus: acpResult.stopReason === "stopped" ? "completed" : "blocked"
+    };
+  }
 
   const result = await runAgentLoop({
     model,
