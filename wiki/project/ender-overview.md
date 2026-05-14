@@ -151,8 +151,11 @@ The ACP backend (`LLM_BACKEND=acp`) spawns an external ACP-compliant agent as a 
 Configuration:
 - `ACP_COMMAND` — the agent binary to spawn (e.g. `claude-code`)
 - `ACP_ARGS` — CLI args passed to the agent (default: `acp`)
+- `ENDER_ACP_HANDSHAKE_TIMEOUT_MS` — optional startup timeout for ACP `initialize`/`newSession` handshakes, default `10000`
 
 The ACP runner (`src/llm/acpAgentRunner.js`) uses `@agentclientprotocol/sdk` over stdio NDJSON. Permission requests are mapped to Ender's existing tools, preserving the operator approval flow.
+
+For Codex, point Ender at an ACP adapter such as `@zed-industries/codex-acp`; the raw OpenAI Codex CLI `0.130.0` does not expose `codex acp` as an ACP server.
 
 ## Quality Gates
 

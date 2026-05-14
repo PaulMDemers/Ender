@@ -312,6 +312,7 @@ ACP (Agent Client Protocol):
 
 - `ACP_COMMAND` — the agent binary to spawn (e.g. `claude-code`)
 - `ACP_ARGS` — CLI args passed to the agent (default: `acp`)
+- `ENDER_ACP_HANDSHAKE_TIMEOUT_MS` — optional startup timeout for ACP `initialize`/`newSession` handshakes, default `10000`
 
 The ACP backend runs an external ACP-compliant agent as a subprocess. When the agent requests permissions (file read/write, shell commands), Ender routes them through its own tool layer and approval system. This lets you use agents like Claude Code as the LLM backend while Ender handles tool execution, approvals, logging, and persistence.
 
@@ -321,6 +322,16 @@ LLM_BACKEND=acp
 ACP_COMMAND=claude-code
 ACP_ARGS=acp
 ```
+
+For Codex, use an ACP adapter instead of the raw `codex` CLI. The OpenAI Codex CLI `0.130.0` does not expose a `codex acp` subcommand; `codex acp` starts the interactive TUI with `acp` as the prompt. A working Codex ACP configuration is:
+
+```env
+LLM_BACKEND=acp
+ACP_COMMAND=npx
+ACP_ARGS=--yes @zed-industries/codex-acp
+```
+
+If installed as a binary, prefer `ACP_COMMAND=codex-acp` with empty `ACP_ARGS`.
 
 ACP agents also support LLM profiles for different agent binaries or configurations.
 

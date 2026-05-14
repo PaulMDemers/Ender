@@ -2,6 +2,10 @@ const { spawn } = require("node:child_process");
 const { Writable, Readable } = require("node:stream");
 const acp = require("@agentclientprotocol/sdk");
 
+const DEFAULT_HANDSHAKE_TIMEOUT_MS = 10_000;
+const AGENT_LOG_FLUSH_MS = 900;
+const AGENT_LOG_MIN_CHARS = 80;
+
 /**
  * Maps ACP capability names to Ender tool names.
  * When the ACP agent requests permission for a capability, Ender intercepts
@@ -60,11 +64,31 @@ function shellQuote(value) {
   return `'${String(value).replace(/'/g, "'\\''")}'`;
 }
 
+function killSubprocess(child) {
+  if (!child || child.killed) return;
+
+  try {
+    if (process.platform !== "win32" && child.pid) {
+      process.kill(-child.pid);
+      return;
+    }
+  } catch {
+    // Fall through to killing the direct child; the process may have already exited.
+  }
+
+  try {
+    child.kill();
+  } catch {
+    // Ignore cleanup failures.
+  }
+}
+
 function createStdioTransport({ command, args, cwd, env }) {
   const child = spawn(command, args, {
     stdio: ["pipe", "pipe", "pipe"],
     cwd,
-    env
+    env,
+    detached: process.platform !== "win32"
   });
 
   let stderr = "";
@@ -79,7 +103,7 @@ function createStdioTransport({ command, args, cwd, env }) {
       Readable.toWeb(child.stdout)
     ),
     kill() {
-      child.kill();
+      killSubprocess(child);
     },
     stderr() {
       return stderr;
@@ -189,6 +213,74 @@ function shouldRetryWithPty(err, transport) {
   return text.includes("stdin is not a terminal") || text.includes("input is not a terminal");
 }
 
+function withTimeout(promise, timeoutMs, createError) {
+  let timer = null;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(createError()), timeoutMs);
+  });
+
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
+function createHandshakeTimeoutError(transport, stage) {
+  const output = transport.stderr().trim();
+  const suffix = output
+    ? `\nACP ${transport.kind} output:\n${output.slice(-4000)}`
+    : "";
+  const err = new Error(`ACP agent did not respond to ${stage} within ${getHandshakeTimeoutMs()}ms. Check that ACP_COMMAND/ACP_ARGS start an ACP server, not an interactive TUI.${suffix}`);
+  err.acpOutput = output;
+  return err;
+}
+
+function getHandshakeTimeoutMs() {
+  const parsed = Number(process.env.ENDER_ACP_HANDSHAKE_TIMEOUT_MS);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_HANDSHAKE_TIMEOUT_MS;
+}
+
+function createAgentTextLogger(onLog) {
+  let buffer = "";
+  let timer = null;
+
+  const clearTimer = () => {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+  };
+
+  const flush = () => {
+    clearTimer();
+    const text = buffer;
+    buffer = "";
+    if (text) {
+      onLog({ level: "info", data: `agent: ${text}` });
+    }
+  };
+
+  return {
+    push(text) {
+      buffer += text;
+
+      if (
+        buffer.length >= AGENT_LOG_MIN_CHARS ||
+        /[\n.!?]\s*$/.test(buffer) ||
+        /```$/.test(buffer)
+      ) {
+        flush();
+        return;
+      }
+
+      if (!timer) {
+        timer = setTimeout(flush, AGENT_LOG_FLUSH_MS);
+        timer.unref?.();
+      }
+    },
+    flush
+  };
+}
+
 async function runAcpSession({
   goal,
   thread,
@@ -200,6 +292,7 @@ async function runAcpSession({
 }) {
   const stream = transport.stream;
   let agentOutput = "";
+  const agentTextLogger = createAgentTextLogger(onLog);
 
   const endTurnStopReasons = new Set(["end_turn", "stopped"]);
 
@@ -209,14 +302,16 @@ async function runAcpSession({
         const text = getTextFromContent(params.update.content || params.update.chunk?.content);
         if (text) {
           agentOutput += text;
-          onLog({ level: "info", data: `agent: ${text}` });
+          agentTextLogger.push(text);
         }
       } else if (params.update.sessionUpdate === "tool_call_update") {
+        agentTextLogger.flush();
         onLog({ level: "info", data: `tool call status: ${params.update.status}` });
       }
     },
 
     requestPermission: async (params) => {
+      agentTextLogger.flush();
       const requested = params.capability || params.toolCall?.title || params.toolCall?.kind || "unknown";
       onLog({ level: "info", data: `acp permission request: ${requested}` });
 
@@ -298,18 +393,26 @@ async function runAcpSession({
   const client = new acp.ClientSideConnection(() => clientHandler, stream);
 
   try {
-    await client.initialize({
-      protocolVersion: acp.PROTOCOL_VERSION,
-      clientInfo: { name: "ender-acp-client", version: "1.0.0" },
-      clientCapabilities: {
-        fs: { readTextFile: true, writeTextFile: true }
-      }
-    });
+    await withTimeout(
+      client.initialize({
+        protocolVersion: acp.PROTOCOL_VERSION,
+        clientInfo: { name: "ender-acp-client", version: "1.0.0" },
+        clientCapabilities: {
+          fs: { readTextFile: true, writeTextFile: true }
+        }
+      }),
+      getHandshakeTimeoutMs(),
+      () => createHandshakeTimeoutError(transport, "initialize")
+    );
 
-    const { sessionId: newSessionId } = await client.newSession({
-      cwd: activeWorkdir,
-      mcpServers: []
-    });
+    const { sessionId: newSessionId } = await withTimeout(
+      client.newSession({
+        cwd: activeWorkdir,
+        mcpServers: []
+      }),
+      getHandshakeTimeoutMs(),
+      () => createHandshakeTimeoutError(transport, "newSession")
+    );
 
     onLog({ level: "info", data: `acp session started: ${newSessionId}` });
     onLog({ level: "info", data: `workspace=${activeWorkdir}` });
@@ -330,6 +433,7 @@ async function runAcpSession({
       prompt: promptParts
     });
 
+    agentTextLogger.flush();
     onLog({ level: "info", data: `acp prompt finished: stopReason=${response.stopReason}` });
 
     return {
@@ -338,6 +442,7 @@ async function runAcpSession({
       completed: endTurnStopReasons.has(response.stopReason)
     };
   } catch (err) {
+    agentTextLogger.flush();
     const output = transport.stderr().trim();
     if (output && !err.acpOutput) {
       err.acpOutput = output;
@@ -345,6 +450,7 @@ async function runAcpSession({
     }
     throw err;
   } finally {
+    agentTextLogger.flush();
     transport.kill();
   }
 }
