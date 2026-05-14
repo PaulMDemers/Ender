@@ -155,7 +155,7 @@ async function runTask({
     return {
       result: acpResult.result,
       ledger,
-      outcomeStatus: acpResult.stopReason === "stopped" ? "completed" : "blocked"
+      outcomeStatus: acpResult.completed ? "completed" : "blocked"
     };
   }
 
