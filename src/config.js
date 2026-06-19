@@ -35,6 +35,19 @@ const schema = z.object({
   CODE_SERVER_STATE_DIR: z.string().optional(),
   CODE_SERVER_COMMAND: z.string().optional(),
   CODE_SERVER_NPX_PACKAGE: z.string().optional(),
+  PILLAR_ENABLED: z.string().optional(),
+  PILLAR_URL: z.string().optional(),
+  PILLAR_SERVER_ID: z.string().optional(),
+  PILLAR_SERVER_TOKEN: z.string().optional(),
+  PILLAR_LOCAL_BASE_URL: z.string().optional(),
+  PILLAR_INSTANCE_ID: z.string().optional(),
+  PILLAR_POLL_TIMEOUT_MS: z.string().optional(),
+  PILLAR_RETRY_DELAY_MS: z.string().optional(),
+  PILLAR_CAPACITY: z.string().optional(),
+  BEACON_ENABLED: z.string().optional(),
+  BEACON_URL: z.string().optional(),
+  BEACON_SERVER_ID: z.string().optional(),
+  BEACON_SERVER_TOKEN: z.string().optional(),
   LLM_BACKEND: z.enum(["openai", "bedrock", "azure", "ollama", "acp"]).default("openai"),
   LLM_PROFILES_JSON: z.string().optional(),
   DEFAULT_LLM_PROFILE_ID: z.string().optional(),
@@ -204,6 +217,20 @@ function loadConfig(env = process.env) {
     throw new Error("CODE_SERVER_MODE must be one of auto, local, or docker when set");
   }
 
+  let pillarEnabled = Boolean(String(parsed.PILLAR_URL || "").trim());
+  try {
+    pillarEnabled = parseBooleanEnv(parsed.PILLAR_ENABLED, pillarEnabled);
+  } catch {
+    throw new Error("PILLAR_ENABLED must be one of true/false/1/0/yes/no/on/off when set");
+  }
+
+  let beaconEnabled = Boolean(String(parsed.BEACON_URL || "").trim());
+  try {
+    beaconEnabled = parseBooleanEnv(parsed.BEACON_ENABLED, beaconEnabled);
+  } catch {
+    throw new Error("BEACON_ENABLED must be one of true/false/1/0/yes/no/on/off when set");
+  }
+
   return {
     port: Number(parsed.PORT || 3000),
     maxSteps,
@@ -243,6 +270,23 @@ function loadConfig(env = process.env) {
       stateDir: path.resolve(parsed.CODE_SERVER_STATE_DIR || path.resolve(process.cwd(), ".ender-code-server")),
       command: String(parsed.CODE_SERVER_COMMAND || "code-server").trim(),
       npxPackage: String(parsed.CODE_SERVER_NPX_PACKAGE || "code-server@4.113.0").trim()
+    },
+    pillar: {
+      enabled: pillarEnabled,
+      url: parsed.PILLAR_URL ? String(parsed.PILLAR_URL).trim() : null,
+      serverId: parsed.PILLAR_SERVER_ID ? String(parsed.PILLAR_SERVER_ID).trim() : null,
+      token: parsed.PILLAR_SERVER_TOKEN ? String(parsed.PILLAR_SERVER_TOKEN).trim() : null,
+      localBaseUrl: parsed.PILLAR_LOCAL_BASE_URL ? String(parsed.PILLAR_LOCAL_BASE_URL).trim() : null,
+      instanceId: parsed.PILLAR_INSTANCE_ID ? String(parsed.PILLAR_INSTANCE_ID).trim() : null,
+      pollTimeoutMs: parsed.PILLAR_POLL_TIMEOUT_MS ? Number(parsed.PILLAR_POLL_TIMEOUT_MS) : undefined,
+      retryDelayMs: parsed.PILLAR_RETRY_DELAY_MS ? Number(parsed.PILLAR_RETRY_DELAY_MS) : undefined,
+      capacity: parsed.PILLAR_CAPACITY ? Number(parsed.PILLAR_CAPACITY) : undefined
+    },
+    beacon: {
+      enabled: beaconEnabled,
+      url: parsed.BEACON_URL ? String(parsed.BEACON_URL).trim() : null,
+      serverId: parsed.BEACON_SERVER_ID ? String(parsed.BEACON_SERVER_ID).trim() : null,
+      token: parsed.BEACON_SERVER_TOKEN ? String(parsed.BEACON_SERVER_TOKEN).trim() : null
     },
 
     openai: {

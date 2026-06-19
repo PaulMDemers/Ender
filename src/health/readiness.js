@@ -218,6 +218,38 @@ function getCodeServerReadiness(config) {
   };
 }
 
+function getPillarReadiness(config) {
+  const enabled = Boolean(config.pillar?.enabled);
+  const missing = [];
+  if (enabled && !config.pillar?.url) missing.push("PILLAR_URL");
+  if (enabled && !config.pillar?.serverId) missing.push("PILLAR_SERVER_ID");
+  if (enabled && !config.pillar?.token) missing.push("PILLAR_SERVER_TOKEN");
+
+  return {
+    ready: !enabled || missing.length === 0,
+    enabled,
+    missing,
+    url: config.pillar?.url || null,
+    serverId: config.pillar?.serverId || null
+  };
+}
+
+function getBeaconReadiness(config) {
+  const enabled = Boolean(config.beacon?.enabled);
+  const missing = [];
+  if (enabled && !config.beacon?.url) missing.push("BEACON_URL");
+  if (enabled && !config.beacon?.serverId) missing.push("BEACON_SERVER_ID");
+  if (enabled && !config.beacon?.token) missing.push("BEACON_SERVER_TOKEN");
+
+  return {
+    ready: !enabled || missing.length === 0,
+    enabled,
+    missing,
+    url: config.beacon?.url || null,
+    serverId: config.beacon?.serverId || null
+  };
+}
+
 function getReadiness(config) {
   const llm = getBackendReadiness(config);
   const jira = getJiraReadiness(config);
@@ -228,6 +260,8 @@ function getReadiness(config) {
   const email = getEmailReadiness(config);
   const selfUpdate = getSelfUpdateReadiness(config);
   const codeServer = getCodeServerReadiness(config);
+  const pillar = getPillarReadiness(config);
+  const beacon = getBeaconReadiness(config);
 
   return {
     ok: true,
@@ -253,7 +287,9 @@ function getReadiness(config) {
       browserCapture,
       email,
       selfUpdate,
-      codeServer
+      codeServer,
+      pillar,
+      beacon
     },
     workflows: {
       jira_to_repo_task: {
@@ -286,7 +322,13 @@ function getReadiness(config) {
                   : "On macOS, auto mode uses a local code-server install. Install code-server or set CODE_SERVER_MODE=docker if you explicitly want Docker launches."
               : codeServer.npxAvailable && !codeServer.npxCompatible
                 ? "Install a local code-server binary for Mac host launches, or keep Docker available for container-backed editor sessions. The pinned npx fallback currently expects Node 22."
-                : "Install a local code-server launcher for best Mac support, or keep Docker available for container-backed editor sessions."
+                : "Install a local code-server launcher for best Mac support, or keep Docker available for container-backed editor sessions.",
+      pillar: pillar.enabled
+        ? (pillar.ready ? "Pillar outbound relay is configured." : `Configure ${pillar.missing.join(", ")} for Pillar relay.`)
+        : "Set PILLAR_URL, PILLAR_SERVER_ID, and PILLAR_SERVER_TOKEN to expose this API through a Pillar relay.",
+      beacon: beacon.enabled
+        ? (beacon.ready ? "Beacon notifications are configured." : `Configure ${beacon.missing.join(", ")} for Beacon notifications.`)
+        : "Register this Ender server with Beacon and set BEACON_URL, BEACON_SERVER_ID, and BEACON_SERVER_TOKEN to send push notifications."
     }
   };
 }

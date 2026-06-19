@@ -249,6 +249,107 @@ Published ports:
 
 ![Ender schedule manager](docs/website/screenshots/schedule-manager-view.jpg)
 
+## Pillar Lighthouse Relay
+
+Pillar is the cloud-facing relay for reaching an on-prem Ender API from mobile or remote clients without opening inbound firewall ports. The cloud Pillar process accepts client requests at `/api/:serverId/...`; the on-prem Ender API keeps an outbound poll open, executes the request locally, and posts the response back.
+
+Start the cloud relay:
+
+```bash
+PILLAR_AUTH_MODE=oidc \
+KEYCLOAK_ISSUER=https://auth.ender.bot/realms/ender \
+KEYCLOAK_AUDIENCE=ender \
+PILLAR_PORT=8080 \
+npm run start:pillar
+```
+
+For production, set `CLOUD_DATABASE_URL` or `PILLAR_DATABASE_URL` so registered servers and token hashes are stored in Postgres instead of the local JSON fallback.
+
+Validate the shared Postgres schema with:
+
+```bash
+TEST_DATABASE_URL=postgres://user:pass@host:5432/db npm run smoke:cloud-postgres
+```
+
+Build the dedicated cloud image:
+
+```bash
+docker build -f Dockerfile.pillar -t ender-pillar .
+```
+
+Register an Ender server with the same Keycloak user that will access it remotely:
+
+```bash
+curl -X POST https://pillar.ender.bot/servers \
+  -H "Authorization: Bearer <keycloak-access-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"serverId":"home","displayName":"Home Ender"}'
+```
+
+Enable the on-prem Ender API connector with the returned `plr_...` token:
+
+```env
+PILLAR_ENABLED=true
+PILLAR_URL=https://pillar.ender.bot
+PILLAR_SERVER_ID=home
+PILLAR_SERVER_TOKEN=plr_...
+```
+
+Remote clients can then use `https://pillar.ender.bot/api/home` as the Ender API base URL with their Keycloak access token. `GET /pillar/status` on the on-prem API reports connector state, and `GET /servers` on Pillar lists the authenticated user's registered servers. `PILLAR_AUTH_MODE=legacy` still supports the earlier global `PILLAR_CLIENT_TOKEN`/`PILLAR_SERVER_TOKEN` mode for local testing.
+
+Pillar also supports Ender's task log stream path, `GET /api/:serverId/tasks/:taskId/stream`, by polling the on-prem API over the outbound connector and emitting the same SSE event names used by the local API.
+
+## Beacon Notification Hub
+
+Beacon is the cloud notification node for Ender apps under `beacon.ender.bot`. It assumes users authenticate with Keycloak OIDC at `auth.ender.bot`, registers mobile/browser push targets to the authenticated user, registers on-prem Ender servers to that same user, and issues a server token that the on-prem API can use to post task notifications.
+
+Start the cloud hub:
+
+```bash
+BEACON_PUBLIC_URL=https://beacon.ender.bot \
+KEYCLOAK_ISSUER=https://auth.ender.bot/realms/ender \
+KEYCLOAK_AUDIENCE=ender \
+BEACON_PORT=8090 \
+npm run start:beacon
+```
+
+For production, set `CLOUD_DATABASE_URL` or `BEACON_DATABASE_URL` so devices, server registrations, notifications, and delivery attempts are stored in Postgres instead of the local JSON fallback. Pillar and Beacon intentionally share the `ender_cloud_servers` table when they point at the same database.
+
+Build the dedicated cloud image:
+
+```bash
+docker build -f Dockerfile.beacon -t ender-beacon .
+```
+
+Client apps register push targets with their Keycloak access token:
+
+```bash
+curl -X POST https://beacon.ender.bot/devices \
+  -H "Authorization: Bearer <keycloak-access-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"deviceId":"phone-1","platform":"ios","pushToken":"..."}'
+```
+
+Operators register an Ender server to the same user and copy the returned `token` into the on-prem API:
+
+```bash
+curl -X POST https://beacon.ender.bot/servers \
+  -H "Authorization: Bearer <keycloak-access-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"serverId":"home","displayName":"Home Ender"}'
+```
+
+Enable the on-prem notification connector:
+
+```env
+BEACON_ENABLED=true
+BEACON_URL=https://beacon.ender.bot
+BEACON_SERVER_ID=home
+BEACON_SERVER_TOKEN=bcn_...
+```
+
+The local API posts approval and terminal task events to Beacon best-effort. `GET /beacon/status` reports the connector state. Beacon stores notifications, sends native push through APNs and FCM when provider credentials are configured, and records per-device delivery status. Web Push device records are accepted but marked `unsupported_web_push` until the VAPID/Web Push adapter is added.
+
 ## Configuration
 
 ### Core Runtime
@@ -271,6 +372,52 @@ Published ports:
 - `AGENT_SELF_UPDATE_TIMEOUT_MS`: health-wait timeout after restart or rollback. Default `90000`.
 - `ENDER_SUPERVISOR_URL`: supervisor control URL injected when using `npm run start:supervised`.
 - `ENDER_SUPERVISOR_TOKEN`: supervisor auth token injected when using `npm run start:supervised`.
+- `CLOUD_DATABASE_URL`: shared Postgres connection URL used by cloud services. Service-specific `PILLAR_DATABASE_URL` and `BEACON_DATABASE_URL` override this when set.
+
+### Pillar Relay
+
+- `PILLAR_ENABLED`: enables the on-prem outbound connector. Defaults to `true` when `PILLAR_URL` is set.
+- `PILLAR_URL`: cloud Pillar base URL.
+- `PILLAR_SERVER_ID`: stable server name used in Pillar client URLs, for example `home`.
+- `PILLAR_SERVER_TOKEN`: per-server token returned by Pillar registration in `oidc` mode, or the global server token in `legacy` mode.
+- `PILLAR_LOCAL_BASE_URL`: local API base URL used by the connector. Defaults to `http://127.0.0.1:$PORT`.
+- `PILLAR_AUTH_MODE`: `oidc` for Keycloak user/server authorization, `legacy` for global bearer tokens, or `dev` for local tests with `x-pillar-user-id`.
+- `PILLAR_DATABASE_URL`: Postgres connection URL for Pillar's user-owned server registry. Falls back to `CLOUD_DATABASE_URL`, then JSON.
+- `PILLAR_DATA_FILE`: JSON store path for registered servers and token hashes in `oidc`/`dev` mode.
+- `PILLAR_OIDC_ISSUER`: Keycloak realm issuer. Planned production value: `https://auth.ender.bot/realms/ender`.
+- `PILLAR_OIDC_AUDIENCE`: expected OIDC audience or authorized party. Default `ender`.
+- `PILLAR_OIDC_JWKS_URI`: optional JWKS override. Defaults to `${PILLAR_OIDC_ISSUER}/protocol/openid-connect/certs`.
+- `PILLAR_CLIENT_TOKEN`: legacy-mode cloud token required from mobile or remote clients.
+- `PILLAR_PORT`: cloud Pillar listen port. Default `8080`.
+- `PILLAR_REQUEST_TIMEOUT_MS`: cloud timeout while waiting for an on-prem response. Default `60000`.
+- `PILLAR_POLL_TIMEOUT_MS`: long-poll wait timeout. Default `25000`.
+- `PILLAR_RETRY_DELAY_MS`: on-prem retry delay after a failed poll. Default `2000`.
+- `PILLAR_CAPACITY`: number of queued requests the on-prem connector accepts per poll. Default `4`.
+- `PILLAR_STREAM_POLL_MS`: cloud-side poll interval used to synthesize task SSE streams. Default `1000`.
+- `PILLAR_STREAM_HEARTBEAT_MS`: SSE heartbeat interval for relayed task streams. Default `15000`.
+
+### Beacon Notifications
+
+- `BEACON_PUBLIC_URL`: cloud Beacon URL. Planned production value: `https://beacon.ender.bot`.
+- `BEACON_PORT`: cloud Beacon listen port. Default `8090`.
+- `BEACON_DATABASE_URL`: Postgres connection URL for Beacon devices, server registry, notifications, and delivery attempts. Falls back to `CLOUD_DATABASE_URL`, then JSON.
+- `BEACON_DATA_FILE`: JSON store path for devices, server registrations, and notifications.
+- `BEACON_AUTH_MODE`: `oidc` for production, `dev` for local tests with `x-beacon-user-id`.
+- `KEYCLOAK_ISSUER`: Keycloak realm issuer. Planned production value: `https://auth.ender.bot/realms/ender`.
+- `KEYCLOAK_AUDIENCE`: expected OIDC audience or authorized party. Default `ender`.
+- `BEACON_OIDC_JWKS_URI`: optional JWKS override. Defaults to `${KEYCLOAK_ISSUER}/protocol/openid-connect/certs`.
+- `BEACON_ENABLED`: enables the on-prem notification connector. Defaults to `true` when `BEACON_URL` is set.
+- `BEACON_URL`: cloud Beacon base URL.
+- `BEACON_SERVER_ID`: server ID registered through Beacon.
+- `BEACON_SERVER_TOKEN`: server token returned by Beacon registration or rotation.
+- `BEACON_FCM_PROJECT_ID`: Firebase project ID for Android push delivery.
+- `BEACON_FCM_CLIENT_EMAIL`: Firebase service account client email.
+- `BEACON_FCM_PRIVATE_KEY`: Firebase service account private key. Escaped `\n` sequences are accepted.
+- `BEACON_APNS_TEAM_ID`: Apple developer team ID.
+- `BEACON_APNS_KEY_ID`: APNs token auth key ID.
+- `BEACON_APNS_PRIVATE_KEY`: APNs `.p8` private key. Escaped `\n` sequences are accepted.
+- `BEACON_APNS_BUNDLE_ID`: app bundle ID used as the APNs topic.
+- `BEACON_APNS_ENV`: `production` or `sandbox`. Default `production`.
 
 ### Shared Contracts
 

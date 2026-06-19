@@ -123,6 +123,7 @@ class TaskManager {
     this.projectManager = null;
     this.memoryManager = null;
     this.llmProfileManager = null;
+    this.notificationClient = null;
     this.tasks = new Map();
     this.maxLogs = 5000;
     this.threadsDir = path.resolve(this.config.threadsDir || path.resolve(process.cwd(), "threads"));
@@ -165,6 +166,10 @@ class TaskManager {
 
   setLlmProfileManager(llmProfileManager) {
     this.llmProfileManager = llmProfileManager || null;
+  }
+
+  setNotificationClient(notificationClient) {
+    this.notificationClient = notificationClient || null;
   }
 
   async listWorkspaces() {
@@ -725,6 +730,12 @@ class TaskManager {
         details: approval.details,
         requestedAt: approval.requestedAt
       });
+      this._notifyTaskEvent(task, "approval_required", {
+        title: approval.title || "Ender approval required",
+        body: approval.description || task.goal,
+        approvalId: approval.id,
+        approvalType: approval.type
+      });
     });
   }
 
@@ -796,6 +807,10 @@ class TaskManager {
         await this._persistTask(task);
         this._resolveWaiters(task);
         this._broadcastEvent(task, "complete", { status: task.status, result: task.result });
+        this._notifyTaskEvent(task, "task_completed", {
+          title: task.status === "done" ? "Ender task completed" : "Ender task needs attention",
+          body: task.result || task.goal
+        });
         this._closeSubscribers(task);
       } catch (err) {
         task.status = "error";
@@ -808,9 +823,20 @@ class TaskManager {
         await this._persistTask(task);
         this._resolveWaiters(task);
         this._broadcastEvent(task, "complete", { status: task.status, result: null });
+        this._notifyTaskEvent(task, "task_failed", {
+          title: "Ender task failed",
+          body: err && err.message ? err.message : String(err)
+        });
         this._closeSubscribers(task);
       }
     })();
+  }
+
+  _notifyTaskEvent(task, type, input = {}) {
+    if (!this.notificationClient?.notifyTaskEvent) return;
+    this.notificationClient.notifyTaskEvent(task, type, input).catch?.(() => {
+      // Notification delivery is best-effort and must not block task execution.
+    });
   }
 
   _normalizeLog(entry) {

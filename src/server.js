@@ -13,17 +13,22 @@ const { ProjectManager } = require("./runtime/projectManager");
 const { MemoryManager } = require("./runtime/memoryManager");
 const { LlmProfileManager } = require("./llm/profileManager");
 const { APP_NAME, APP_VERSION } = require("./version");
+const { PillarClient, loadPillarClientConfig } = require("./pillar/client");
+const { BeaconClient, loadBeaconClientConfig } = require("./beacon/client");
 
 async function main() {
   const config = loadConfig(process.env);
   await ensureRuntimeDirectories(config);
   const llmProfileManager = new LlmProfileManager(config);
+  const beaconClientConfig = loadBeaconClientConfig(process.env);
+  const beaconClient = new BeaconClient(beaconClientConfig);
   const projectManager = new ProjectManager({ config });
   const memoryManager = new MemoryManager({ config });
   const taskManager = new TaskManager(config);
   taskManager.setLlmProfileManager(llmProfileManager);
   taskManager.setProjectManager(projectManager);
   taskManager.setMemoryManager(memoryManager);
+  taskManager.setNotificationClient(beaconClient);
   await projectManager.init();
   await memoryManager.init();
   await taskManager.init();
@@ -51,6 +56,13 @@ async function main() {
     memoryManager,
     llmProfileManager
   );
+  const pillarClientConfig = loadPillarClientConfig(process.env, {
+    localBaseUrl: `http://127.0.0.1:${config.port}`,
+    serverId: config.pillar?.serverId || null
+  });
+  const pillarClient = new PillarClient(pillarClientConfig);
+  app.locals.pillarClient = pillarClient;
+  app.locals.beaconClient = beaconClient;
 
   const server = app.listen(config.port, () => {
     console.log(`${APP_NAME} ${APP_VERSION} server listening on http://localhost:${config.port}`);
@@ -69,6 +81,22 @@ async function main() {
       + ` mode=${config.codeServer?.mode || "auto"}`
       + ` bindHost=${config.codeServer?.bindHost || "n/a"}`
     );
+    console.log(
+      `pillar=${pillarClientConfig.enabled ? "enabled" : "disabled"}`
+      + ` serverId=${pillarClientConfig.serverId || "n/a"}`
+      + ` url=${pillarClientConfig.url || "n/a"}`
+    );
+    console.log(
+      `beacon=${beaconClientConfig.enabled ? "enabled" : "disabled"}`
+      + ` serverId=${beaconClientConfig.serverId || "n/a"}`
+      + ` url=${beaconClientConfig.url || "n/a"}`
+    );
+    try {
+      pillarClient.start();
+    } catch (err) {
+      console.error(err && err.stack ? err.stack : String(err));
+      process.exit(1);
+    }
   });
 
   server.on("upgrade", async (req, socket, head) => {

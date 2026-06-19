@@ -70,6 +70,25 @@ function createApp(
     res.json(getReadiness(config));
   });
 
+  app.get("/pillar/status", (_req, res) => {
+    const status = app.locals.pillarClient?.status?.() || {
+      enabled: Boolean(config.pillar?.enabled),
+      running: false,
+      url: config.pillar?.url || null,
+      serverId: config.pillar?.serverId || null
+    };
+    res.json(status);
+  });
+
+  app.get("/beacon/status", (_req, res) => {
+    const status = app.locals.beaconClient?.status?.() || {
+      enabled: Boolean(config.beacon?.enabled),
+      url: config.beacon?.url || null,
+      serverId: config.beacon?.serverId || null
+    };
+    res.json(status);
+  });
+
   app.get("/workspaces", async (_req, res) => {
     try {
       const data = await taskManager.listWorkspaces();
