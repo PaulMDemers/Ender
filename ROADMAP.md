@@ -653,15 +653,37 @@ Verification:
 
 The exact staged candidate passed documentation checks across 54 Markdown files, all 118 backend tests, targeted typechecking, syntax checks, the production UI build, and all 41 Playwright tests.
 
+### G3. Merge and publish the modernization baseline
+
+Status: local merge complete; push blocked on GitHub authentication
+
+- Confirmed the release-candidate worktree was clean and the local commit was exactly one commit ahead of `dev`.
+- Fetched `origin/dev` and confirmed it remained at `e1d27ac`, identical to local `dev` and an ancestor of `7dcf67f`.
+- Fast-forwarded local `dev` to the verified modernization commit without a conflict, merge commit, force update, or history rewrite.
+- Used direct Git transport because the optional GitHub CLI/PR workflow is unavailable on this host and the product owner explicitly requested a direct merge and push rather than a pull request.
+- Attempted to push the updated `dev` branch through the configured HTTPS remote; Git rejected the operation before transfer because no username/credential was available.
+- Confirmed `gh` is not installed, `GITHUB_TOKEN` and `GH_TOKEN` are unset, the configured macOS Keychain helper has no usable credential for this operation, and no `~/.ssh` identity directory exists.
+- Left local `dev` clean and two commits ahead of `origin/dev`, ready to push without another merge once GitHub authentication is configured.
+- Created no PR, tag, release artifact, merge action, or deployment beyond the requested branch update.
+
+Verification:
+
+- clean worktree and branch-topology inspection
+- `git fetch origin dev`
+- `git merge-base --is-ancestor origin/dev codex/modernization-release-candidate`
+- fast-forward-only merge
+- expected failed HTTPS push diagnostic: `could not read Username for 'https://github.com'`
+- local/remote divergence: local `dev` ahead by two commits, remote unchanged
+
 ## Next milestone
 
-Milestone G3: publish the guarded branch and open a draft pull request against `dev`, without merging, tagging, or releasing it.
+Milestone G3 completion: configure GitHub authentication on this host, push local `dev`, and confirm `origin/dev` resolves to the local head. H1 UI refinement follows immediately after publication.
 
 Planned verification:
 
-- Confirm the configured remote, GitHub authentication, local commit, and clean non-ignored worktree.
-- Push only `codex/modernization-release-candidate` and open a draft PR targeting `dev` with the modernization summary, verification evidence, and target-only release gaps.
-- Inspect the published PR head/base, diff size, and available checks; leave review, merge, tags, and release publication to the product owner.
+- Install and authenticate GitHub CLI with `gh auth login`, provide a credential through the configured HTTPS helper, or configure an SSH identity for GitHub.
+- Push local `dev` without force and confirm local/remote commit equality.
+- Then run the current browser UI against the local API and begin the fresh UI audit.
 
 ## Working assumptions
 
