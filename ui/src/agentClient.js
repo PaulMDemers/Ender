@@ -1,16 +1,31 @@
+import contractDefinitions from "../../shared/contracts.json";
+import { createContractTracker } from "./contractVersions";
+
 const DEFAULT_API_BASE = import.meta.env.VITE_ENDER_API || "http://localhost:3000";
 let currentApiBase = DEFAULT_API_BASE;
+const contractTracker = createContractTracker({
+  api: contractDefinitions.contracts.api.version,
+  taskSse: contractDefinitions.contracts.taskSse.version
+});
 
-function normalizeApiBase(value) {
+export function normalizeApiBase(value) {
   const raw = String(value || "").trim();
   if (!raw) return DEFAULT_API_BASE;
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(raw) && !/^https?:\/\//i.test(raw)) {
+    throw new Error("Server URL must use http:// or https://");
+  }
   const withProto = /^https?:\/\//i.test(raw) ? raw : `http://${raw}`;
   const u = new URL(withProto);
+  if (!new Set(["http:", "https:"]).has(u.protocol) || !u.host) {
+    throw new Error("Server URL must use http:// or https://");
+  }
   return `${u.protocol}//${u.host}`;
 }
 
 export function setApiBase(nextBase) {
-  currentApiBase = normalizeApiBase(nextBase);
+  const normalized = normalizeApiBase(nextBase);
+  if (normalized !== currentApiBase) contractTracker.reset();
+  currentApiBase = normalized;
   return currentApiBase;
 }
 
@@ -18,10 +33,35 @@ export function getApiBase() {
   return currentApiBase;
 }
 
+export function getContractStatus() {
+  return contractTracker.getStatus();
+}
+
+export function subscribeContractStatus(listener) {
+  return contractTracker.subscribe(listener);
+}
+
 async function request(path, init) {
   const res = await fetch(`${currentApiBase}${path}`, init);
+  contractTracker.observeApiHeader(res.headers.get(contractDefinitions.contracts.api.header));
   if (!res.ok) {
-    throw new Error(`${init?.method || "GET"} ${path} failed (${res.status})`);
+    const contentType = String(res.headers.get("content-type") || "").toLowerCase();
+    let payload = null;
+    if (contentType.includes("application/json")) {
+      try {
+        payload = await res.json();
+      } catch {
+        // Fall through to the status-based message.
+      }
+    }
+
+    const error = new Error(
+      payload?.message || `${init?.method || "GET"} ${path} failed (${res.status})`
+    );
+    error.code = payload?.error || "request_failed";
+    error.status = res.status;
+    error.details = payload?.details || null;
+    throw error;
   }
   const contentType = String(res.headers.get("content-type") || "").toLowerCase();
   if (!contentType.includes("application/json")) {
@@ -258,7 +298,7 @@ export function getLogs(id, from = 0) {
 
 export function streamLogs(
   id,
-  { onOpen, onLog, onStatus, onComplete, onApprovalRequired, onError, onClose }
+  { onOpen, onLog, onStatus, onComplete, onApprovalRequired, onContract, onError, onClose }
 ) {
   const es = new EventSource(`${currentApiBase}/tasks/${id}/stream`);
   let completed = false;
@@ -266,6 +306,16 @@ export function streamLogs(
   es.onopen = () => {
     onOpen?.();
   };
+
+  es.addEventListener(contractDefinitions.contracts.taskSse.event, (ev) => {
+    try {
+      const payload = JSON.parse(ev.data);
+      const status = contractTracker.observeTaskSse(payload);
+      onContract?.(payload, status.taskSse);
+    } catch {
+      // Legacy and malformed metadata must not interrupt task streaming.
+    }
+  });
 
   es.addEventListener("log", (ev) => {
     try {

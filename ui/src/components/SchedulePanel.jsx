@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { advanceWorkflowSession, createWorkflowSession, retreatWorkflowSession } from "../agentClient";
 import WorkflowStepRenderer from "./WorkflowStepRenderer";
+import StateNotice from "./ui/StateNotice";
 import contractDefinitions from "../../../shared/contracts.json";
 
 const [PROMPT_TARGET, THREAD_TARGET, WORKFLOW_TARGET] = contractDefinitions.scheduleTargetKinds;
@@ -61,16 +62,37 @@ function isWorkflowConfigured(session) {
   return session?.currentStep?.type === "complete";
 }
 
+function isCronShapeValid(value) {
+  const parts = String(value || "").trim().split(/\s+/).filter(Boolean);
+  return parts.length === 5 || parts.length === 6;
+}
+
+function isTimezoneValid(value) {
+  const normalized = String(value || "").trim();
+  if (!normalized) return true;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: normalized }).format();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export default function SchedulePanel({
   schedules,
   workflows,
   tasks,
+  loading,
   busy,
+  operation,
   error,
+  result,
   onCreate,
   onUpdate,
   onDelete,
-  onRunNow
+  onRunNow,
+  onReload,
+  onClearFeedback
 }) {
   const [editingId, setEditingId] = useState(null);
   const [name, setName] = useState("");
@@ -88,6 +110,8 @@ export default function SchedulePanel({
   const [workflowConfigError, setWorkflowConfigError] = useState("");
   const [workflowBootstrap, setWorkflowBootstrap] = useState({ nonce: 0, inputs: [] });
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [lastRequest, setLastRequest] = useState(null);
 
   const threadOptions = useMemo(
     () => (tasks || []).map((task) => ({ value: task.id, label: `${task.id.slice(0, 8)} · ${task.goal}` })),
@@ -131,6 +155,8 @@ export default function SchedulePanel({
     setThreadId("");
     setWorkflowId("");
     setShowAdvanced(false);
+    setFormError("");
+    setLastRequest(null);
     resetWorkflowConfigState();
   };
 
@@ -183,6 +209,7 @@ export default function SchedulePanel({
   }, [targetKind, workflowId, workflowBootstrap.nonce]);
 
   const startEdit = (schedule) => {
+    onClearFeedback?.();
     setEditingId(schedule.id);
     setName(schedule.name || "");
     setCronExpr(schedule.cron || "");
@@ -195,6 +222,8 @@ export default function SchedulePanel({
     setThreadId(target.threadId || "");
     setWorkflowId(target.workflowId || "");
     setShowAdvanced(Boolean(schedule.timezone || target.kind === WORKFLOW_TARGET || schedule.enabled === false));
+    setFormError("");
+    setLastRequest(null);
     setWorkflowConfigError("");
     if (target.kind === WORKFLOW_TARGET && target.workflowId) {
       queueWorkflowBootstrap(target.inputs || []);
@@ -241,32 +270,129 @@ export default function SchedulePanel({
   const submit = async (event) => {
     event?.preventDefault?.();
 
+    const normalizedName = String(name || "").trim();
+    const normalizedCron = String(cronExpr || "").trim();
+    const normalizedTimezone = String(timezone || "").trim();
+    const normalizedPrompt = String(prompt || "").trim();
+    if (!normalizedName) {
+      setFormError("Add a name so operators can identify this schedule.");
+      return;
+    }
+    if (!isCronShapeValid(normalizedCron)) {
+      setFormError("Enter a cron expression with five or six space-separated fields.");
+      return;
+    }
+    if (!isTimezoneValid(normalizedTimezone)) {
+      setFormError("Enter a valid IANA timezone such as America/New_York, or leave it blank for the server default.");
+      return;
+    }
+    if (targetKind === PROMPT_TARGET && !normalizedPrompt) {
+      setFormError("Add the prompt this schedule should start.");
+      return;
+    }
+    if (targetKind === THREAD_TARGET && !threadId) {
+      setFormError("Choose the thread this schedule should continue.");
+      return;
+    }
+    if (targetKind === THREAD_TARGET && !normalizedPrompt) {
+      setFormError("Add the follow-up prompt this schedule should send.");
+      return;
+    }
+
     if (targetKind === WORKFLOW_TARGET) {
       if (!workflowId) {
-        setWorkflowConfigError("Choose a workflow to continue");
+        setFormError("Choose a workflow to continue.");
         return;
       }
       if (!workflowSession || !isWorkflowConfigured(workflowSession)) {
-        setWorkflowConfigError("Complete the workflow configuration before saving this schedule");
+        setFormError("Complete the workflow configuration before saving this schedule.");
         return;
       }
     }
 
+    setFormError("");
+    onClearFeedback?.();
     const target = buildTargetFromForm(targetKind, { prompt, workspace, threadId, workflowId }, workflowInputs);
     const payload = {
-      name: String(name || "").trim(),
-      cron: String(cronExpr || "").trim(),
-      timezone: String(timezone || "").trim() || null,
+      name: normalizedName,
+      cron: normalizedCron,
+      timezone: normalizedTimezone || null,
       enabled,
       target
     };
-    if (editingId) {
-      await onUpdate?.(editingId, payload);
-    } else {
-      await onCreate?.(payload);
-    }
-    beginCreate();
+    const request = { type: editingId ? "update" : "create", id: editingId, payload, resetForm: true };
+    setLastRequest(request);
+    const saved = editingId
+      ? await onUpdate?.(editingId, payload)
+      : await onCreate?.(payload);
+    if (saved) beginCreate();
   };
+
+  const performRequest = async (request) => {
+    if (!request) return null;
+    setLastRequest(request);
+    onClearFeedback?.();
+    let response = null;
+    if (request.type === "create") response = await onCreate?.(request.payload);
+    if (request.type === "update") response = await onUpdate?.(request.id, request.payload);
+    if (request.type === "run") response = await onRunNow?.(request.id);
+    if (request.type === "delete") response = await onDelete?.(request.id);
+    if (response?.cancelled) {
+      setLastRequest(null);
+      return response;
+    }
+    if (response && request.resetForm) beginCreate();
+    if (response) setLastRequest(null);
+    return response;
+  };
+
+  const runNow = (schedule) => performRequest({ type: "run", id: schedule.id });
+
+  const deleteEntry = (schedule) => performRequest({ type: "delete", id: schedule.id });
+
+  const toggleEnabled = (schedule) => performRequest({
+    type: "update",
+    id: schedule.id,
+    payload: { enabled: !schedule.enabled },
+    resetForm: false
+  });
+
+  const retryLastRequest = () => {
+    if (lastRequest) return performRequest(lastRequest);
+    return onReload?.();
+  };
+
+  const retryLabel = lastRequest?.type === "run"
+    ? "Retry run"
+    : lastRequest?.type === "delete"
+      ? "Retry delete"
+      : lastRequest?.type === "update"
+        ? "Retry update"
+        : lastRequest?.type === "create"
+          ? "Retry create"
+          : "Reload schedules";
+
+  const operationTitle = operation?.type === "run"
+    ? "Running schedule"
+    : operation?.type === "delete"
+      ? "Deleting schedule"
+      : operation?.type === "update"
+        ? "Updating schedule"
+        : operation?.type === "create"
+          ? "Creating schedule"
+          : "Updating schedules";
+
+  const resultTitle = result?.type === "run"
+    ? "Schedule run started"
+    : result?.type === "delete"
+      ? "Schedule deleted"
+      : result?.type === "update"
+        ? "Schedule updated"
+        : "Schedule created";
+
+  const resultDetail = result?.type === "run"
+    ? result.result?.message || "The run request completed and its latest outcome is shown in the schedule list."
+    : "The server schedule collection is up to date.";
 
   const workflowReady = isWorkflowConfigured(workflowSession);
   const cadencePresets = [
@@ -274,9 +400,48 @@ export default function SchedulePanel({
     { label: "Daily 9am", cron: "0 9 * * *" },
     { label: "Hourly", cron: "0 * * * *" }
   ];
+  const enabledCount = (schedules || []).filter((schedule) => schedule.enabled).length;
+  const failedCount = (schedules || []).filter((schedule) => schedule.lastRunStatus === "error").length;
+  const neverRunCount = (schedules || []).filter((schedule) => !schedule.lastRunAt).length;
 
   return (
-    <div className="scheduleWorkspace">
+    <div className="scheduleStack">
+      <section className="automationOverview" aria-label="Schedule overview">
+        <div className="workflowHero">
+          <span className="workflowBadge">AUTOMATION</span>
+          <div className="launchTitle">Recurring operations</div>
+          <div className="launchDescription">Create, inspect, run, pause, and recover server-managed schedules from one workspace.</div>
+        </div>
+        <div className="automationSummaryGrid">
+          <div className="automationSummaryItem"><span>Total</span><strong>{(schedules || []).length}</strong></div>
+          <div className="automationSummaryItem"><span>Enabled</span><strong>{enabledCount}</strong></div>
+          <div className="automationSummaryItem"><span>Needs review</span><strong>{failedCount}</strong></div>
+          <div className="automationSummaryItem"><span>Never run</span><strong>{neverRunCount}</strong></div>
+        </div>
+      </section>
+
+      {loading && !schedules?.length ? (
+        <StateNotice title="Loading schedules" detail="Reading recurring jobs and their latest outcomes from the server." busy />
+      ) : null}
+      {operation ? (
+        <StateNotice title={operationTitle} detail="The form and schedule collection will remain in place while the server responds." busy compact />
+      ) : null}
+      {error ? (
+        <StateNotice
+          tone="danger"
+          title="Schedule operation failed"
+          detail={error}
+          actionLabel={retryLabel}
+          onAction={retryLastRequest}
+          busy={busy || loading}
+          compact
+        />
+      ) : null}
+      {!error && result ? (
+        <StateNotice tone="success" title={resultTitle} detail={resultDetail} compact />
+      ) : null}
+
+      <div className="scheduleWorkspace">
       <section className="consolePanel scheduleEditor">
         <div className="panelBody workflowPanelBody">
           <div className="workflowHero">
@@ -287,20 +452,21 @@ export default function SchedulePanel({
             </div>
           </div>
 
-          <form className="workflowStep" onSubmit={submit}>
+          <form className="workflowStep" onSubmit={submit} noValidate>
             <div className="scheduleTopGrid">
               <label className="workflowField scheduleNameField">
                 <span className="workflowFieldLabel">Name</span>
-                <input className="consoleInput" value={name} onChange={(event) => setName(event.target.value)} required />
+                <span className="fieldHint">Use a recognizable operational label.</span>
+                <input className="consoleInput" value={name} onChange={(event) => { setName(event.target.value); setFormError(""); }} />
               </label>
 
               <label className="workflowField">
                 <span className="workflowFieldLabel">Cadence</span>
+                <span className="fieldHint">Choose a preset or enter a five- or six-field cron expression.</span>
                 <input
                   className="consoleInput mono"
                   value={cronExpr}
-                  onChange={(event) => setCronExpr(event.target.value)}
-                  required
+                  onChange={(event) => { setCronExpr(event.target.value); setFormError(""); }}
                   placeholder="0 9 * * 1-5"
                 />
                 <div className="schedulePresetRow">
@@ -309,6 +475,7 @@ export default function SchedulePanel({
                       key={preset.label}
                       type="button"
                       className={`miniButton ${cronExpr === preset.cron ? "schedulePresetActive" : ""}`.trim()}
+                      aria-pressed={cronExpr === preset.cron}
                       onClick={() => setCronExpr(preset.cron)}
                     >
                       {preset.label}
@@ -340,7 +507,12 @@ export default function SchedulePanel({
             </div>
 
             <div className="workflowActionBar scheduleAdvancedToggleRow">
-              <button type="button" className="secondaryButton" onClick={() => setShowAdvanced((value) => !value)}>
+              <button
+                type="button"
+                className="secondaryButton"
+                aria-expanded={showAdvanced}
+                onClick={() => setShowAdvanced((value) => !value)}
+              >
                 {showAdvanced ? "Hide advanced options" : "Show advanced options"}
               </button>
             </div>
@@ -437,7 +609,17 @@ export default function SchedulePanel({
                       <div className="emptyState">Preparing workflow configuration…</div>
                     ) : null}
 
-                    {workflowConfigError ? <div className="errorBanner">{workflowConfigError}</div> : null}
+                    {workflowConfigError ? (
+                      <StateNotice
+                        tone="danger"
+                        title="Workflow configuration failed"
+                        detail={workflowConfigError}
+                        actionLabel="Retry configuration"
+                        onAction={() => queueWorkflowBootstrap(workflowInputs)}
+                        busy={workflowConfigBusy}
+                        compact
+                      />
+                    ) : null}
                   </div>
                 ) : (
                   <div className="panelNote">Only workflows that support scheduled execution appear here.</div>
@@ -471,6 +653,10 @@ export default function SchedulePanel({
               </div>
             ) : null}
 
+            {formError ? (
+              <StateNotice tone="warning" title="Schedule needs attention" detail={formError} compact />
+            ) : null}
+
             <div className="workflowActionBar">
               <button type="submit" className="primaryButton workflowAction" disabled={busy || workflowConfigBusy}>
                 {busy ? "Saving..." : editingId ? "Save schedule" : "Create schedule"}
@@ -483,7 +669,6 @@ export default function SchedulePanel({
             </div>
           </form>
 
-          {error ? <div className="errorBanner">{error}</div> : null}
         </div>
       </section>
 
@@ -512,29 +697,53 @@ export default function SchedulePanel({
                   <span className="scheduleMetaChip mono">cron {schedule.cron}</span>
                   <span className="scheduleMetaChip mono">{schedule.timezone || "server default"}</span>
                   <span className="scheduleMetaChip mono">last {formatTimestamp(schedule.lastRunAt)}</span>
-                  <span className="scheduleMetaChip mono">result {compactResultLabel(schedule.lastRunStatus)}</span>
+                  <span className={`scheduleMetaChip mono ${schedule.lastRunStatus === "error" ? "danger" : schedule.lastRunStatus ? "success" : ""}`.trim()}>
+                    result {compactResultLabel(schedule.lastRunStatus)}
+                  </span>
                 </div>
 
-                {schedule.lastRunMessage ? <div className="panelNote">{schedule.lastRunMessage}</div> : null}
+                {schedule.lastRunMessage ? (
+                  <div className={`scheduleRunOutcome ${schedule.lastRunStatus === "error" ? "danger" : "success"}`}>
+                    <strong>Latest outcome</strong>
+                    <span>{schedule.lastRunMessage}</span>
+                  </div>
+                ) : null}
+
+                <details className="scheduleDetails">
+                  <summary>Target details</summary>
+                  <div className="scheduleTargetDetails">
+                    <span className="mono">{schedule.id}</span>
+                    {schedule.target?.prompt ? <span>{schedule.target.prompt}</span> : null}
+                    {schedule.target?.workspace ? <span className="mono">{schedule.target.workspace}</span> : null}
+                    {schedule.target?.workflowId ? <span className="mono">workflow {schedule.target.workflowId}</span> : null}
+                    {schedule.target?.threadId ? <span className="mono">thread {schedule.target.threadId}</span> : null}
+                  </div>
+                </details>
 
                 <div className="scheduleActions scheduleActionsCompact">
                   <button type="button" className="miniButton" disabled={busy} onClick={() => startEdit(schedule)}>
                     Edit
                   </button>
-                  <button type="button" className="miniButton" disabled={busy} onClick={() => onRunNow?.(schedule.id)}>
-                    Run now
+                  <button type="button" className="miniButton" disabled={busy} onClick={() => toggleEnabled(schedule)}>
+                    {schedule.enabled ? "Disable" : "Enable"}
                   </button>
-                  <button type="button" className="miniButton miniButtonDanger" disabled={busy} onClick={() => onDelete?.(schedule.id)}>
-                    Delete
+                  <button type="button" className="miniButton" disabled={busy} onClick={() => runNow(schedule)}>
+                    {operation?.type === "run" && operation.id === schedule.id ? "Running…" : "Run now"}
+                  </button>
+                  <button type="button" className="miniButton miniButtonDanger" disabled={busy} onClick={() => deleteEntry(schedule)}>
+                    {operation?.type === "delete" && operation.id === schedule.id ? "Deleting…" : "Delete"}
                   </button>
                 </div>
               </div>
             ))}
 
-            {!schedules?.length ? <div className="emptyState">No schedules created yet</div> : null}
+            {!schedules?.length && !loading ? (
+              <StateNotice title="No schedules yet" detail="Create the first recurring run with the editor beside this list." />
+            ) : null}
           </div>
         </div>
       </section>
+      </div>
     </div>
   );
 }

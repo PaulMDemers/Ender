@@ -11,6 +11,10 @@ const {
 
 test("shared contract definitions expose the expected workflow and schedule enums", () => {
   assert.deepEqual(contractDefinitions.scheduleTargetKinds, ["prompt", "thread", "workflow"]);
+  assert.deepEqual(contractDefinitions.contracts, {
+    api: { version: 1, header: "X-Ender-API-Version" },
+    taskSse: { version: 1, header: "X-Ender-SSE-Version", event: "contract" }
+  });
   assert.deepEqual(workflowModeValues, ["interactive", "schedule_config", "scheduled_run"]);
   assert.deepEqual(workflowStepTypeValues, ["form", "select", "complete"]);
 });

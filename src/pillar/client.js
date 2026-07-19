@@ -94,6 +94,7 @@ class PillarClient {
     this.lastPollAt = null;
     this.lastRequestAt = null;
     this.lastResponseAt = null;
+    this.abortController = null;
   }
 
   get enabled() {
@@ -118,12 +119,14 @@ class PillarClient {
   start() {
     if (!this.enabled || this.running) return;
     this.validateConfig();
+    this.abortController = new AbortController();
     this.running = true;
     this.loopPromise = this.loop();
   }
 
   stop() {
     this.running = false;
+    this.abortController?.abort(new Error("Pillar client stopped"));
     return this.loopPromise;
   }
 
@@ -142,6 +145,7 @@ class PillarClient {
         await Promise.all(requests.map((request) => this.handleRequest(request)));
         this.lastError = null;
       } catch (err) {
+        if (!this.running || this.abortController?.signal.aborted) break;
         this.lastError = err.message || String(err);
         await sleep(this.config.retryDelayMs || DEFAULT_RETRY_DELAY_MS);
       }
@@ -159,7 +163,8 @@ class PillarClient {
       body: JSON.stringify({
         instanceId: this.config.instanceId,
         capacity: this.config.capacity || 1
-      })
+      }),
+      signal: this.abortController?.signal
     });
     this.lastPollAt = new Date().toISOString();
 
@@ -187,7 +192,8 @@ class PillarClient {
     const res = await this.fetchImpl(url, {
       method,
       headers,
-      body: method === "GET" || method === "HEAD" ? undefined : body
+      body: method === "GET" || method === "HEAD" ? undefined : body,
+      signal: this.abortController?.signal
     });
     const responseBody = Buffer.from(await res.arrayBuffer());
     return {
@@ -208,7 +214,8 @@ class PillarClient {
         authorization: `Bearer ${this.config.token}`,
         "content-type": "application/json"
       },
-      body: JSON.stringify(response)
+      body: JSON.stringify(response),
+      signal: this.abortController?.signal
     });
 
     if (!res.ok) {

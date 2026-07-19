@@ -1,220 +1,36 @@
-# Quick Start for Agents
+# Quick Start for Development Threads
 
-Purpose: give future threads the minimum high-value context needed to work effectively in this repo fast.
+## What this repo is
 
-## 1. What this repo is
+Ender is a local-first agent runtime with an Express API, React/Electron operator console, versioned local persistence, guided workflows, schedules, a global task ledger, optional editor sessions, and optional Pillar/Beacon cloud connectors.
 
-Ender is a local-first agent runtime with:
+## Read first
 
-- Express backend in `src/`
-- React/Electron operator UI in `ui/`
-- persisted task threads in `threads/`
-- persisted schedules in `schedules/`
-- persisted workflow sessions in `workflow-sessions/`
-- optional supervised self-update via `scripts/ender-supervisor.js`
+1. [`docs/README.md`](../docs/README.md)
+2. [`docs/architecture/overview.md`](../docs/architecture/overview.md)
+3. [`ROADMAP.md`](../ROADMAP.md) for current modernization continuity
+4. The matching compatibility record: [`API_CONTRACTS.md`](../API_CONTRACTS.md), [`PERSISTENCE.md`](../PERSISTENCE.md), or [`FRONTEND_ARCHITECTURE.md`](../FRONTEND_ARCHITECTURE.md)
+5. The smallest owning code boundary from [the repository map](repo-map.md)
 
-Main backend entrypoint: `src/server.js`
-Main UI entrypoint: `ui/src/App.jsx`
+## Mental model
 
-## 2. Read these first
+- `src/server.js` composes managers and lifecycle; `src/api/app.js` composes middleware and domain routers.
+- `TaskManager` coordinates lifecycle but extracted collaborators own execution preparation, approvals, storage, and transition policy.
+- `runTask()` assembles a run; `runAgentLoop()` iterates model/tool calls.
+- Interactive workflows are persisted server-defined state machines. Schedules replay prompt/thread/workflow targets. The task ledger is a separate durable work queue.
+- `App.jsx` composes page-level transitions; domain hooks own server, task, transcript, automation, ledger, and editor state.
+- Direct API access defaults to local clients. Pillar is the authenticated remote path.
 
-If you only have a few minutes, read in this order:
+## Before changing code
 
-1. `README.md`
-2. `src/server.js`
-3. `src/api/app.js`
-4. `src/runtime/taskManager.js`
-5. `src/runtime/runTask.js`
-6. `src/runtime/runAgentLoop.js`
-7. `src/workflows/workflowManager.js`
-8. `src/runtime/scheduleManager.js`
-9. `ui/src/App.jsx`
-10. `knowledge/*.md`
+Answer these questions:
 
-## 3. Core architecture in one screen
+- Which module owns the state and retry behavior?
+- Does this alter REST/SSE metadata, a shared workflow/schedule schema, or persisted records?
+- Does cancellation or shutdown need to propagate through the change?
+- Is an optional capability being confused with core readiness?
+- Which focused test proves the behavior before the full gate?
 
-Boot flow:
+## Verification
 
-- `loadConfig()` parses env
-- `TaskManager` loads persisted threads
-- `WorkflowManager` loads persisted workflow sessions
-- `ScheduleManager` loads persisted schedules and activates cron jobs
-- `SelfUpdateManager` connects to supervisor if configured
-- Express app exposes REST endpoints
-
-Runtime flow:
-
-- UI starts or continues a task
-- `TaskManager` creates/updates task state
-- `runTask()` assembles model + tools + ledger
-- `runAgentLoop()` runs iterative tool-calling
-- logs stream over SSE
-- approvals pause execution when needed
-- final result is persisted back to the thread
-
-## 4. Files that matter most by concern
-
-### Backend/API
-
-- `src/server.js`
-- `src/api/app.js`
-- `src/config.js`
-- `src/health/readiness.js`
-
-### Runtime
-
-- `src/runtime/taskManager.js`
-- `src/runtime/runTask.js`
-- `src/runtime/runAgentLoop.js`
-- `src/state/ledger.js`
-
-### Workflows/schedules
-
-- `src/workflows/workflowManager.js`
-- `src/workflows/jiraToRepoWorkflow.js`
-- `src/runtime/scheduleManager.js`
-- `src/shared/contracts.js`
-- `shared/contracts.json`
-
-### UI
-
-- `ui/src/App.jsx`
-- `ui/src/agentClient.js`
-- `ui/src/hooks/useTaskLogs.js`
-- `ui/src/components/WorkflowPanel.jsx`
-- `ui/src/components/SchedulePanel.jsx`
-- `ui/src/components/WorkflowStepRenderer.jsx`
-
-### Self-update
-
-- `scripts/ender-supervisor.js`
-- `src/selfUpdate/manager.js`
-- `src/selfUpdate/runner.js`
-- `src/tools/selfUpdateTools.js`
-
-## 5. Important mental models
-
-### Tasks are persisted threads
-
-Each task is a long-lived thread record with:
-
-- goal
-- status
-- logs
-- simplified conversation thread
-- pending approvals
-- workspace
-- parent/child task links
-
-Persisted in `threads/<id>.json`.
-
-### Workflows are server-defined state machines
-
-The UI renders generic workflow steps from backend-provided step payloads.
-If a new workflow stays within the shared step schema, UI changes may be minimal or unnecessary.
-
-### Schedules are cron wrappers around three target kinds
-
-A schedule can:
-
-- start a new prompt
-- continue a thread
-- replay a workflow with stored inputs
-
-### Self-update is special-case and supervisor-only
-
-Do not treat self-update like normal repo editing. It only works safely when:
-
-- Ender is launched with `npm run start:supervised`
-- the active task workspace is the Ender repo root
-
-## 6. High-risk boundaries
-
-Be careful when changing:
-
-- `shared/contracts.json`
-- `src/shared/contracts.js`
-- workflow step payload shapes
-- schedule target payload shapes
-- SSE event names from `TaskManager.sse()`
-- self-update protocol between backend and supervisor
-
-These affect backend/UI compatibility or restart safety.
-
-## 7. Existing built-in workflow
-
-`jira_to_repo_task` is the main built-in guided workflow.
-Stages:
-
-1. project
-2. board
-3. issue
-4. repo
-5. delivery
-6. jira_outcome
-7. complete
-
-Special behavior:
-
-- `interactive`: clone immediately, fail on occupied target dir
-- `schedule_config`: defer clone, store preview only
-- `scheduled_run`: clone during execution and auto-rename occupied target dirs
-
-## 8. How approvals work
-
-Approval-gated tools call back into `TaskManager._requestApproval()`.
-That:
-
-- stores approval metadata
-- sets task status to `awaiting_approval`
-- emits `approval_required` over SSE
-
-The UI resolves approval via `POST /tasks/:id/approvals/:approvalId`.
-
-## 9. How restart behavior works
-
-On server restart:
-
-- persisted tasks reload from disk
-- any task that was `running` or `awaiting_approval` is converted to `error`
-- a warning log is appended saying it was interrupted by restart
-
-This is intentional and tested.
-
-## 10. Fast verification guidance
-
-For most backend/runtime changes:
-
-- `npm test`
-- `npm run typecheck`
-- `npm run check`
-
-For UI or contract changes:
-
-- `npm run build`
-- optionally `npm run test:e2e`
-
-For self-update changes:
-
-- inspect `tests/self-update.test.js`
-- likely run at least `npm test`
-
-## 11. Best next step for a future thread
-
-Before coding, quickly answer:
-
-- Is this backend, UI, workflow, schedule, or self-update work?
-- Does it touch shared contracts?
-- Does it affect persisted state shape?
-- Does it affect SSE events or approval flow?
-- What is the smallest relevant test/verification set?
-
-## 12. Knowledge file index
-
-- `knowledge/repo-map.md`
-- `knowledge/architecture.md`
-- `knowledge/runtime-loop.md`
-- `knowledge/workflows-and-schedules.md`
-- `knowledge/ui-operator-console.md`
-- `knowledge/self-update.md`
-- `knowledge/testing-and-quality.md`
+Use [testing and quality](testing-and-quality.md) to select a focused suite. Run `npm run verify` before closing a broad milestone. Environment-specific evidence belongs in [`RELEASE_READINESS.md`](../RELEASE_READINESS.md), not in an assumption or a generic unit test result.

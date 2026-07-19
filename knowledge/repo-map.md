@@ -1,89 +1,47 @@
 # Repository Map
 
-## Top-level layout
+## Top level
 
-- `src/` — backend server, runtime loop, managers, tools, workflows, self-update
-- `ui/` — React UI and Electron packaging
-- `docs/` — user-facing docs, tutorials, architecture notes
-- `tests/` — backend regression tests
-- `scripts/` — dev launcher and external supervisor
-- `shared/` — JSON contracts shared by backend and UI
-- `threads/` — persisted task snapshots
-- `schedules/` — persisted cron schedules
-- `workflow-sessions/` — persisted interactive workflow sessions
-- `workspace/` — default working directory for generated/cloned work
+- `src/`: API, runtime, persistence, tools, workflows, Pillar, Beacon, and self-update
+- `ui/`: React operator console and Electron packaging
+- `tests/`: Node backend, lifecycle, contract, persistence, and boundary tests
+- `e2e/`: Playwright operator-flow and visual coverage
+- `scripts/`: launchers, versioning, environment smokes, and documentation validation
+- `shared/`: workflow/schedule contracts shared by backend and UI
+- `docs/`: maintained operator, deployment, reference, and architecture documentation
+- `knowledge/`: developer continuity addendum
+- `threads/`, `projects/`, `memories/`, `schedules/`, `task-ledger/`, `workflow-sessions/`: default local state
 
 ## Backend hotspots
 
-### Server and API
+- Composition: `src/server.js`, `src/api/app.js`
+- API routers: `src/api/routes/`
+- Validation and HTTP errors: `src/api/taskSchemas.js`, `src/api/http.js`
+- Access policy: `src/api/access.js`
+- Lifecycle coordinator: `src/runtime/taskManager.js`
+- Extracted task boundaries: `taskExecutionRunner.js`, `taskApprovalCoordinator.js`, `jsonTaskRepository.js`, `taskLifecycle.js`, `taskRecord.js`
+- Model/tool execution: `src/runtime/runTask.js`, `src/runtime/runAgentLoop.js`
+- Automation: `src/workflows/`, `src/runtime/scheduleManager.js`, `src/runtime/taskLedgerManager.js`
+- Record envelopes/migrations: `src/persistence/jsonRecord.js`
+- Shutdown: `src/runtime/shutdown.js`
+- Readiness: `src/health/readiness.js`
 
-- `src/server.js` — bootstraps config, managers, and Express app
-- `src/api/app.js` — all REST endpoints
-- `src/config.js` — env parsing, defaults, runtime OS description, system prompt wiring
-- `src/health/readiness.js` — readiness payload for LLM/integrations/self-update
+## Frontend hotspots
 
-### Runtime
+- Composition and navigation: `ui/src/App.jsx`, `ui/src/navigation.js`
+- API/SSE client: `ui/src/agentClient.js`
+- Domain state: `ui/src/hooks/`
+- Page/surface components: `ui/src/components/`
+- Shared UI primitives: `ui/src/components/ui/`
+- Tokens and layout: `ui/src/design-tokens.css`, `ui/src/styles.css`
+- Electron boundary: `ui/electron/main.cjs`, `ui/electron/preload.cjs`
 
-- `src/runtime/taskManager.js` — task lifecycle, SSE, approvals, persistence, reruns, follow-ups
-- `src/runtime/runTask.js` — assembles model + tools + ledger for a task
-- `src/runtime/runAgentLoop.js` — iterative model/tool loop with stall detection
-- `src/state/ledger.js` — in-memory plan/todo/fact/progress structure
+## Verification hotspots
 
-### Workflows and schedules
+- Backend suite: `tests/*.test.js`
+- Browser suite: `e2e/tests/*.spec.js`
+- Visual baselines: adjacent `*-snapshots/` directories
+- Release smokes: `scripts/release-environment-smoke.mjs`, `scripts/electron-smoke.mjs`
+- Docs gate: `scripts/check-docs.mjs`
 
-- `src/workflows/workflowManager.js` — workflow session lifecycle and persistence
-- `src/workflows/index.js` — static workflow registry
-- `src/workflows/jiraToRepoWorkflow.js` — built-in guided workflow
-- `src/runtime/scheduleManager.js` — cron-backed schedule persistence and execution
-- `src/shared/contracts.js` + `shared/contracts.json` — shared enums and schemas
-
-### Self-update
-
-- `scripts/ender-supervisor.js` — external supervisor process and control API
-- `src/selfUpdate/manager.js` — backend client for supervisor API
-- `src/selfUpdate/runner.js` — verify/restart/rollback flow
-- `src/tools/selfUpdateTools.js` — tools exposed to the agent
-
-### Tools
-
-Tool modules live in `src/tools/`.
-Important ones:
-
-- `fileTools.js`
-- `execTool.js`
-- `gitTools.js`
-- `githubTools.js`
-- `gitlabTools.js`
-- `jiraTools.js`
-- `confluenceTools.js`
-- `googleDriveTools.js`
-- `emailTools.js`
-- `cronTools.js`
-- `threadTools.js`
-- `ledgerTools.js`
-- `selfUpdateTools.js`
-- `webTools.js`
-
-## UI hotspots
-
-- `ui/src/App.jsx` — main shell, mode switching, task selection, health polling
-- `ui/src/agentClient.js` — REST/SSE client
-- `ui/src/components/WorkflowPanel.jsx` — guided workflow UX
-- `ui/src/components/SchedulePanel.jsx` — schedule creation/editing UX
-- `ui/src/components/WorkflowStepRenderer.jsx` — generic renderer for workflow step schema
-- `ui/src/hooks/useTaskLogs.js` — live transcript stream handling
-
-## Tests
-
-- `tests/group1-bugs.test.js` — workflow/repo edge cases and clone behavior
-- `tests/group2-runtime.test.js` — workflow persistence, schedule persistence, restart behavior, approvals
-- `tests/group3-contracts.test.js` — shared contract validation
-- `tests/self-update.test.js` — checkpoint and rollback behavior
-
-## Docs worth cross-checking
-
-- `docs/architecture/overview.md`
-- `docs/architecture/runtime-loop.md`
-- `docs/architecture/workflows-and-schedules.md`
-- `docs/guides/custom-workflow.md`
-- `docs/reference/workflow-step-schema.md`
+For public behavior, start with [`docs/README.md`](../docs/README.md) rather than inferring it from this map.

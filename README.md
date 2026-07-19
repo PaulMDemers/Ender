@@ -14,7 +14,7 @@ It is designed for operator-driven work: launch a task against a workspace, watc
 - Exposes a local API for threads, live logs, approvals, workflows, schedules, health, and workspace browsing.
 - Adds a persisted global task ledger that can queue work, auto-dispatch tasks, and track which thread completed each item.
 - Ships a React UI and an Electron desktop app built from the same frontend.
-- Persists threads, schedules, and workflow sessions to JSON on disk so they survive server restarts.
+- Persists threads, projects, memories, schedules, task-ledger entries, and workflow sessions to versioned JSON records so they survive server restarts.
 - Supports guided workflows that gather structured inputs before starting work.
 - Supports recurring automation for three targets: start a new prompt, continue an existing thread, or run a workflow on a cron cadence.
 - Works with multiple LLM backends: OpenAI, AWS Bedrock, Azure OpenAI, Ollama, and ACP-compliant agents (Claude Code, etc.)
@@ -77,6 +77,8 @@ ender/
 ```
 
 ## Quickstart
+
+The maintained operator, architecture, deployment, and troubleshooting path starts at [docs/README.md](docs/README.md).
 
 ### Prerequisites
 
@@ -162,12 +164,17 @@ Recommended self-update flow:
 ```bash
 npm test
 npm run typecheck
+npm run docs:check
 npm run verify
+npm audit --omit=dev
 ```
 
 - `npm test` runs the backend regression suite.
 - `npm run typecheck` runs the targeted TypeScript check for the migrated runtime slice.
-- `npm run verify` runs tests, typecheck, backend syntax checks, and the UI production build.
+- `npm run docs:check` validates maintained local Markdown links and referenced root npm scripts.
+- `npm run verify` checks version synchronization, documentation, backend tests, typecheck, syntax, the UI production build, and Playwright browser coverage.
+- `npm audit --omit=dev` checks the production dependency graph against the current npm advisory database.
+- Environment-specific release checks and their prerequisites are tracked in [`RELEASE_READINESS.md`](RELEASE_READINESS.md).
 
 ## Contributing and Releases
 
@@ -211,7 +218,6 @@ The desktop app lives in [`ui/`](ui/) and packages the same React UI with Electr
 After the root install step above, the `ui` dependencies are already installed.
 
 ```bash
-cd ui
 npm run electron:dev
 ```
 
@@ -220,6 +226,14 @@ Packaging commands:
 ```bash
 npm run electron:pack
 npm run electron:dist
+```
+
+Smoke the built renderer/preload boundary before packaging, then smoke the current-platform unpacked package:
+
+```bash
+npm run smoke:electron
+npm run electron:pack
+npm run smoke:electron:packaged
 ```
 
 Current build targets:
@@ -240,12 +254,18 @@ The compose stack includes:
 
 - `Dockerfile.api` for the API/runtime
 - [`ui/Dockerfile`](ui/Dockerfile) for the frontend
-- bind mounts for `./threads`, `./workspace`, `./schedules`, and `./workflow-sessions`
+- bind mounts for `./threads`, `./workspace`, `./schedules`, `./task-ledger`, and `./workflow-sessions`
 
 Published ports:
 
 - API: `3000`
 - UI: `5173`
+
+The compose profile explicitly uses `ENDER_API_ACCESS_MODE=open` because traffic forwarded from the host is not loopback inside the API container. Its browser CORS allowlist is limited to `http://localhost:5173`; protect port `3000` with the host firewall or a trusted deployment boundary. For authenticated remote use, prefer Pillar instead of publishing the API directly.
+
+For isolated image build/runtime checks that do not load the repository `.env`, use the commands in [`RELEASE_READINESS.md`](RELEASE_READINESS.md).
+
+For connection, readiness, Docker exposure, editor, automation, and persistence diagnosis, use the [operator troubleshooting guide](docs/guides/troubleshooting.md).
 
 ![Ender schedule manager](docs/website/screenshots/schedule-manager-view.jpg)
 
@@ -355,6 +375,10 @@ The local API posts approval and terminal task events to Beacon best-effort. `GE
 ### Core Runtime
 
 - `PORT`: API port. Default `3000`.
+- `ENDER_API_ACCESS_MODE`: `local` rejects non-loopback API and WebSocket clients; `open` allows direct network clients. Default `local`. Pillar's outbound connector continues to work in local mode.
+- `ENDER_API_BIND_HOST`: HTTP listen address. Default `0.0.0.0`; access mode is enforced independently.
+- `ENDER_CORS_ORIGINS`: optional comma-separated browser origin allowlist. Local mode automatically permits loopback origins; open mode allows all origins only when no list is configured.
+- `ENDER_SHUTDOWN_TIMEOUT_MS`: maximum graceful cleanup window before remaining HTTP connections are forced closed. Default `10000`.
 - `AGENT_WORKDIR`: default working directory for generated files and cloned repos. Default `./workspace`.
 - `AGENT_WORKSPACE_BASE`: root used by the workspace picker. Default `..`.
 - `AGENT_THREADS_DIR`: thread persistence directory. Default `./threads`.
@@ -568,7 +592,21 @@ Health and discovery:
 
 - `GET /health`
 - `GET /workspaces`
+- `GET /llm-profiles`
 - `GET /filesystem/directories?path=/optional/absolute/path`
+- `GET /pillar/status`
+- `GET /beacon/status`
+
+Projects and memories:
+
+- `GET /projects`
+- `POST /projects`
+- `PUT /projects/:id`
+- `POST /projects/:id/ensure-workspace`
+- `GET /memories`
+- `POST /memories`
+- `PUT /memories/:id`
+- `DELETE /memories/:id`
 
 Threads:
 
@@ -582,6 +620,9 @@ Threads:
 - `GET /tasks/:id/logs?from=0`
 - `GET /tasks/:id/stream`
 - `POST /tasks/:id/approvals/:approvalId`
+- `GET /tasks/:id/code-server`
+- `POST /tasks/:id/code-server`
+- `DELETE /tasks/:id/code-server`
 
 Workflows:
 
@@ -598,6 +639,15 @@ Schedules:
 - `PUT /schedules/:id`
 - `POST /schedules/:id/run`
 - `DELETE /schedules/:id`
+
+Task ledger:
+
+- `GET /task-ledger`
+- `GET /task-ledger/:id`
+- `POST /task-ledger`
+- `PUT /task-ledger/:id`
+- `POST /task-ledger/:id/run`
+- `DELETE /task-ledger/:id`
 
 Self-update:
 
@@ -630,6 +680,7 @@ Start here:
 - [Custom workflow guide](docs/guides/custom-workflow.md)
 - [Workflow UI step schema reference](docs/reference/workflow-step-schema.md)
 - [Architecture overview](docs/architecture/overview.md)
+- [Release readiness matrix](RELEASE_READINESS.md)
 
 ## Workflow Development
 
@@ -647,8 +698,10 @@ Before publishing publicly, confirm:
 
 - `.env` is not committed
 - provider credentials are removed from local examples
-- `threads/`, `schedules/`, `workflow-sessions/`, and `workspace/` do not contain sensitive data
+- `threads/`, `projects/`, `memories/`, `schedules/`, `task-ledger/`, `workflow-sessions/`, and `workspace/` do not contain sensitive data
 - desktop packaging assets are the intended release icons
+- `npm run verify`, both npm audits, and the applicable checks in [`RELEASE_READINESS.md`](RELEASE_READINESS.md) pass
+- platform signing, notarization or installer validation is recorded for the target artifact
 
 ---
 

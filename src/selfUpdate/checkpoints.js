@@ -2,6 +2,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const cp = require("node:child_process");
 const { randomUUID } = require("node:crypto");
+const { migratePersistedRecord, versionPersistedRecord } = require("../persistence/jsonRecord");
 
 function runGit(args, cwd) {
   return new Promise((resolve) => {
@@ -78,14 +79,28 @@ async function createCheckpoint(rootDir, storageDir, label) {
   };
 
   await fs.mkdir(storageDir, { recursive: true });
-  await fs.writeFile(path.join(storageDir, `${id}.json`), JSON.stringify(checkpoint, null, 2), "utf8");
+  await fs.writeFile(
+    path.join(storageDir, `${id}.json`),
+    JSON.stringify(versionPersistedRecord("selfUpdateCheckpoint", checkpoint), null, 2),
+    "utf8"
+  );
   return { ok: true, checkpoint };
 }
 
 async function readCheckpoint(storageDir, checkpointId) {
   try {
-    const raw = await fs.readFile(path.join(storageDir, `${checkpointId}.json`), "utf8");
-    return { ok: true, checkpoint: JSON.parse(raw) };
+    const file = path.join(storageDir, `${checkpointId}.json`);
+    const raw = await fs.readFile(file, "utf8");
+    const migrated = migratePersistedRecord(JSON.parse(raw), "selfUpdateCheckpoint");
+    const { recordVersion: _recordVersion, ...checkpoint } = migrated.record;
+    if (migrated.migrated) {
+      await fs.writeFile(
+        file,
+        JSON.stringify(versionPersistedRecord("selfUpdateCheckpoint", checkpoint), null, 2),
+        "utf8"
+      );
+    }
+    return { ok: true, checkpoint };
   } catch (err) {
     if (err?.code === "ENOENT") {
       return { ok: false, error: "checkpoint_not_found", message: "Checkpoint not found" };

@@ -1,6 +1,7 @@
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { randomUUID } = require("node:crypto");
+const { migratePersistedRecord, versionPersistedRecord } = require("../persistence/jsonRecord");
 
 const TERMINAL_TASK_STATUSES = new Set(["done", "error", "canceled", "terminated", "blocked", "needs_input"]);
 const EDITABLE_LEDGER_STATUSES = new Set(["pending", "completed", "failed", "canceled", "blocked", "needs_input"]);
@@ -792,9 +793,10 @@ class TaskLedgerManager {
       const filePath = path.join(this.ledgerDir, file);
       try {
         const raw = await fs.readFile(filePath, "utf8");
-        const data = JSON.parse(raw);
+        const migrated = migratePersistedRecord(JSON.parse(raw), "taskLedgerEntry");
+        const data = migrated.record;
         if (!data?.id || this.entries.has(String(data.id))) continue;
-        this.entries.set(String(data.id), {
+        const hydrated = {
           id: String(data.id),
           title: String(data.title || deriveTitle(data.prompt || "")),
           prompt: String(data.prompt || ""),
@@ -818,7 +820,9 @@ class TaskLedgerManager {
           lastError: data.lastError ? String(data.lastError) : null,
           result: data.result ?? null,
           lifecycle: ensureLifecycle(data.lifecycle, data.updatedAt || data.createdAt || new Date().toISOString())
-        });
+        };
+        this.entries.set(hydrated.id, hydrated);
+        if (migrated.migrated) await this._persistEntry(hydrated);
       } catch (err) {
         console.warn(`Failed to load task ledger entry ${filePath}: ${err.message || String(err)}`);
       }
@@ -826,7 +830,11 @@ class TaskLedgerManager {
   }
 
   async _persistEntry(entry) {
-    const snapshot = JSON.stringify(this._serialize(entry), null, 2);
+    const snapshot = JSON.stringify(
+      versionPersistedRecord("taskLedgerEntry", this._serialize(entry)),
+      null,
+      2
+    );
     const target = this._entryFile(entry.id);
     const temp = `${target}.tmp`;
 

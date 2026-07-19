@@ -2,6 +2,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { randomUUID } = require("node:crypto");
 const { sanitizeJsonValue, sanitizeString } = require("../utils/jsonSafe");
+const { migratePersistedRecord, versionPersistedRecord } = require("../persistence/jsonRecord");
 
 const SCOPE_VALUES = new Set(["global", "project", "thread"]);
 const KIND_VALUES = new Set(["fact", "preference", "summary", "resource", "note"]);
@@ -259,9 +260,16 @@ class MemoryManager {
     for (const entry of entries.filter((item) => item.isFile() && item.name.endsWith(".json"))) {
       const filePath = path.join(this.memoriesDir, entry.name);
       try {
-        const data = JSON.parse(await fs.readFile(filePath, "utf8"));
+        const migrated = migratePersistedRecord(
+          JSON.parse(await fs.readFile(filePath, "utf8")),
+          "memory"
+        );
+        const data = migrated.record;
         const memory = this._hydrate(data);
-        if (memory.body) this.memories.set(memory.id, memory);
+        if (memory.body) {
+          this.memories.set(memory.id, memory);
+          if (migrated.migrated) await this._persistMemory(memory);
+        }
       } catch (err) {
         console.warn(`Failed to load memory ${filePath}: ${err.message || String(err)}`);
       }
@@ -269,7 +277,7 @@ class MemoryManager {
   }
 
   async _persistMemory(memory) {
-    const snapshot = JSON.stringify(this._serialize(memory), null, 2);
+    const snapshot = JSON.stringify(versionPersistedRecord("memory", this._serialize(memory)), null, 2);
     const target = this._memoryFile(memory.id);
     const temp = `${target}.tmp`;
     const writeMemory = async () => {

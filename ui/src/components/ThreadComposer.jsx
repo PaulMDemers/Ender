@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { MAX_ATTACHMENTS, prepareMessageAttachments } from "../utils/messageAttachments";
+import DisclosureButton from "./ui/DisclosureButton";
+import StateNotice from "./ui/StateNotice";
 
 function getStatusLabel(status) {
   if (!status) return "idle";
@@ -12,6 +14,12 @@ function getAttachmentLabel(attachment) {
   if (attachment.kind === "image") return "image";
   if (attachment.kind === "text") return "text";
   return "file";
+}
+
+function getMemoryLabel(memoryMode) {
+  if (memoryMode === "manual") return "Manual memory";
+  if (memoryMode === "off") return "Memory off";
+  return "Automatic memory";
 }
 
 export default function ThreadComposer({
@@ -30,10 +38,15 @@ export default function ThreadComposer({
   const [memoryMode, setMemoryMode] = useState(currentMemoryMode || "auto");
   const [attachmentError, setAttachmentError] = useState("");
   const [attachmentBusy, setAttachmentBusy] = useState(false);
+  const [runSettingsOpen, setRunSettingsOpen] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState("");
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
 
   const canSend = Boolean(text.trim() || attachments.length);
+  const selectedProfile = (llmProfiles || []).find((profile) => profile.id === llmProfileId);
+  const settingsSummary = `${selectedProfile?.label || selectedProfile?.backend || "Server default"} · ${getMemoryLabel(memoryMode)}`;
 
   useEffect(() => {
     setLlmProfileId(currentLlmProfileId || "");
@@ -45,23 +58,31 @@ export default function ThreadComposer({
 
   const submit = async (event) => {
     event?.preventDefault?.();
-    if (!canSend || disabled || attachmentBusy) return;
+    if (!canSend || disabled || attachmentBusy || sending) return;
 
     const prompt = text.trim();
     const content = attachments.flatMap((attachment) => attachment.blocks || []);
-    await onSend?.({
-      prompt,
-      ...(content.length ? { content } : {}),
-      ...(llmProfileId ? { llmProfileId } : {}),
-      memoryMode
-    });
-    setText("");
-    setAttachments([]);
-    setAttachmentError("");
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
+    setSending(true);
+    setSendError("");
+    try {
+      await onSend?.({
+        prompt,
+        ...(content.length ? { content } : {}),
+        ...(llmProfileId ? { llmProfileId } : {}),
+        memoryMode
+      });
+      setText("");
+      setAttachments([]);
+      setAttachmentError("");
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+      textareaRef.current?.focus({ preventScroll: true });
+    } catch (error) {
+      setSendError(error?.message || "Unable to send this follow-up");
+    } finally {
+      setSending(false);
     }
-    textareaRef.current?.focus({ preventScroll: true });
   };
 
   const attachFiles = async (event) => {
@@ -99,26 +120,41 @@ export default function ThreadComposer({
         <div className="composerContext mono">{workspace || "No workspace scope"}</div>
       </div>
 
-      <div className="composerTop">
-        <label className="workflowField composerInlineField">
-          <span className="workflowFieldLabel">Backend profile</span>
-          <select className="consoleInput" value={llmProfileId} onChange={(event) => setLlmProfileId(event.target.value)}>
-            {(llmProfiles || []).map((profile) => (
-              <option key={profile.id} value={profile.id}>
-                {profile.label} · {profile.backend}{profile.model ? ` · ${profile.model}` : ""}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="workflowField composerInlineField">
-          <span className="workflowFieldLabel">Memory</span>
-          <select className="consoleInput" value={memoryMode} onChange={(event) => setMemoryMode(event.target.value)}>
-            <option value="auto">Auto</option>
-            <option value="manual">Manual tools only</option>
-            <option value="off">Off</option>
-          </select>
-        </label>
+      <div className="composerSettingsBar">
+        <div className="composerSettingsSummary mono">{settingsSummary}</div>
+        <DisclosureButton
+          className="secondaryButton composerSettingsButton"
+          expanded={runSettingsOpen}
+          controls="thread-run-settings"
+          label={runSettingsOpen ? "Hide follow-up run settings" : "Review follow-up run settings"}
+          onClick={() => setRunSettingsOpen((value) => !value)}
+        >
+          {runSettingsOpen ? "Hide settings" : "Run settings"}
+        </DisclosureButton>
       </div>
+
+      {runSettingsOpen ? (
+        <div id="thread-run-settings" className="composerSettingsGrid">
+          <label className="workflowField composerInlineField">
+            <span className="workflowFieldLabel">Backend profile</span>
+            <select className="consoleInput" value={llmProfileId} onChange={(event) => setLlmProfileId(event.target.value)}>
+              {(llmProfiles || []).map((profile) => (
+                <option key={profile.id} value={profile.id}>
+                  {profile.label} · {profile.backend}{profile.model ? ` · ${profile.model}` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="workflowField composerInlineField">
+            <span className="workflowFieldLabel">Memory</span>
+            <select className="consoleInput" value={memoryMode} onChange={(event) => setMemoryMode(event.target.value)}>
+              <option value="auto">Auto</option>
+              <option value="manual">Manual tools only</option>
+              <option value="off">Off</option>
+            </select>
+          </label>
+        </div>
+      ) : null}
 
       <input
         ref={fileInputRef}
@@ -159,12 +195,25 @@ export default function ThreadComposer({
 
       {attachmentError ? <div className="composerAttachmentError">{attachmentError}</div> : null}
 
+      {sendError ? (
+        <StateNotice
+          tone="danger"
+          title="Message not sent"
+          detail={sendError}
+          actionLabel="Retry message"
+          onAction={() => submit()}
+          busy={sending}
+          compact
+        />
+      ) : null}
+
       <div className="composerInputRow">
         <textarea
           ref={textareaRef}
           value={text}
           className="composerTextarea"
           rows={2}
+          aria-label="Follow-up message"
           placeholder="Continue this thread. Shift+Enter adds a new line."
           onChange={(event) => setText(event.target.value)}
           onKeyDown={(event) => {
@@ -178,7 +227,7 @@ export default function ThreadComposer({
           <button
             type="button"
             className="secondaryButton composerButton"
-            disabled={disabled || attachmentBusy || attachments.length >= MAX_ATTACHMENTS}
+            disabled={disabled || sending || attachmentBusy || attachments.length >= MAX_ATTACHMENTS}
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => fileInputRef.current?.click()}
           >
@@ -187,10 +236,10 @@ export default function ThreadComposer({
           <button
             type="submit"
             className="primaryButton composerButton"
-            disabled={disabled || attachmentBusy || !canSend}
+            disabled={disabled || sending || attachmentBusy || !canSend}
             onMouseDown={(event) => event.preventDefault()}
           >
-            Send
+            {sending ? "Sending..." : "Send"}
           </button>
         </div>
       </div>

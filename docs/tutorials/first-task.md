@@ -12,9 +12,10 @@ This tutorial covers the fastest path from a clean checkout to a running Ender t
 
 ```bash
 npm install
-npm --prefix ui install
 cp .env.example .env
 ```
+
+The root install includes the `ui` workspace.
 
 ## 2. Configure a backend
 
@@ -49,15 +50,16 @@ You should see `services.llm.ready: true` for your chosen backend.
 
 In the UI:
 
-1. Open the new task composer.
+1. Choose **New thread** in the primary navigation.
 2. Enter a goal such as:
 
 ```text
 Inspect this repo, summarize the major modules, and list the first three cleanup opportunities.
 ```
 
-3. Optionally select a workspace.
-4. Submit the task.
+3. Optionally select a project and workspace.
+4. Open **Review run settings** only when you need a non-default backend profile or memory mode.
+5. Select **Launch task**.
 
 ## 6. Watch the live transcript
 
@@ -106,3 +108,4 @@ Task stops early:
 - Check `AGENT_STALL_LIMIT`
 - Review the thread log for missing tools or approvals
 
+For connection states, capability diagnostics, launch recovery, and persistence issues, see [Troubleshoot Ender](../guides/troubleshooting.md).

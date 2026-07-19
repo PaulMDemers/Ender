@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createProject, getHealth, listDirectories, startTask } from "../agentClient";
+import DisclosureButton from "./ui/DisclosureButton";
+import StateNotice from "./ui/StateNotice";
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -50,8 +52,14 @@ export default function NewTaskForm({
   const [pickerParent, setPickerParent] = useState(null);
   const [pickerItems, setPickerItems] = useState([]);
   const [pickerLoading, setPickerLoading] = useState(false);
+  const [runSettingsOpen, setRunSettingsOpen] = useState(false);
   const taRef = useRef(null);
   const lastWorkspaceDefaultRef = useRef(String(serverWorkspacePath || "").trim());
+  const selectedProfile = (llmProfiles || []).find((profile) => profile.id === llmProfileId);
+  const runSettingsSummary = [
+    selectedProfile?.label || selectedProfile?.backend || "Server default",
+    memoryMode === "auto" ? "Automatic memory" : memoryMode === "manual" ? "Manual memory" : "Memory off"
+  ].join(" · ");
 
   const autosize = () => {
     const el = taRef.current;
@@ -214,6 +222,7 @@ export default function NewTaskForm({
                 <div className="workspacePickerRow">
                   <select
                     className="consoleInput"
+                    aria-label="Project"
                     value={projectId}
                     onChange={(event) => setProjectId(event.target.value)}
                   >
@@ -319,34 +328,52 @@ export default function NewTaskForm({
                 </div>
               ) : null}
 
-              <div className="launchWorkspace">
-                <label className="launchField">
-                  <span className="fieldLabel">Backend profile</span>
-                  <select
-                    className="consoleInput"
-                    value={llmProfileId}
-                    onChange={(event) => setLlmProfileId(event.target.value)}
-                  >
-                    {(llmProfiles || []).map((profile) => (
-                      <option key={profile.id} value={profile.id}>
-                        {profile.label} · {profile.backend}{profile.model ? ` · ${profile.model}` : ""}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="launchField">
-                  <span className="fieldLabel">Memory loading</span>
-                  <select
-                    className="consoleInput"
-                    value={memoryMode}
-                    onChange={(event) => setMemoryMode(event.target.value)}
-                  >
-                    <option value="auto">Auto</option>
-                    <option value="manual">Manual tools only</option>
-                    <option value="off">Off</option>
-                  </select>
-                </label>
+              <div className="launchSettingsDisclosure">
+                <div className="launchSettingsCopy">
+                  <span className="fieldLabel">Run settings</span>
+                  <span className="fieldHint">{runSettingsSummary}</span>
+                </div>
+                <DisclosureButton
+                  className="secondaryButton launchSettingsButton"
+                  expanded={runSettingsOpen}
+                  controls="new-task-run-settings"
+                  label={runSettingsOpen ? "Hide run settings" : "Review run settings"}
+                  onClick={() => setRunSettingsOpen((value) => !value)}
+                >
+                  {runSettingsOpen ? "Hide settings" : "Review settings"}
+                </DisclosureButton>
               </div>
+
+              {runSettingsOpen ? (
+                <div id="new-task-run-settings" className="launchSettingsGrid">
+                  <label className="launchField">
+                    <span className="fieldLabel">Backend profile</span>
+                    <select
+                      className="consoleInput"
+                      value={llmProfileId}
+                      onChange={(event) => setLlmProfileId(event.target.value)}
+                    >
+                      {(llmProfiles || []).map((profile) => (
+                        <option key={profile.id} value={profile.id}>
+                          {profile.label} · {profile.backend}{profile.model ? ` · ${profile.model}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="launchField">
+                    <span className="fieldLabel">Memory loading</span>
+                    <select
+                      className="consoleInput"
+                      value={memoryMode}
+                      onChange={(event) => setMemoryMode(event.target.value)}
+                    >
+                      <option value="auto">Auto</option>
+                      <option value="manual">Manual tools only</option>
+                      <option value="off">Off</option>
+                    </select>
+                  </label>
+                </div>
+              ) : null}
             </div>
 
             <aside className="sidePanel launchSidePanel">
@@ -386,7 +413,16 @@ export default function NewTaskForm({
             </button>
           </div>
 
-          {error ? <div className="errorBanner">{error}</div> : null}
+          {error ? (
+            <StateNotice
+              tone="danger"
+              title="Task could not start"
+              detail={error}
+              actionLabel="Try again"
+              onAction={() => submit()}
+              busy={busy}
+            />
+          ) : null}
         </form>
       </div>
     </section>

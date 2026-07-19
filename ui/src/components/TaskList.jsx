@@ -1,4 +1,5 @@
 import { useState } from "react";
+import DisclosureButton from "./ui/DisclosureButton";
 
 function getStatusTone(status) {
   const normalized = String(status || "idle");
@@ -73,6 +74,7 @@ export default function TaskList({
             <button
               type="button"
               className="threadCardMain"
+              aria-current={selected ? "true" : undefined}
               onClick={() => {
                 onSelect?.(task.id);
               }}
@@ -81,6 +83,7 @@ export default function TaskList({
                 <div className="threadStatusRow">
                   <span className={`statusPill ${getStatusTone(task.status)}`}>{getStatusLabel(task.status)}</span>
                   {pinned ? <span className="threadTag">Pinned</span> : null}
+                  {task.pendingApprovalCount ? <span className="threadTag attention">Approval</span> : null}
                 </div>
                 <span className="threadTimestamp mono">{formatTimestamp(task.finishedAt || task.startedAt)}</span>
               </div>
@@ -99,19 +102,20 @@ export default function TaskList({
               ) : null}
             </button>
             <div className="threadCardFooter">
-              <button
-                type="button"
+              <DisclosureButton
                 className="summaryToggle threadEntryToggle"
-                aria-label={expanded ? "Collapse thread entry" : "Expand thread entry"}
-                title={expanded ? "Collapse thread entry" : "Expand thread entry"}
+                expanded={expanded}
+                controls={`thread-details-${task.id}`}
+                label={expanded ? "Collapse thread entry" : "Expand thread entry"}
                 onClick={() => toggleExpanded(task.id)}
               >
+                <span className="threadEntryToggleLabel">{expanded ? "Hide" : "Details"}</span>
                 <span className={`summaryToggleIcon ${expanded ? "expanded" : "collapsed"}`} aria-hidden="true" />
-              </button>
+              </DisclosureButton>
             </div>
             {expanded ? (
               <>
-                <div className="threadCardDetails">
+                <div id={`thread-details-${task.id}`} className="threadCardDetails">
                   <div className="threadCardMeta">
                     <span className="mono">{task.id}</span>
                     <span className="mono">runs {task.runCount || 1}</span>

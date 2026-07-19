@@ -9,13 +9,14 @@ function formatTimestamp(value) {
 
 export default function ApprovalPrompt({ approval, onApprove, onDeny }) {
   if (!approval) return null;
+  const titleId = `approval-title-${approval.id}`;
 
   return (
-    <section className="approvalCard">
+    <section className="approvalCard approvalCardSticky" role="alert" aria-labelledby={titleId}>
       <div className="approvalHeader">
         <div>
           <div className="workflowBadge">APPROVAL REQUIRED</div>
-          <div className="approvalTitle">{approval.title || "Sensitive action requested"}</div>
+          <h2 id={titleId} className="approvalTitle">{approval.title || "Sensitive action requested"}</h2>
         </div>
         <div className="approvalCode mono">{approval.type || "sensitive_action"} · {String(approval.id || "").slice(0, 8)}</div>
       </div>

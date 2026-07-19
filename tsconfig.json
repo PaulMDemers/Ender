@@ -15,8 +15,28 @@
     "types": ["node"]
   },
   "include": [
+    "src/api/access.js",
+    "src/api/app.js",
+    "src/api/codeServerProxy.js",
+    "src/api/http.js",
+    "src/api/routes/automationRoutes.js",
+    "src/api/routes/contextRoutes.js",
+    "src/api/routes/systemRoutes.js",
+    "src/api/routes/taskLedgerRoutes.js",
+    "src/api/routes/taskRoutes.js",
+    "src/api/taskSchemas.js",
     "src/config.js",
+    "src/persistence/jsonRecord.js",
+    "src/runtime/jsonTaskRepository.js",
+    "src/runtime/shutdown.js",
+    "src/runtime/taskApprovalCoordinator.js",
+    "src/runtime/taskExecutionRunner.js",
+    "src/runtime/taskLifecycle.js",
+    "src/runtime/taskManager.js",
+    "src/runtime/taskRecord.js",
+    "src/shared/apiContracts.js",
     "src/shared/contracts.js",
+    "src/utils/abort.js",
     "src/workflows/workflowManager.js"
   ]
 }

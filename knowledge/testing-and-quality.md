@@ -1,90 +1,32 @@
 # Testing and Quality
 
-## Package scripts
+## Core gates
 
-From root `package.json`:
+- `npm test`: Node backend and boundary suite
+- `npm run typecheck`: maintained targeted TypeScript boundary
+- `npm run check`: syntax checks for production and smoke entrypoints
+- `npm run docs:check`: maintained Markdown link and root-script references
+- `npm run build`: production UI build
+- `npm run test:e2e`: Playwright operator-flow and visual suite
+- `npm run verify`: version, docs, backend, typecheck, syntax, build, and browser gates in one command
 
-- `npm run dev` — starts API and UI together
-- `npm run start` — starts backend only
-- `npm run start:supervised` — starts external supervisor + child backend
-- `npm test` — backend regression tests via Node test runner
-- `npm run typecheck` — TypeScript check
-- `npm run check` — syntax checks for key backend files
-- `npm run build` — UI build
-- `npm run verify` — full verification: tests + typecheck + syntax + build + e2e
-- `npm run test:e2e` — Playwright end-to-end tests
+## Focused test selection
 
-## Test suite layout
+- API/router changes: `tests/task-api.test.js`, `tests/api-router-boundaries.test.js`, `tests/api-contracts.test.js`
+- Task lifecycle/execution/approval: `tests/task-lifecycle.test.js`, `tests/task-execution-runner.test.js`, `tests/task-approval-coordinator.test.js`, `tests/lifecycle-security.test.js`
+- Persistence: `tests/task-repository.test.js`, `tests/persistence-contracts.test.js`
+- Runtime/tools: `tests/tool-runtime-regressions.test.js`
+- Pillar/Beacon: `tests/pillar.test.js`, related contract tests
+- UI state/flows: the matching file under `e2e/tests/`
+- Frontend ownership rules and suite map: [`FRONTEND_ARCHITECTURE.md`](../FRONTEND_ARCHITECTURE.md)
 
-### `tests/group1-bugs.test.js`
+## Release/environment gates
 
-Covers:
+- `npm run smoke:release:local`: direct API, built browser assets, and real local legacy Pillar relay
+- `npm run smoke:electron`: installed Electron renderer/preload boundary
+- `npm run electron:pack` plus `npm run smoke:electron:packaged`: current-platform unpacked app
+- Docker and target-owner commands: [`RELEASE_READINESS.md`](../RELEASE_READINESS.md)
 
-- rerun preserving original goal after follow-up prompts
-- `schedule_config` repo step deferring clone
-- `scheduled_run` repo step auto-renaming occupied directories
-- interactive repo step collision errors
-- GitHub auth header injection during clone
+## Change expectations
 
-### `tests/group2-runtime.test.js`
-
-Covers:
-
-- workflow session persistence and reload
-- non-persistence of `scheduled_run` sessions
-- schedule last-run persistence
-- task restart interruption behavior
-- approval flow resuming task execution
-
-### `tests/group3-contracts.test.js`
-
-Covers:
-
-- shared enum definitions
-- workflow-backed schedule schema validation
-- workflow session schema validation
-
-### `tests/self-update.test.js`
-
-Covers:
-
-- checkpoint creation and rollback
-- refusal to checkpoint dirty repos
-- rollback on verify failure
-- rollback on unhealthy restart after apply
-
-## Quality expectations inferred from repo
-
-- backend behavior is regression-tested for workflow/schedule/self-update edge cases
-- shared contracts are treated as important compatibility boundaries between backend and UI
-- `npm run verify` is the intended high-confidence gate before restart or release
-- self-update flows assume verification before promotion
-
-## Useful operational checks
-
-When changing backend/runtime behavior, likely relevant checks are:
-
-- `npm test`
-- `npm run typecheck`
-- `npm run check`
-
-When changing UI or shared contracts, also run:
-
-- `npm run build`
-- possibly `npm run test:e2e`
-
-When changing self-update behavior, inspect:
-
-- `tests/self-update.test.js`
-- `scripts/ender-supervisor.js`
-- `src/selfUpdate/*`
-
-## Known contract boundaries
-
-Be careful when changing:
-
-- `shared/contracts.json`
-- `src/shared/contracts.js`
-- workflow step payload shapes
-- schedule target payload shapes
-- task SSE event names used by the UI
+Run the smallest focused test while iterating, then `npm run verify` before closing a broad milestone. Update a visual baseline only after inspecting the rendered change. When a contract or persisted shape changes, add current, legacy, malformed, and unsupported-future coverage as applicable.

@@ -3,6 +3,7 @@ const path = require("node:path");
 const { randomUUID } = require("node:crypto");
 const cron = require("node-cron");
 const { contractDefinitions, scheduleInputSchema } = require("../shared/contracts");
+const { migratePersistedRecord, versionPersistedRecord } = require("../persistence/jsonRecord");
 
 class ScheduleManager {
   constructor({ config, taskManager, workflowManager }) {
@@ -112,6 +113,10 @@ class ScheduleManager {
     const schedule = this.schedules.get(String(id));
     if (!schedule) return { ok: false, error: "not_found" };
     return this._execute(schedule);
+  }
+
+  stop() {
+    for (const id of [...this.jobs.keys()]) this._deactivate(id);
   }
 
   async _execute(schedule) {
@@ -312,7 +317,8 @@ class ScheduleManager {
       const filePath = path.join(this.schedulesDir, file.name);
       try {
         const raw = await fs.readFile(filePath, "utf8");
-        const parsed = JSON.parse(raw);
+        const migrated = migratePersistedRecord(JSON.parse(raw), "schedule");
+        const parsed = migrated.record;
         if (!parsed?.id) continue;
         const candidate = this._hydrate(parsed);
         const valid = this._validateInput({
@@ -325,6 +331,7 @@ class ScheduleManager {
         });
         if (!valid.ok) continue;
         this.schedules.set(candidate.id, candidate);
+        if (migrated.migrated) await this._persistSchedule(candidate);
       } catch (err) {
         console.warn(`Failed to load schedule ${filePath}: ${err.message || String(err)}`);
       }
@@ -332,7 +339,7 @@ class ScheduleManager {
   }
 
   async _persistSchedule(schedule) {
-    const snapshot = JSON.stringify(this._serialize(schedule), null, 2);
+    const snapshot = JSON.stringify(versionPersistedRecord("schedule", this._serialize(schedule)), null, 2);
     const target = this._scheduleFile(schedule.id);
     const temp = `${target}.tmp`;
     const writeSchedule = async () => {

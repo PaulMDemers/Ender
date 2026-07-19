@@ -2,6 +2,15 @@ const fs = require("node:fs");
 const { APP_NAME, APP_VERSION } = require("../version");
 
 function getBackendReadiness(config) {
+  if (config.backend === "acp") {
+    const command = String(config.acp?.command || "").trim();
+    return {
+      backend: "acp",
+      ready: Boolean(command),
+      missing: command ? [] : ["ACP_COMMAND"]
+    };
+  }
+
   if (config.backend === "openai") {
     return {
       backend: "openai",
@@ -279,6 +288,13 @@ function getReadiness(config) {
       workflowSessionsDir: config.workflowSessionsDir
     },
     services: {
+      apiAccess: {
+        ready: true,
+        mode: config.apiAccess?.mode || "local",
+        bindHost: config.apiAccess?.bindHost || "0.0.0.0",
+        corsOrigins: config.apiAccess?.corsOrigins || [],
+        remoteAccess: config.apiAccess?.mode === "open"
+      },
       llm,
       jira,
       github,

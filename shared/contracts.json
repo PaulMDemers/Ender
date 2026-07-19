@@ -1,5 +1,16 @@
 {
   "scheduleTargetKinds": ["prompt", "thread", "workflow"],
   "workflowModes": ["interactive", "schedule_config", "scheduled_run"],
-  "workflowStepTypes": ["form", "select", "complete"]
+  "workflowStepTypes": ["form", "select", "complete"],
+  "contracts": {
+    "api": {
+      "version": 1,
+      "header": "X-Ender-API-Version"
+    },
+    "taskSse": {
+      "version": 1,
+      "header": "X-Ender-SSE-Version",
+      "event": "contract"
+    }
+  }
 }

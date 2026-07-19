@@ -1,3 +1,5 @@
+// @ts-check
+
 const http = require("node:http");
 
 function getTaskIdFromProxyUrl(url) {

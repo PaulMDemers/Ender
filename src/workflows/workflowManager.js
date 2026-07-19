@@ -5,6 +5,7 @@ const path = require("node:path");
 const { randomUUID } = require("node:crypto");
 const { getWorkflowDefinitions } = require("./index");
 const { workflowModeValues, workflowSessionSchema } = require("../shared/contracts");
+const { migratePersistedRecord, versionPersistedRecord } = require("../persistence/jsonRecord");
 
 function cloneState(state) {
   return JSON.parse(JSON.stringify(state || {}));
@@ -174,7 +175,7 @@ class WorkflowManager {
   }
 
   _serializeForDisk(session) {
-    return {
+    return versionPersistedRecord("workflowSession", {
       id: session.id,
       workflowId: session.workflowId,
       mode: session.mode || "interactive",
@@ -184,7 +185,7 @@ class WorkflowManager {
       updatedAt: session.updatedAt,
       history: Array.isArray(session.history) ? session.history : [],
       state: session.state || {}
-    };
+    });
   }
 
   _hydrateSession(data) {
@@ -210,11 +211,13 @@ class WorkflowManager {
       const target = path.join(this.sessionsDir, file.name);
       try {
         const raw = await fs.readFile(target, "utf8");
-        const data = JSON.parse(raw);
+        const migrated = migratePersistedRecord(JSON.parse(raw), "workflowSession");
+        const data = migrated.record;
         if (!data?.id || !data?.workflowId) continue;
         if (!this.definitions.has(String(data.workflowId))) continue;
         const session = this._hydrateSession(data);
         this.sessions.set(session.id, session);
+        if (migrated.migrated) await this._persistSession(session);
       } catch (err) {
         console.warn(`Failed to load workflow session ${target}: ${err.message || String(err)}`);
       }

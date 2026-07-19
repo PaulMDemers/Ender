@@ -1,35 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  advanceWorkflowSession,
   continueTask,
-  createTaskLedgerEntry,
-  listLlmProfiles,
-  listProjects,
-  createSchedule,
-  deleteTaskLedgerEntry,
-  getTaskCodeServer,
-  createWorkflowSession,
-  deleteSchedule,
   deleteTaskWithOptions,
-  getApiBase,
-  getHealth,
-  launchTaskCodeServer,
-  listTaskLedger,
-  getWorkflowSession,
-  listSchedules,
-  listTasks,
-  listWorkflows,
   rerunTask,
   resolveApproval,
-  retreatWorkflowSession,
-  runTaskLedgerEntryNow,
-  runScheduleNow,
-  setApiBase,
-  stopTaskCodeServer,
   terminateTask,
-  updateSchedule
 } from "./agentClient";
 import { useTaskLogs } from "./hooks/useTaskLogs";
+import { useServerConnection } from "./hooks/useServerConnection";
+import { useTaskThreads } from "./hooks/useTaskThreads";
+import { useAutomations } from "./hooks/useAutomations";
+import { useTaskLedger } from "./hooks/useTaskLedger";
+import { useThreadEditor } from "./hooks/useThreadEditor";
 import NewTaskForm from "./components/NewTaskForm";
 import TaskList from "./components/TaskList";
 import LogViewer from "./components/LogViewer";
@@ -37,60 +19,28 @@ import ThreadComposer from "./components/ThreadComposer";
 import ApprovalPrompt from "./components/ApprovalPrompt";
 import ServerModal from "./components/ServerModal";
 import ServerPickerShell from "./components/ServerPickerShell";
+import ServerDiagnostics from "./components/ServerDiagnostics";
 import WorkflowPanel from "./components/WorkflowPanel";
 import SchedulePanel from "./components/SchedulePanel";
 import TaskLedgerPanel from "./components/TaskLedgerPanel";
 import SimpleTaskLedgerView from "./components/SimpleTaskLedgerView";
+import ApplicationShell, { MAIN_CONTENT_ID, NAVIGATION_ID } from "./components/ApplicationShell";
+import PrimaryNavigation from "./components/PrimaryNavigation";
+import DisclosureButton from "./components/ui/DisclosureButton";
+import StatusIndicator from "./components/ui/StatusIndicator";
+import StateNotice from "./components/ui/StateNotice";
+import {
+  DockedThreadEditor,
+  ModalThreadEditor,
+  StackedThreadEditor
+} from "./components/ThreadEditor";
+import { resolveActiveMode } from "./navigation";
 import { APP_VERSION } from "./version";
+import { formatConnectionState } from "./serverPresentation";
 
 const logoIcon = "/icons/icon-rounded-master.png";
 
-const SAVED_SERVERS_KEY = "ender_saved_servers";
-const TASK_UI_STATE_KEY = "ender_task_ui_state";
 const RAIL_COLLAPSED_KEY = "ender_rail_collapsed";
-const WORKFLOW_SESSION_KEY = "ender_workflow_sessions";
-const TASK_PAGE_SIZE = 12;
-const HAS_CONFIGURED_DEFAULT_API = Boolean(import.meta.env.VITE_ENDER_API);
-
-function compareTasksByNewest(a, b) {
-  const aTime = new Date(a.finishedAt || a.startedAt || 0).getTime();
-  const bTime = new Date(b.finishedAt || b.startedAt || 0).getTime();
-  return bTime - aTime;
-}
-
-function loadSavedServers() {
-  try {
-    const raw = JSON.parse(localStorage.getItem(SAVED_SERVERS_KEY) || "[]");
-    if (!Array.isArray(raw)) return [];
-    return raw
-      .map((item) => ({
-        name: String(item?.name || item?.endpoint || ""),
-        endpoint: String(item?.endpoint || "").trim(),
-        favorite: Boolean(item?.favorite),
-        lastUsedAt: Number(item?.lastUsedAt || 0)
-      }))
-      .filter((item) => item.endpoint);
-  } catch {
-    return [];
-  }
-}
-
-function saveServers(items) {
-  localStorage.setItem(SAVED_SERVERS_KEY, JSON.stringify(items));
-}
-
-function loadTaskUiState() {
-  try {
-    const raw = JSON.parse(localStorage.getItem(TASK_UI_STATE_KEY) || "{}");
-    return raw && typeof raw === "object" ? raw : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveTaskUiState(value) {
-  localStorage.setItem(TASK_UI_STATE_KEY, JSON.stringify(value));
-}
 
 function loadRailCollapsed() {
   try {
@@ -98,26 +48,6 @@ function loadRailCollapsed() {
   } catch {
     return false;
   }
-}
-
-function loadWorkflowSessionIds() {
-  try {
-    const raw = JSON.parse(localStorage.getItem(WORKFLOW_SESSION_KEY) || "{}");
-    return raw && typeof raw === "object" ? raw : {};
-  } catch {
-    return {};
-  }
-}
-
-function getSavedWorkflowSessionId(serverUrl) {
-  return String(loadWorkflowSessionIds()[serverUrl] || "").trim();
-}
-
-function saveWorkflowSessionId(serverUrl, sessionId) {
-  const next = loadWorkflowSessionIds();
-  if (sessionId) next[serverUrl] = sessionId;
-  else delete next[serverUrl];
-  localStorage.setItem(WORKFLOW_SESSION_KEY, JSON.stringify(next));
 }
 
 function isThreadIdle(status) {
@@ -297,50 +227,14 @@ function getStandaloneViewFromHash() {
 }
 
 export default function App() {
-  const [tasks, setTasks] = useState([]);
-  const [selectedId, setSelectedId] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
-  const [serverUrl, setServerUrl] = useState(getApiBase());
-  const [savedServers, setSavedServers] = useState([]);
-  const [connectionRequested, setConnectionRequested] = useState(HAS_CONFIGURED_DEFAULT_API);
-  const [connectedOnce, setConnectedOnce] = useState(false);
   const [serverModalOpen, setServerModalOpen] = useState(false);
   const [composeMode, setComposeMode] = useState("new");
   const [standaloneView, setStandaloneView] = useState(() => getStandaloneViewFromHash());
-  const [workflows, setWorkflows] = useState([]);
-  const [workflowLoading, setWorkflowLoading] = useState(false);
-  const [workflowError, setWorkflowError] = useState("");
-  const [workflowSession, setWorkflowSession] = useState(null);
-  const [workflowBusy, setWorkflowBusy] = useState(false);
-  const [schedules, setSchedules] = useState([]);
-  const [scheduleBusy, setScheduleBusy] = useState(false);
-  const [scheduleError, setScheduleError] = useState("");
-  const [ledgerEntries, setLedgerEntries] = useState([]);
-  const [llmProfiles, setLlmProfiles] = useState([]);
-  const [defaultLlmProfileId, setDefaultLlmProfileId] = useState("");
-  const [projects, setProjects] = useState([]);
-  const [ledgerBusy, setLedgerBusy] = useState(false);
-  const [ledgerError, setLedgerError] = useState("");
-  const [health, setHealth] = useState(null);
-  const [taskUiState, setTaskUiState] = useState({});
-  const [taskVisibleCount, setTaskVisibleCount] = useState(TASK_PAGE_SIZE);
-  const [showArchived, setShowArchived] = useState(false);
   const [headerCollapsed, setHeaderCollapsed] = useState(false);
   const [serverSummaryCollapsed, setServerSummaryCollapsed] = useState(true);
-  const [modeSectionCollapsed, setModeSectionCollapsed] = useState(true);
   const [railCollapsed, setRailCollapsed] = useState(() => loadRailCollapsed());
   const [railOpen, setRailOpen] = useState(false);
   const [threadScrollToken, setThreadScrollToken] = useState(0);
-  const [reconnectNotice, setReconnectNotice] = useState("");
-  const [codeServerSession, setCodeServerSession] = useState(null);
-  const [codeServerBusy, setCodeServerBusy] = useState(false);
-  const [codeServerError, setCodeServerError] = useState("");
-  const [editorSurface, setEditorSurface] = useState(null);
-  const [editorFrameKey, setEditorFrameKey] = useState(0);
-  const [editorFrameStatus, setEditorFrameStatus] = useState("idle");
-  const [editorFrameReachable, setEditorFrameReachable] = useState(false);
-  const [copiedEditorPassword, setCopiedEditorPassword] = useState(false);
 
   useEffect(() => {
     const onHashChange = () => {
@@ -352,46 +246,122 @@ export default function App() {
       window.removeEventListener("hashchange", onHashChange);
     };
   }, []);
-  const [editorDockWidth, setEditorDockWidth] = useState(640);
-  const [editorDetailsCollapsed, setEditorDetailsCollapsed] = useState(true);
   const [threadFocusRequested, setThreadFocusRequested] = useState(false);
-  const [threadMobilePanel, setThreadMobilePanel] = useState("transcript");
 
-  const wasOnlineRef = useRef(null);
-  const copiedEditorPasswordTimerRef = useRef(null);
+  const threadRefreshRef = useRef(() => Promise.resolve([]));
   const dockRailRestoreRef = useRef(null);
-  const dockResizeRef = useRef({
-    active: false,
-    startX: 0,
-    startWidth: 640
+  const {
+    serverUrl,
+    savedServers,
+    connectionRequested,
+    showConnectionShell,
+    loading,
+    loadError,
+    health,
+    lastHealth,
+    healthChecking,
+    healthError,
+    healthCheckedAt,
+    connectionState,
+    contractStatus,
+    llmProfiles,
+    defaultLlmProfileId,
+    projects,
+    reconnectNotice,
+    currentServer,
+    connectServer,
+    toggleFavoriteServer,
+    removeServer,
+    refreshHealth,
+    refreshProjects,
+    reportTaskListSuccess,
+    reportTaskListFailure,
+    completeTaskListLoad
+  } = useServerConnection({ onReconnect: () => threadRefreshRef.current() });
+  const {
+    tasks,
+    selectedId,
+    selectedTask,
+    taskStateForServer,
+    showArchived,
+    activeTasks,
+    archivedTasks,
+    taskQuery,
+    setTaskQuery,
+    filteredTaskCount,
+    visibleTasks,
+    hasMore: hasMoreTasks,
+    refresh,
+    reset: resetThreads,
+    selectTask,
+    clearSelection,
+    appendTask,
+    updateTask,
+    removeTaskState,
+    togglePinned,
+    toggleArchived: toggleTaskArchived,
+    toggleArchiveScope,
+    loadMore: loadMoreTasks
+  } = useTaskThreads({
+    serverUrl,
+    connectionRequested,
+    composeMode,
+    onListSuccess: reportTaskListSuccess,
+    onListFailure: reportTaskListFailure,
+    onListComplete: completeTaskListLoad
   });
-  const selectedTask = useMemo(() => tasks.find((task) => task.id === selectedId) || null, [tasks, selectedId]);
-  const taskStateForServer = taskUiState[serverUrl] || {};
-  const codeServerEditorUrl = codeServerSession?.proxyUrl || codeServerSession?.url || "";
-
-  useEffect(() => {
-    const saved = localStorage.getItem("ender_api_base");
-    const nextSavedServers = loadSavedServers();
-    setSavedServers(nextSavedServers);
-    setTaskUiState(loadTaskUiState());
-    if (saved) {
-      const normalized = setApiBase(saved);
-      setServerUrl(normalized);
-      setConnectionRequested(true);
-      setLoading(true);
-      setServerModalOpen(false);
-    } else {
-      setServerUrl(getApiBase());
-      setConnectionRequested(HAS_CONFIGURED_DEFAULT_API);
-      setLoading(HAS_CONFIGURED_DEFAULT_API);
-      setServerModalOpen(false);
-    }
-  }, []);
+  threadRefreshRef.current = refresh;
+  const {
+    workflows,
+    workflowLoading,
+    workflowError,
+    workflowSession,
+    workflowBusy,
+    schedules,
+    scheduleLoading,
+    scheduleBusy,
+    scheduleOperation,
+    scheduleError,
+    scheduleResult,
+    reset: resetAutomations,
+    refreshWorkflows,
+    reloadSchedules,
+    clearWorkflowError,
+    clearScheduleFeedback,
+    discardWorkflowSession,
+    startWorkflow,
+    advanceWorkflow: advanceWorkflowStep,
+    retreatWorkflow,
+    createSchedule: createScheduleRecord,
+    updateSchedule: updateScheduleRecord,
+    deleteSchedule: deleteScheduleRecord,
+    runScheduleNow: runScheduleRecordNow
+  } = useAutomations({ serverUrl, connectionRequested, composeMode });
+  const {
+    entries: ledgerEntries,
+    metadata: ledgerMetadata,
+    loading: ledgerLoading,
+    refreshing: ledgerRefreshing,
+    busy: ledgerBusy,
+    operation: ledgerOperation,
+    error: ledgerError,
+    result: ledgerResult,
+    reset: resetLedger,
+    refresh: reloadLedger,
+    clearFeedback: clearLedgerFeedback,
+    createEntry: createLedgerRecord,
+    runEntryNow: runLedgerRecordNow,
+    deleteEntry: deleteLedgerRecord
+  } = useTaskLedger({ serverUrl, connectionRequested, composeMode, standaloneView });
+  const editor = useThreadEditor({
+    taskId: selectedTask?.id,
+    active: Boolean(selectedTask && composeMode === "thread"),
+    serverUrl
+  });
 
   useEffect(() => {
     if (!selectedTask || composeMode !== "thread") {
       setThreadFocusRequested(false);
-      setThreadMobilePanel("transcript");
     }
   }, [selectedTask, composeMode]);
 
@@ -399,463 +369,16 @@ export default function App() {
     localStorage.setItem(RAIL_COLLAPSED_KEY, String(railCollapsed));
   }, [railCollapsed]);
 
-  useEffect(() => {
-    if (!connectionRequested) {
-      setWorkflows([]);
-      setWorkflowLoading(false);
-      return;
-    }
-    if (composeMode !== "workflow" && composeMode !== "schedule") return;
-    let live = true;
-    setWorkflowLoading(true);
-    listWorkflows()
-      .then((data) => {
-        if (!live) return;
-        setWorkflows(data.items || []);
-        setWorkflowError("");
-      })
-      .catch((err) => {
-        if (!live) return;
-        setWorkflowError(err.message || "Unable to load workflows");
-      })
-      .finally(() => {
-        if (live) setWorkflowLoading(false);
-      });
-
-    return () => {
-      live = false;
-    };
-  }, [composeMode, serverUrl, connectionRequested]);
-
-  useEffect(() => {
-    if (!connectionRequested) return;
-    if (composeMode !== "workflow" || workflowSession) return;
-    const savedSessionId = getSavedWorkflowSessionId(serverUrl);
-    if (!savedSessionId) return;
-
-    let live = true;
-    setWorkflowLoading(true);
-    getWorkflowSession(savedSessionId)
-      .then((session) => {
-        if (!live) return;
-        setWorkflowSession(session);
-        setWorkflowError("");
-      })
-      .catch(() => {
-        if (!live) return;
-        saveWorkflowSessionId(serverUrl, "");
-      })
-      .finally(() => {
-        if (live) setWorkflowLoading(false);
-      });
-
-    return () => {
-      live = false;
-    };
-  }, [composeMode, serverUrl, workflowSession, connectionRequested]);
-
-  useEffect(() => {
-    if (workflowSession && workflowSession.mode === "interactive" && !workflowSession.startedTaskId) {
-      saveWorkflowSessionId(serverUrl, workflowSession.id);
-      return;
-    }
-    saveWorkflowSessionId(serverUrl, "");
-  }, [serverUrl, workflowSession]);
-
-  useEffect(() => {
-    if (!connectionRequested) {
-      setSchedules([]);
-      setScheduleBusy(false);
-      return;
-    }
-    if (composeMode !== "schedule") return;
-    let live = true;
-    setScheduleBusy(true);
-    listSchedules()
-      .then((data) => {
-        if (!live) return;
-        setSchedules(data.items || []);
-        setScheduleError("");
-      })
-      .catch((err) => {
-        if (!live) return;
-        setScheduleError(err.message || "Unable to load schedules");
-      })
-      .finally(() => {
-        if (live) setScheduleBusy(false);
-      });
-
-    return () => {
-      live = false;
-    };
-  }, [composeMode, serverUrl, connectionRequested]);
-
-  useEffect(() => {
-    if (!connectionRequested) {
-      setLedgerEntries([]);
-      setLedgerBusy(false);
-      return;
-    }
-    if (composeMode !== "ledger" && standaloneView !== "ledger") return;
-    let live = true;
-
-    const loadLedger = async () => {
-      setLedgerBusy(true);
-      try {
-        const data = await listTaskLedger();
-        if (!live) return;
-        setLedgerEntries(data.items || []);
-        setLedgerError("");
-      } catch (err) {
-        if (!live) return;
-        setLedgerError(err.message || "Unable to load task ledger");
-      } finally {
-        if (live) setLedgerBusy(false);
-      }
-    };
-
-    loadLedger();
-    const id = setInterval(loadLedger, 3000);
-
-    return () => {
-      live = false;
-      clearInterval(id);
-    };
-  }, [composeMode, serverUrl, standaloneView, connectionRequested]);
-
-  useEffect(() => {
-    if (!connectionRequested) {
-      setHealth(null);
-      return undefined;
-    }
-    let live = true;
-
-    const loadHealth = async () => {
-      try {
-        const data = await getHealth();
-        if (!live) return;
-        setHealth(data);
-      } catch {
-        if (!live) return;
-        setHealth(null);
-      }
-    };
-
-    loadHealth();
-    const intervalId = setInterval(loadHealth, 15000);
-
-    return () => {
-      live = false;
-      clearInterval(intervalId);
-    };
-  }, [serverUrl, connectionRequested]);
-
-  useEffect(() => {
-    if (!connectionRequested) {
-      setLlmProfiles([]);
-      setDefaultLlmProfileId("");
-      setProjects([]);
-      return undefined;
-    }
-    let live = true;
-
-    const loadRuntimeCatalogs = async () => {
-      try {
-        const [profilesData, projectsData] = await Promise.all([
-          listLlmProfiles(),
-          listProjects()
-        ]);
-        if (!live) return;
-        setLlmProfiles(profilesData.items || []);
-        setDefaultLlmProfileId(profilesData.defaultProfileId || profilesData.items?.[0]?.id || "");
-        setProjects(projectsData.items || []);
-      } catch {
-        if (!live) return;
-        setLlmProfiles([]);
-        setDefaultLlmProfileId("");
-        setProjects([]);
-      }
-    };
-
-    loadRuntimeCatalogs();
-    const intervalId = setInterval(loadRuntimeCatalogs, 15000);
-    return () => {
-      live = false;
-      clearInterval(intervalId);
-    };
-  }, [serverUrl, connectionRequested]);
-
-  useEffect(() => {
-    const isOnline = Boolean(health?.ok);
-    const wasOnline = wasOnlineRef.current;
-    wasOnlineRef.current = isOnline;
-
-    if (wasOnline === null) return;
-
-    if (wasOnline && !isOnline) {
-      setReconnectNotice("Server disconnected. Waiting to reconnect...");
-    }
-
-    if (!wasOnline && isOnline) {
-      setReconnectNotice("Reconnected. Refreshing...");
-      refresh().finally(() => {
-        setTimeout(() => setReconnectNotice(""), 1500);
-      });
-    }
-  }, [health?.ok]);
-
-  useEffect(() => {
-    if (!selectedTask || composeMode !== "thread") {
-      setCodeServerSession(null);
-      setCodeServerError("");
-      setEditorSurface(null);
-      return undefined;
-    }
-
-    let live = true;
-
-    const load = async () => {
-      try {
-        const result = await getTaskCodeServer(selectedTask.id);
-        if (!live) return;
-        setCodeServerSession(result.session || null);
-        setCodeServerError("");
-      } catch (err) {
-        if (!live) return;
-        setCodeServerSession(null);
-        setCodeServerError(err.message || "Unable to load thread editor status");
-      }
-    };
-
-    load();
-    const intervalId = setInterval(load, 15000);
-
-    return () => {
-      live = false;
-      clearInterval(intervalId);
-    };
-  }, [selectedTask?.id, serverUrl, composeMode]);
-
-  useEffect(() => {
-    if (codeServerSession) return;
-    setEditorSurface(null);
-    setEditorDetailsCollapsed(true);
-    setThreadMobilePanel("transcript");
-  }, [codeServerSession]);
-
-  useEffect(() => {
-    setCopiedEditorPassword(false);
-  }, [codeServerSession?.password]);
-
-  useEffect(() => {
-    if (!codeServerEditorUrl || !editorSurface) {
-      setEditorFrameStatus("idle");
-      setEditorFrameReachable(false);
-      return;
-    }
-
-    setEditorFrameStatus("connecting");
-    setEditorFrameReachable(false);
-  }, [codeServerEditorUrl, editorSurface]);
-
-  useEffect(() => {
-    if (!codeServerEditorUrl || !editorSurface) return;
-    setEditorFrameStatus("connecting");
-  }, [codeServerEditorUrl, editorSurface, editorFrameKey]);
-
-  useEffect(() => {
-    if (!codeServerEditorUrl || !editorSurface || editorFrameStatus === "loaded") {
-      return undefined;
-    }
-
-    let live = true;
-
-    const probeEditor = async () => {
-      try {
-        await fetch(codeServerEditorUrl, { mode: "no-cors", cache: "no-store" });
-        if (!live) return;
-        if (!editorFrameReachable) {
-          setEditorFrameKey((value) => value + 1);
-        }
-        setEditorFrameReachable(true);
-      } catch {
-        if (live) setEditorFrameReachable(false);
-      }
-    };
-
-    probeEditor();
-    const intervalId = window.setInterval(probeEditor, 2000);
-
-    return () => {
-      live = false;
-      window.clearInterval(intervalId);
-    };
-  }, [codeServerEditorUrl, editorSurface, editorFrameStatus, editorFrameReachable]);
-
-  useEffect(() => {
-    if (!codeServerEditorUrl || !editorSurface || editorFrameStatus !== "connecting") {
-      return undefined;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      setEditorFrameKey((value) => value + 1);
-    }, 4500);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [codeServerEditorUrl, editorSurface, editorFrameStatus, editorFrameKey]);
-
-  useEffect(() => () => {
-    if (copiedEditorPasswordTimerRef.current) {
-      window.clearTimeout(copiedEditorPasswordTimerRef.current);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (editorSurface !== "modal") return undefined;
-
-    const onKeyDown = (event) => {
-      if (event.key === "Escape") {
-        setEditorSurface(null);
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [editorSurface]);
-
-  useEffect(() => {
-    const onPointerMove = (event) => {
-      const state = dockResizeRef.current;
-      if (!state.active) return;
-
-      const nextWidth = state.startWidth + (state.startX - event.clientX);
-      const maxWidth = Math.max(520, Math.floor(window.innerWidth * 0.58));
-      const clamped = Math.min(maxWidth, Math.max(420, nextWidth));
-      setEditorDockWidth(clamped);
-    };
-
-    const onPointerUp = () => {
-      if (!dockResizeRef.current.active) return;
-      dockResizeRef.current.active = false;
-      document.body.classList.remove("editorDockResizing");
-    };
-
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp);
-    return () => {
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
-      document.body.classList.remove("editorDockResizing");
-    };
-  }, []);
-
-  useEffect(() => {
-    const onResize = () => {
-      setEditorDockWidth((current) => {
-        const maxWidth = Math.max(520, Math.floor(window.innerWidth * 0.58));
-        return Math.min(current, maxWidth);
-      });
-
-      const nextSurface = getResponsiveEditorSurface(editorSurface, window.innerWidth);
-      if (nextSurface && nextSurface !== editorSurface) {
-        setEditorFrameKey((value) => value + 1);
-        setEditorSurface(nextSurface);
-        setThreadMobilePanel(nextSurface === "stacked" ? "editor" : "transcript");
-      }
-    };
-
-    window.addEventListener("resize", onResize);
-    return () => {
-      window.removeEventListener("resize", onResize);
-    };
-  }, [editorSurface]);
-
-  useEffect(() => {
-    if (!connectionRequested) {
-      setLoading(false);
-      setLoadError("");
-      setTasks([]);
-      setSelectedId(null);
-      return undefined;
-    }
-
-    let live = true;
-    const load = async () => {
-      try {
-        const data = await listTasks();
-        if (!live) return;
-        setLoadError("");
-        setConnectedOnce(true);
-        setTasks(data.items || []);
-        if (!selectedId && composeMode === "thread" && data.items?.length) {
-          setSelectedId([...data.items].sort(compareTasksByNewest)[0].id);
-        }
-      } catch (err) {
-        if (!live) return;
-        setLoadError(err.message || "Unable to reach server");
-        setTasks([]);
-        setSelectedId(null);
-      } finally {
-        if (live) setLoading(false);
-      }
-    };
-
-    load();
-    const id = setInterval(load, 3000);
-    return () => {
-      live = false;
-      clearInterval(id);
-    };
-  }, [selectedId, serverUrl, composeMode, connectionRequested]);
-
-  const activeTasks = useMemo(() => {
-    const pinned = [];
-    const rest = [];
-    const items = tasks.filter((task) => !taskStateForServer[task.id]?.archived);
-    const sorted = [...items].sort(compareTasksByNewest);
-    for (const task of sorted) {
-      if (taskStateForServer[task.id]?.pinned) pinned.push(task);
-      else rest.push(task);
-    }
-    return [...pinned, ...rest];
-  }, [tasks, taskStateForServer]);
-  const archivedTasks = useMemo(() => {
-    const items = tasks.filter((task) => taskStateForServer[task.id]?.archived);
-    return [...items].sort(compareTasksByNewest);
-  }, [tasks, taskStateForServer]);
-  const visibleTasks = useMemo(
-    () => (showArchived ? archivedTasks : activeTasks).slice(0, taskVisibleCount),
-    [showArchived, archivedTasks, activeTasks, taskVisibleCount]
-  );
   const { entries, status, pendingApprovals, removeApproval } = useTaskLogs(
     selectedId,
     serverUrl,
     selectedTask?.runCount || 0
   );
 
-  useEffect(() => {
-    setTaskVisibleCount(TASK_PAGE_SIZE);
-  }, [showArchived, serverUrl, tasks.length]);
-
-  const currentServer = useMemo(
-    () => savedServers.find((server) => server.endpoint === serverUrl) || null,
-    [savedServers, serverUrl]
-  );
-  const showConnectionShell = !connectedOnce;
-
-  const discardWorkflowSession = () => {
-    setWorkflowSession(null);
-    saveWorkflowSessionId(serverUrl, "");
-  };
-
   const effectiveStatus = selectedTask ? status || selectedTask.status : null;
   const primaryApproval = pendingApprovals[0] || null;
   const threadBlockedByApproval = effectiveStatus === "awaiting_approval";
-  const activeMode = composeMode === "thread" && !selectedTask ? "new" : composeMode;
+  const activeMode = resolveActiveMode(composeMode, Boolean(selectedTask));
   const sendLocked = !selectedTask || !isThreadIdle(effectiveStatus);
   const latestEntry = entries.length ? entries[entries.length - 1] : null;
   const selectedTaskUpdatedAt = latestEntry?.t
@@ -871,9 +394,11 @@ export default function App() {
   const selfUpdateReady = Boolean(health?.services?.selfUpdate?.ready);
   const selfUpdateHint = health?.setupHints?.selfUpdate || "";
   const codeServerReady = Boolean(health?.services?.codeServer?.ready);
-  const serverAppVersion = String(health?.app?.version || "").trim();
-  const hasSplitEditor = editorSurface === "split" && Boolean(codeServerSession?.url);
-  const hasStackedEditor = editorSurface === "stacked" && Boolean(codeServerSession?.url);
+  const healthSnapshot = health || lastHealth;
+  const serverAppVersion = String(healthSnapshot?.app?.version || "").trim();
+  const connectionCopy = formatConnectionState(connectionState);
+  const hasSplitEditor = editor.hasSplit;
+  const hasStackedEditor = editor.hasStacked;
   const isThreadFocusMode = Boolean(selectedTask && composeMode === "thread" && (threadFocusRequested || hasSplitEditor));
 
   useEffect(() => {
@@ -894,126 +419,28 @@ export default function App() {
     setRailOpen(false);
   }, [hasSplitEditor, railCollapsed, threadFocusRequested]);
 
-  function getPreferredEditorSurface(width = typeof window !== "undefined" ? window.innerWidth : 1440) {
-    if (width < 980) return "stacked";
-    if (width < 1180) return "modal";
-    return "split";
-  }
-
-  function getResponsiveEditorSurface(currentSurface, width = typeof window !== "undefined" ? window.innerWidth : 1440) {
-    if (!currentSurface) return null;
-    if (currentSurface === "split") {
-      return getPreferredEditorSurface(width);
-    }
-    if (currentSurface === "stacked") {
-      return getPreferredEditorSurface(width);
-    }
-    if (currentSurface === "modal" && width < 980) {
-      return "stacked";
-    }
-    return currentSurface;
-  }
-
-  function shouldUseStackedEditor() {
-    return getPreferredEditorSurface() === "stacked";
-  }
-
-  function shouldUseModalEditor() {
-    return getPreferredEditorSurface() === "modal";
-  }
-
-  const refresh = async () => {
-    if (!connectionRequested) return [];
-    try {
-      const data = await listTasks();
-      setLoadError("");
-      setConnectedOnce(true);
-      const items = data.items || [];
-      setTasks(items);
-      setSelectedId((current) => {
-        if (!items.length) return null;
-        if (current && items.some((task) => task.id === current)) return current;
-        if (composeMode === "new") return null;
-        return [...items].sort(compareTasksByNewest)[0].id;
-      });
-      return items;
-    } catch (err) {
-      setLoadError(err.message || "Unable to reach server");
-      setTasks([]);
-      setSelectedId(null);
-      return [];
-    }
-  };
-
   const applyServer = (server) => {
-    try {
-      const normalized = setApiBase(server.endpoint);
-      const existing = savedServers.find((item) => item.endpoint === normalized);
-      const nextServer = {
-        name: server.name?.trim() || existing?.name || normalized,
-        endpoint: normalized,
-        favorite: existing?.favorite || false,
-        lastUsedAt: Date.now()
-      };
-      const nextSavedServers = [nextServer, ...savedServers.filter((item) => item.endpoint !== normalized)];
-      saveServers(nextSavedServers);
-      setSavedServers(nextSavedServers);
-      localStorage.setItem("ender_api_base", normalized);
-      setServerUrl(normalized);
-      setConnectionRequested(true);
-      setConnectedOnce(false);
-      setLoading(true);
-    setHealth(null);
-    setLlmProfiles([]);
-    setDefaultLlmProfileId("");
-    setProjects([]);
-      setLoadError("");
-      setTasks([]);
-      setSelectedId(null);
-      setComposeMode("new");
-      setWorkflowSession(null);
-      setServerModalOpen(false);
-    } catch (err) {
-      setLoadError(err.message || "Invalid server URL");
-    }
-  };
-
-  const toggleFavoriteServer = (endpoint) => {
-    setSavedServers((prev) => {
-      const next = prev.map((server) => (
-        server.endpoint === endpoint ? { ...server, favorite: !server.favorite } : server
-      ));
-      saveServers(next);
-      return next;
-    });
-  };
-
-  const removeServer = (endpoint) => {
-    setSavedServers((prev) => {
-      const next = prev.filter((server) => server.endpoint !== endpoint);
-      saveServers(next);
-      return next;
-    });
-    if (endpoint === serverUrl) {
-      localStorage.removeItem("ender_api_base");
-      if (!connectedOnce) {
-        setConnectionRequested(false);
-        setLoadError("");
-      }
-    }
+    const normalized = connectServer(server);
+    if (!normalized) return null;
+    resetThreads();
+    resetAutomations();
+    resetLedger();
+    setComposeMode("new");
+    setServerModalOpen(false);
+    return normalized;
   };
 
   const openMode = (nextMode) => {
     setComposeMode(nextMode);
     if (nextMode !== "thread") {
-      setSelectedId(null);
+      clearSelection();
     }
-    setWorkflowError("");
+    clearWorkflowError();
     setRailOpen(false);
   };
 
   const onStarted = ({ id, goal, workspace, projectId, llmProfileId, memoryMode }) => {
-    setTasks((prev) => [...prev, {
+    appendTask({
       id,
       goal,
       workspace: workspace || null,
@@ -1025,178 +452,68 @@ export default function App() {
       logCount: 0,
       runCount: 1,
       pendingApprovalCount: 0
-    }]);
-    setSelectedId(id);
+    });
+    selectTask(id);
     setComposeMode("thread");
     setRailOpen(false);
   };
 
-  const refreshProjects = async () => {
-    const data = await listProjects();
-    setProjects(data.items || []);
-  };
-
-  const startWorkflow = async (workflowId) => {
-    setWorkflowBusy(true);
-    setWorkflowError("");
-    try {
-      const session = await createWorkflowSession(workflowId);
-      setWorkflowSession(session);
-    } catch (err) {
-      setWorkflowError(err.message || "Unable to start workflow");
-    } finally {
-      setWorkflowBusy(false);
-    }
-  };
-
   const advanceWorkflow = async (input) => {
-    if (!workflowSession) return;
-    setWorkflowBusy(true);
-    setWorkflowError("");
-    try {
-      const result = await advanceWorkflowSession(workflowSession.id, input);
-      setWorkflowSession(result.session);
-      if (result.startedTaskId) {
-        await refresh();
-        setSelectedId(result.startedTaskId);
-        setComposeMode("thread");
-        discardWorkflowSession();
-      }
-    } catch (err) {
-      setWorkflowError(err.message || "Workflow step failed");
-    } finally {
-      setWorkflowBusy(false);
+    const result = await advanceWorkflowStep(input);
+    if (result?.startedTaskId) {
+      await refresh();
+      selectTask(result.startedTaskId);
+      setComposeMode("thread");
+      discardWorkflowSession();
     }
+    return result;
   };
 
-  const retreatWorkflow = async () => {
-    if (!workflowSession) return;
-    setWorkflowBusy(true);
-    setWorkflowError("");
-    try {
-      const session = await retreatWorkflowSession(workflowSession.id);
-      setWorkflowSession(session);
-    } catch (err) {
-      setWorkflowError(err.message || "Unable to go back");
-    } finally {
-      setWorkflowBusy(false);
-    }
-  };
+  const createScheduleEntry = (payload) => createScheduleRecord(payload);
 
-  const refreshSchedules = async () => {
-    const data = await listSchedules();
-    setSchedules(data.items || []);
-  };
-
-  const refreshTaskLedger = async () => {
-    const data = await listTaskLedger();
-    setLedgerEntries(data.items || []);
-  };
-
-  const createScheduleEntry = async (payload) => {
-    setScheduleBusy(true);
-    setScheduleError("");
-    try {
-      await createSchedule(payload);
-      await refreshSchedules();
-    } catch (err) {
-      setScheduleError(err.message || "Unable to create schedule");
-    } finally {
-      setScheduleBusy(false);
-    }
-  };
-
-  const updateScheduleEntry = async (id, payload) => {
-    setScheduleBusy(true);
-    setScheduleError("");
-    try {
-      await updateSchedule(id, payload);
-      await refreshSchedules();
-    } catch (err) {
-      setScheduleError(err.message || "Unable to update schedule");
-    } finally {
-      setScheduleBusy(false);
-    }
-  };
+  const updateScheduleEntry = (id, payload) => updateScheduleRecord(id, payload);
 
   const deleteScheduleEntry = async (id) => {
     const confirmed = window.confirm("Delete this schedule?");
-    if (!confirmed) return;
-    setScheduleBusy(true);
-    setScheduleError("");
-    try {
-      await deleteSchedule(id);
-      await refreshSchedules();
-    } catch (err) {
-      setScheduleError(err.message || "Unable to delete schedule");
-    } finally {
-      setScheduleBusy(false);
-    }
+    if (!confirmed) return { cancelled: true };
+    return deleteScheduleRecord(id);
   };
 
   const runScheduleEntryNow = async (id) => {
-    setScheduleBusy(true);
-    setScheduleError("");
-    try {
-      await runScheduleNow(id);
-      await refreshSchedules();
+    const result = await runScheduleRecordNow(id);
+    if (result) {
       await refresh();
-    } catch (err) {
-      setScheduleError(err.message || "Unable to run schedule");
-    } finally {
-      setScheduleBusy(false);
     }
+    return result;
   };
 
   const createLedgerEntry = async (payload) => {
-    setLedgerBusy(true);
-    setLedgerError("");
-    try {
-      await createTaskLedgerEntry(payload);
-      await Promise.all([refreshTaskLedger(), refresh()]);
-    } catch (err) {
-      setLedgerError(err.message || "Unable to create task ledger entry");
-      throw err;
-    } finally {
-      setLedgerBusy(false);
-    }
+    const result = await createLedgerRecord(payload);
+    if (!result) return null;
+    await refresh();
+    return result;
   };
 
   const runLedgerEntryNow = async (id) => {
-    setLedgerBusy(true);
-    setLedgerError("");
-    try {
-      const result = await runTaskLedgerEntryNow(id);
-      await Promise.all([refreshTaskLedger(), refresh()]);
-      if (result?.startedTaskId) {
-        setSelectedId(result.startedTaskId);
-        setComposeMode("thread");
-      }
-    } catch (err) {
-      setLedgerError(err.message || "Unable to run task ledger entry");
-    } finally {
-      setLedgerBusy(false);
+    const result = await runLedgerRecordNow(id);
+    if (!result) return null;
+    await refresh();
+    if (result.startedTaskId) {
+      selectTask(result.startedTaskId);
+      setComposeMode("thread");
     }
+    return result;
   };
 
   const deleteLedgerEntry = async (id) => {
     const confirmed = window.confirm("Delete this ledger entry?");
-    if (!confirmed) return;
-    setLedgerBusy(true);
-    setLedgerError("");
-    try {
-      await deleteTaskLedgerEntry(id);
-      await refreshTaskLedger();
-    } catch (err) {
-      setLedgerError(err.message || "Unable to delete task ledger entry");
-    } finally {
-      setLedgerBusy(false);
-    }
+    if (!confirmed) return { cancelled: true };
+    return deleteLedgerRecord(id);
   };
 
   const openTaskFromLedger = async (taskId) => {
     await refresh();
-    setSelectedId(taskId);
+    selectTask(taskId);
     setComposeMode("thread");
     setRailOpen(false);
   };
@@ -1229,6 +546,7 @@ export default function App() {
   const onDelete = async (id) => {
     const task = tasks.find((item) => item.id === id);
     if (!task) return;
+    const wasSelected = selectedId === id;
     const workspaceRoot = health?.paths?.workspaceRoot;
 
     const confirmed = window.confirm("Delete this thread? This cannot be undone.");
@@ -1256,46 +574,15 @@ export default function App() {
       }
     }
 
-    setTaskUiState((prev) => {
-      const next = { ...prev };
-      if (next[serverUrl]) {
-        next[serverUrl] = { ...next[serverUrl] };
-        delete next[serverUrl][id];
-      }
-      saveTaskUiState(next);
-      return next;
-    });
-    setSelectedId((current) => {
-      if (current === id) {
-        setComposeMode("new");
-        return null;
-      }
-      return current;
-    });
+    removeTaskState(id);
+    if (wasSelected) setComposeMode("new");
     await refresh();
   };
 
-  const patchTaskUi = (taskId, patch) => {
-    setTaskUiState((prev) => {
-      const currentServer = { ...(prev[serverUrl] || {}) };
-      currentServer[taskId] = { ...(currentServer[taskId] || {}), ...patch };
-      const next = { ...prev, [serverUrl]: currentServer };
-      saveTaskUiState(next);
-      return next;
-    });
-  };
-
-  const togglePinned = (taskId) => {
-    patchTaskUi(taskId, { pinned: !taskStateForServer[taskId]?.pinned });
-  };
-
   const toggleArchived = (taskId) => {
-    const nextArchived = !taskStateForServer[taskId]?.archived;
-    patchTaskUi(taskId, { archived: nextArchived });
-    if (selectedId === taskId && nextArchived) {
-      setSelectedId(null);
-      setComposeMode("new");
-    }
+    const wasSelected = selectedId === taskId;
+    const nextArchived = toggleTaskArchived(taskId);
+    if (wasSelected && nextArchived) setComposeMode("new");
   };
 
   const onRerun = async (id) => {
@@ -1319,17 +606,13 @@ export default function App() {
     if (!selectedTask) return;
     setThreadScrollToken((value) => value + 1);
     await continueTask(selectedTask.id, input);
-    setTasks((prev) =>
-      prev.map((task) => (task.id === selectedTask.id
-        ? {
-            ...task,
-            status: "running",
-            runCount: (task.runCount || 0) + 1,
-            llmProfileId: input?.llmProfileId || task.llmProfileId,
-            memoryMode: input?.memoryMode || task.memoryMode || "auto"
-          }
-        : task))
-    );
+    updateTask(selectedTask.id, (task) => ({
+      ...task,
+      status: "running",
+      runCount: (task.runCount || 0) + 1,
+      llmProfileId: input?.llmProfileId || task.llmProfileId,
+      memoryMode: input?.memoryMode || task.memoryMode || "auto"
+    }));
     setTimeout(() => {
       refresh();
     }, 250);
@@ -1342,133 +625,12 @@ export default function App() {
     await refresh();
   };
 
-  const launchEditor = async () => {
-    if (!selectedTask) return;
-    setCodeServerBusy(true);
-    setCodeServerError("");
-    try {
-      const result = await launchTaskCodeServer(selectedTask.id);
-      setCodeServerSession(result.session || null);
-      if (result.session?.url) {
-        setEditorFrameKey((value) => value + 1);
-        const nextSurface = getPreferredEditorSurface();
-        setEditorSurface(nextSurface);
-        setThreadMobilePanel(nextSurface === "stacked" ? "editor" : "transcript");
-      }
-    } catch (err) {
-      setCodeServerError(err.message || "Unable to launch thread editor");
-    } finally {
-      setCodeServerBusy(false);
-    }
-  };
-
-  const stopEditor = async () => {
-    if (!selectedTask) return;
-    setCodeServerBusy(true);
-    setCodeServerError("");
-    try {
-      await stopTaskCodeServer(selectedTask.id);
-      setCodeServerSession(null);
-      setEditorSurface(null);
-    } catch (err) {
-      setCodeServerError(err.message || "Unable to stop thread editor");
-    } finally {
-      setCodeServerBusy(false);
-    }
-  };
-
-  const openEditorTab = () => {
-    if (!codeServerEditorUrl) return;
-    const nextWindow = window.open(codeServerEditorUrl, "_blank", "noopener,noreferrer");
-    if (nextWindow) {
-      setEditorSurface(null);
-      setEditorDetailsCollapsed(true);
-      setThreadMobilePanel("transcript");
-    }
-  };
-
-  const copyEditorPassword = async () => {
-    const password = codeServerSession?.password;
-    if (!password) return;
-
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(password);
-      } else {
-        const textarea = document.createElement("textarea");
-        try {
-          textarea.value = password;
-          textarea.setAttribute("readonly", "");
-          textarea.style.position = "fixed";
-          textarea.style.opacity = "0";
-          document.body.appendChild(textarea);
-          textarea.select();
-          document.execCommand("copy");
-        } finally {
-          textarea.remove();
-        }
-      }
-
-      setCopiedEditorPassword(true);
-      if (copiedEditorPasswordTimerRef.current) {
-        window.clearTimeout(copiedEditorPasswordTimerRef.current);
-      }
-      copiedEditorPasswordTimerRef.current = window.setTimeout(() => {
-        setCopiedEditorPassword(false);
-      }, 1600);
-    } catch {
-      setCodeServerError("Unable to copy the editor password.");
-    }
-  };
-
-  const openEditorModal = () => {
-    if (!codeServerSession?.url) return;
-    setEditorFrameKey((value) => value + 1);
-    setEditorDetailsCollapsed(true);
-    setEditorSurface("modal");
-    setThreadMobilePanel("transcript");
-  };
-
-  const openEditorStacked = () => {
-    if (!codeServerSession?.url) return;
-    setEditorFrameKey((value) => value + 1);
-    setEditorDetailsCollapsed(true);
-    setEditorSurface("stacked");
-    setThreadMobilePanel("editor");
-  };
-
-  const openEditorSplit = () => {
-    if (!codeServerSession?.url) return;
-    if (shouldUseStackedEditor()) {
-      openEditorStacked();
-      return;
-    }
-    if (shouldUseModalEditor()) {
-      openEditorModal();
-      return;
-    }
-    setEditorFrameKey((value) => value + 1);
-    setEditorDetailsCollapsed(true);
-    setEditorSurface("split");
-    setThreadMobilePanel("transcript");
-  };
-
   const showThreadTranscript = () => {
-    setThreadMobilePanel("transcript");
+    editor.showTranscript();
     setRailOpen(false);
   };
 
-  const showThreadEditor = () => {
-    if (!codeServerSession?.url) {
-      launchEditor();
-      return;
-    }
-    if (shouldUseStackedEditor()) {
-      openEditorStacked();
-      return;
-    }
-    openEditorSplit();
-  };
+  const showThreadEditor = editor.showEditor;
 
   const toggleThreadFocus = () => {
     setThreadFocusRequested((value) => !value);
@@ -1481,42 +643,38 @@ export default function App() {
     setRailOpen(false);
   };
 
-  const beginDockResize = (event) => {
-    dockResizeRef.current = {
-      active: true,
-      startX: event.clientX,
-      startWidth: editorDockWidth
-    };
-    document.body.classList.add("editorDockResizing");
-  };
-
   const renderThreadTranscript = () => (
     <div className="transcriptStack">
+      {!codeServerReady ? (
+        <StateNotice
+          title="Workspace editor unavailable"
+          detail={health?.setupHints?.codeServer || "This server has not configured the optional thread workspace editor."}
+          compact
+        />
+      ) : editor.busyOperation === "launch" ? (
+        <StateNotice
+          title="Starting workspace editor"
+          detail="Ender is preparing an editor session for this thread workspace."
+          busy
+          compact
+        />
+      ) : editor.actionError?.operation === "launch" ? (
+        <StateNotice
+          tone="danger"
+          title="Workspace editor could not start"
+          detail={editor.actionError.message}
+          actionLabel="Retry editor"
+          onAction={editor.retryAction}
+          busy={editor.busy}
+          compact
+        />
+      ) : null}
       {primaryApproval ? (
-        <>
-          <section className="approvalStickyBar">
-            <div className="approvalStickyCopy">
-              <div className="workflowBadge">APPROVAL REQUIRED</div>
-              <div className="approvalStickyTitle">{primaryApproval.title || "Sensitive action requested"}</div>
-              <div className="approvalStickyMeta">
-                {primaryApproval.description || "Resolve the pending action before continuing this run."}
-              </div>
-            </div>
-            <div className="approvalStickyActions">
-              <button className="primaryButton" onClick={() => decideApproval(primaryApproval.id, true)}>
-                Approve
-              </button>
-              <button className="dangerButton" onClick={() => decideApproval(primaryApproval.id, false)}>
-                Deny
-              </button>
-            </div>
-          </section>
-          <ApprovalPrompt
-            approval={primaryApproval}
-            onApprove={(approvalId) => decideApproval(approvalId, true)}
-            onDeny={(approvalId) => decideApproval(approvalId, false)}
-          />
-        </>
+        <ApprovalPrompt
+          approval={primaryApproval}
+          onApprove={(approvalId) => decideApproval(approvalId, true)}
+          onDeny={(approvalId) => decideApproval(approvalId, false)}
+        />
       ) : null}
       <LogViewer
         entries={entries}
@@ -1528,125 +686,21 @@ export default function App() {
     </div>
   );
 
-  const renderEditorPasswordButton = () => {
-    if (!codeServerSession?.password) return null;
-
-    return (
-      <button
-        type="button"
-        className={`editorPasswordButton ${copiedEditorPassword ? "copied" : ""}`}
-        onClick={copyEditorPassword}
-        title="Copy editor password"
-        aria-label="Copy editor password"
-      >
-        <span className="headerChipLabel">Password</span>
-        <span className="editorPasswordValue mono">{codeServerSession.password}</span>
-        <span className="editorPasswordState">{copiedEditorPassword ? "Copied" : "Copy"}</span>
-      </button>
-    );
-  };
-
-  const renderEditorPasswordCredential = () => {
-    if (!codeServerSession?.password) return null;
-
-    return (
-      <button
-        type="button"
-        className={`editorCredential editorCredentialButton ${copiedEditorPassword ? "copied" : ""}`}
-        onClick={copyEditorPassword}
-      >
-        <span className="headerChipLabel">Password</span>
-        <span className="editorCredentialCopyRow">
-          <span className="editorMetaValue mono">{codeServerSession.password}</span>
-          <span className="editorPasswordState">{copiedEditorPassword ? "Copied" : "Copy"}</span>
-        </span>
-      </button>
-    );
-  };
-
-  const renderEditorFrame = (surface, shellClassName = "") => {
-    if (!codeServerEditorUrl) return null;
-    const waiting = editorFrameStatus !== "loaded";
-
-    return (
-      <div className={`editorFrameShell ${shellClassName}`}>
-        {waiting ? (
-          <div className="editorFrameOverlay" role="status" aria-live="polite">
-            <div className="editorFrameSpinner" aria-hidden="true" />
-            <div className="editorFrameOverlayTitle">Waiting to connect</div>
-            <div className="editorFrameOverlayText">The workspace editor will reload automatically when it is ready.</div>
-          </div>
-        ) : null}
-        <iframe
-          key={`${surface}-${editorFrameKey}-${codeServerEditorUrl}`}
-          className="editorFrame"
-          src={codeServerEditorUrl}
-          title="Thread workspace editor"
-          onLoad={() => setEditorFrameStatus(editorFrameReachable ? "loaded" : "connecting")}
-        />
-      </div>
-    );
-  };
-
-  const renderStackedEditor = () => {
-    if (!codeServerSession?.url) return null;
-
-    return (
-      <section className="threadEditorStack" aria-label="Thread workspace editor">
-        <div className="threadEditorStackHeader">
-          <div>
-            <div className="panelLabel mono">thread.editor</div>
-            <div className="editorDockTitle">Workspace editor</div>
-          </div>
-          <div className="editorDockActions threadEditorStackActions">
-            <span className="statusPill success">running</span>
-            {renderEditorPasswordButton()}
-            <button type="button" className="miniButton" onClick={() => setEditorDetailsCollapsed((value) => !value)}>
-              {editorDetailsCollapsed ? "Show Details" : "Hide Details"}
-            </button>
-            <button type="button" className="miniButton" onClick={openEditorTab}>
-              New Tab
-            </button>
-            <button type="button" className="miniButton miniButtonDanger" onClick={() => setEditorSurface(null)}>
-              Close
-            </button>
-          </div>
-        </div>
-        {!editorDetailsCollapsed ? (
-          <div className="threadEditorStackMeta">
-            <div className="panelNote">Switch back to the transcript any time to review logs, approvals, or continue the thread.</div>
-            <div className="editorCredentials">
-              <div className="editorCredential">
-                <span className="headerChipLabel">URL</span>
-                <a className="editorLink mono" href={codeServerEditorUrl} target="_blank" rel="noreferrer">
-                  {codeServerEditorUrl}
-                </a>
-              </div>
-              {renderEditorPasswordCredential()}
-            </div>
-          </div>
-        ) : null}
-        {renderEditorFrame("stacked", "threadEditorStackViewport")}
-      </section>
-    );
-  };
-
   const renderMainContent = () => {
     if (activeMode === "workflow") {
       return (
         <WorkflowPanel
           workflows={workflows}
+          readiness={health?.workflows || {}}
           loading={workflowLoading}
           error={workflowError}
           session={workflowSession}
           busy={workflowBusy}
           onStartWorkflow={startWorkflow}
+          onReload={refreshWorkflows}
           onAdvance={advanceWorkflow}
           onBack={retreatWorkflow}
-          onReset={() => {
-            discardWorkflowSession();
-            setWorkflowError("");
-          }}
+          onReset={discardWorkflowSession}
         />
       );
     }
@@ -1657,12 +711,17 @@ export default function App() {
           schedules={schedules}
           workflows={workflows}
           tasks={tasks}
+          loading={scheduleLoading}
           busy={scheduleBusy}
+          operation={scheduleOperation}
           error={scheduleError}
+          result={scheduleResult}
           onCreate={createScheduleEntry}
           onUpdate={updateScheduleEntry}
           onDelete={deleteScheduleEntry}
           onRunNow={runScheduleEntryNow}
+          onReload={reloadSchedules}
+          onClearFeedback={clearScheduleFeedback}
         />
       );
     }
@@ -1671,14 +730,21 @@ export default function App() {
       return (
         <TaskLedgerPanel
           entries={ledgerEntries}
+          metadata={ledgerMetadata}
+          loading={ledgerLoading}
+          refreshing={ledgerRefreshing}
           busy={ledgerBusy}
+          operation={ledgerOperation}
           error={ledgerError}
+          result={ledgerResult}
           serverWorkspacePath={serverWorkspacePath}
           onCreate={createLedgerEntry}
           onDelete={deleteLedgerEntry}
           onOpenIsolatedView={openLedgerStandaloneView}
           onRunNow={runLedgerEntryNow}
           onOpenTask={openTaskFromLedger}
+          onReload={reloadLedger}
+          onClearFeedback={clearLedgerFeedback}
         />
       );
     }
@@ -1691,8 +757,8 @@ export default function App() {
               <button
                 type="button"
                 role="tab"
-                aria-selected={threadMobilePanel === "transcript"}
-                className={`threadSurfaceButton ${threadMobilePanel === "transcript" ? "active" : ""}`}
+                aria-selected={editor.mobilePanel === "transcript"}
+                className={`threadSurfaceButton ${editor.mobilePanel === "transcript" ? "active" : ""}`}
                 onClick={showThreadTranscript}
               >
                 Transcript
@@ -1700,14 +766,16 @@ export default function App() {
               <button
                 type="button"
                 role="tab"
-                aria-selected={threadMobilePanel === "editor"}
-                className={`threadSurfaceButton ${threadMobilePanel === "editor" ? "active" : ""}`}
-                onClick={() => setThreadMobilePanel("editor")}
+                aria-selected={editor.mobilePanel === "editor"}
+                className={`threadSurfaceButton ${editor.mobilePanel === "editor" ? "active" : ""}`}
+                onClick={editor.selectEditorPanel}
               >
                 Editor
               </button>
             </div>
-            {threadMobilePanel === "editor" ? renderStackedEditor() : renderThreadTranscript()}
+            {editor.mobilePanel === "editor" ? (
+              <StackedThreadEditor editor={editor} workspace={selectedTask.workspace} />
+            ) : renderThreadTranscript()}
           </div>
         );
       }
@@ -1741,7 +809,9 @@ export default function App() {
         servers={savedServers}
         busy={connectionRequested && loading}
         error={loadError}
+        connectionState={connectionState}
         onConnect={applyServer}
+        onRetry={() => applyServer(currentServer || { name: "Direct endpoint", endpoint: serverUrl })}
         onToggleFavorite={toggleFavoriteServer}
         onRemove={removeServer}
       />
@@ -1752,13 +822,20 @@ export default function App() {
     return (
       <SimpleTaskLedgerView
         entries={ledgerEntries}
+        metadata={ledgerMetadata}
+        loading={ledgerLoading}
+        refreshing={ledgerRefreshing}
         busy={ledgerBusy}
+        operation={ledgerOperation}
         error={ledgerError}
+        result={ledgerResult}
         serverName={currentServer?.name || "Direct endpoint"}
         serverUrl={serverUrl}
         onCreate={createLedgerEntry}
         onOpenEntry={openEntryFromStandaloneLedger}
         onOpenFullConsole={openFullConsole}
+        onReload={reloadLedger}
+        onClearFeedback={clearLedgerFeedback}
       />
     );
   }
@@ -1768,17 +845,33 @@ export default function App() {
       <ServerModal
         open={serverModalOpen}
         currentEndpoint={serverUrl}
+        currentServerName={currentServer?.name || "Direct endpoint"}
         servers={savedServers}
+        busy={connectionState === "checking"}
+        error={loadError}
+        connectionState={connectionState}
+        health={health}
+        lastHealth={lastHealth}
+        healthChecking={healthChecking}
+        healthError={healthError}
+        healthCheckedAt={healthCheckedAt}
+        contractStatus={contractStatus}
+        uiVersion={APP_VERSION}
         onClose={() => setServerModalOpen(false)}
         onConnect={applyServer}
+        onRefreshHealth={refreshHealth}
         onToggleFavorite={toggleFavoriteServer}
         onRemove={removeServer}
       />
 
-      <div className={`railScrim ${railOpen ? "visible" : ""}`} onClick={() => setRailOpen(false)} />
-
-      <div className={`layout ${railCollapsed ? "railCollapsed" : ""} ${hasSplitEditor ? "withDock" : ""} ${isThreadFocusMode ? "reviewMode" : ""}`}>
-        <aside className={`leftRail ${railOpen ? "open" : ""}`}>
+      <ApplicationShell
+        railOpen={railOpen}
+        railCollapsed={railCollapsed}
+        hasDock={hasSplitEditor}
+        reviewMode={isThreadFocusMode}
+        onDismissRail={() => setRailOpen(false)}
+      >
+        <aside id={NAVIGATION_ID} className={`leftRail ${railOpen ? "open" : ""}`} aria-label="Ender navigation">
           <button
             type="button"
             className="railCollapseToggle"
@@ -1811,117 +904,60 @@ export default function App() {
                   <div className="serverEndpointDisplay mono">{serverUrl}</div>
                 </div>
                 <div className="serverSummaryActions">
-                  <div className={`connectionStatus ${health?.ok ? "ready" : "notReady"}`}>
-                    <span className="statusDot" />
-                    {health?.ok ? "Connected" : "Offline"}
-                  </div>
-                  <button
-                    type="button"
+                  <StatusIndicator label={connectionCopy.label} tone={connectionCopy.tone} />
+                  <DisclosureButton
                     className="summaryToggle"
-                    aria-label={serverSummaryCollapsed ? "Expand server details" : "Collapse server details"}
-                    title={serverSummaryCollapsed ? "Expand server details" : "Collapse server details"}
+                    expanded={!serverSummaryCollapsed}
+                    controls="server-summary-details"
+                    label={serverSummaryCollapsed ? "Expand server details" : "Collapse server details"}
                     onClick={() => setServerSummaryCollapsed((value) => !value)}
                   >
                     <span className={`chevronIcon ${serverSummaryCollapsed ? "down" : "up"}`} aria-hidden="true" />
-                  </button>
+                  </DisclosureButton>
                 </div>
               </div>
 
-              {reconnectNotice ? <div className="panelNote">{reconnectNotice}</div> : null}
+              {reconnectNotice ? (
+                <StateNotice
+                  tone={reconnectNotice.startsWith("Reconnected") ? "success" : "warning"}
+                  title={reconnectNotice.startsWith("Reconnected") ? "Connection restored" : "Connection lost"}
+                  detail={reconnectNotice}
+                  compact
+                />
+              ) : null}
 
               {!serverSummaryCollapsed ? (
-                <>
-                  <div className="serverSummaryMetaRow">
-                    <span className="serverSummaryMetaChip mono">{tasks.length} threads</span>
-                    <span className="serverSummaryMetaChip mono">ui v{APP_VERSION}</span>
-                    <span className="serverSummaryMetaChip mono">server v{serverAppVersion || "unknown"}</span>
-                    {selfWorkspacePath ? (
-                      <span className="serverSummaryMetaChip mono">{selfUpdateReady ? "self-update ready" : "self-update unavailable"}</span>
-                    ) : null}
-                  </div>
-                  {serverWorkspacePath ? (
-                    <div className="readinessMeta">
-                      Workspace root: {formatPathTail(serverWorkspacePath, 5)}
-                    </div>
-                  ) : null}
-                  {selfWorkspacePath ? (
-                    <div className="readinessMeta">
-                      Self workspace: {formatPathTail(selfWorkspacePath, 5)} {selfUpdateReady ? "· supervisor ready" : "· supervisor unavailable"}
-                    </div>
-                  ) : null}
-                  <div className="readinessGrid">
-                    {readinessChecks.map((item) => (
-                      <div key={item.label} className={`readinessChip ${item.ready ? "ready" : "notReady"}`}>
-                        <span>{item.label}</span>
-                      </div>
-                    ))}
-                  </div>
-                  {readinessChecks.some((item) => item.detail) ? (
-                    <div className="readinessMeta">
-                      {readinessChecks
-                        .filter((item) => item.detail)
-                        .map((item) => `${item.label}: ${item.detail}`)
-                        .join(" ")}
-                    </div>
-                  ) : null}
-                </>
-              ) : null}
-            </section>
-
-            {loadError ? <div className="errorBanner">{loadError}</div> : null}
-
-            <section className="railSection">
-              <div className="railSectionHeader">
-                <div className="sectionHeading">
-                  <span>Launch modes</span>
-                </div>
-                <button
-                  type="button"
-                  className="summaryToggle"
-                  aria-label={modeSectionCollapsed ? "Expand launch modes" : "Collapse launch modes"}
-                  title={modeSectionCollapsed ? "Expand launch modes" : "Collapse launch modes"}
-                  onClick={() => setModeSectionCollapsed((prev) => !prev)}
-                >
-                  <span className={`summaryToggleIcon ${modeSectionCollapsed ? "collapsed" : "expanded"}`} aria-hidden="true" />
-                </button>
-              </div>
-              {!modeSectionCollapsed ? (
-                <div className="railPrimaryActions">
-                  <button
-                    type="button"
-                    className={`modeButton ${activeMode === "new" ? "active" : ""}`}
-                    onClick={() => openMode("new")}
-                  >
-                    <span className="modeButtonLabel">New Thread</span>
-                    <span className="modeButtonMeta">Launch task</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`modeButton ${activeMode === "workflow" ? "active" : ""}`}
-                    onClick={() => openMode("workflow")}
-                  >
-                    <span className="modeButtonLabel">Workflows</span>
-                    <span className="modeButtonMeta">Guided setup</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`modeButton ${activeMode === "schedule" ? "active" : ""}`}
-                    onClick={() => openMode("schedule")}
-                  >
-                    <span className="modeButtonLabel">Schedules</span>
-                    <span className="modeButtonMeta">Recurring runs</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`modeButton ${activeMode === "ledger" ? "active" : ""}`}
-                    onClick={() => openMode("ledger")}
-                  >
-                    <span className="modeButtonLabel">Task Ledger</span>
-                    <span className="modeButtonMeta">Queued shared work</span>
-                  </button>
+                <div id="server-summary-details" className="serverSummaryDetails">
+                  <ServerDiagnostics
+                    serverName={currentServer?.name || "Direct endpoint"}
+                    serverUrl={serverUrl}
+                    health={healthSnapshot}
+                    stale={!health && Boolean(lastHealth)}
+                    connectionState={connectionState}
+                    contractStatus={contractStatus}
+                    uiVersion={APP_VERSION}
+                    healthChecking={healthChecking}
+                    healthError={healthError}
+                    healthCheckedAt={healthCheckedAt}
+                    onRefresh={refreshHealth}
+                    compact
+                  />
                 </div>
               ) : null}
             </section>
+
+            {loadError ? (
+              <StateNotice
+                tone="danger"
+                title="Thread sync failed"
+                detail={loadError}
+                actionLabel="Retry thread sync"
+                onAction={refresh}
+                compact
+              />
+            ) : null}
+
+            <PrimaryNavigation activeId={activeMode} onNavigate={openMode} />
 
             <section className="railSection threadCollection">
               <div className="railSectionHeader">
@@ -1932,21 +968,39 @@ export default function App() {
                   </span>
                 </div>
               </div>
+              {tasks.length > 4 ? (
+                <div className="threadSearchRow">
+                  <input
+                    className="threadSearchInput"
+                    type="search"
+                    aria-label="Search threads"
+                    placeholder="Search goal, status, or workspace"
+                    value={taskQuery}
+                    onChange={(event) => setTaskQuery(event.target.value)}
+                  />
+                  {taskQuery ? (
+                    <button type="button" className="threadSearchClear" onClick={() => setTaskQuery("")}>
+                      Clear
+                    </button>
+                  ) : null}
+                  {taskQuery ? <span className="threadSearchCount mono">{filteredTaskCount} found</span> : null}
+                </div>
+              ) : null}
               <TaskList
                 items={visibleTasks}
                 selectedId={selectedId}
                 taskState={taskStateForServer}
-                hasMore={(showArchived ? archivedTasks : activeTasks).length > visibleTasks.length}
+                hasMore={hasMoreTasks}
                 loadMoreLabel={`Load more ${showArchived ? "archived" : "threads"}`}
                 emptyLabel={showArchived ? "No archived threads" : "No threads on this server yet"}
                 onSelect={(id) => {
-                  setSelectedId(id);
+                  selectTask(id);
                   setComposeMode("thread");
                   setRailOpen(false);
                 }}
                 onTogglePinned={togglePinned}
                 onToggleArchived={toggleArchived}
-                onLoadMore={() => setTaskVisibleCount((value) => value + TASK_PAGE_SIZE)}
+                onLoadMore={loadMoreTasks}
                 onTerminate={onTerminate}
                 onDelete={onDelete}
                 onRerun={onRerun}
@@ -1957,10 +1011,7 @@ export default function App() {
               <button
                 type="button"
                 className={`modeButton modeButtonSecondary ${showArchived ? "active" : ""}`}
-                onClick={() => {
-                  setShowArchived((prev) => !prev);
-                  setSelectedId(null);
-                }}
+                onClick={toggleArchiveScope}
               >
                 <span className="modeButtonLabel">
                   {showArchived ? `Show Active (${activeTasks.length})` : `Show Archived (${archivedTasks.length})`}
@@ -1968,22 +1019,25 @@ export default function App() {
                 <span className="modeButtonMeta">Toggle archive scope</span>
               </button>
               <div className="railFootnote mono">
-                v0.1.0 · {loading ? "syncing" : "ready"} · {tasks.length} total threads
+                v{APP_VERSION} · {connectionState === "checking" ? "checking" : connectionState} · {tasks.length} total threads
               </div>
             </div>
           </div>
         </aside>
 
-        <main className={`mainPane ${isThreadFocusMode ? "reviewMode" : ""}`}>
+        <main id={MAIN_CONTENT_ID} tabIndex="-1" className={`mainPane ${isThreadFocusMode ? "reviewMode" : ""}`}>
           <header className={`mainHeader ${headerCollapsed ? "collapsed" : ""} ${isThreadFocusMode ? "reviewMode" : ""}`}>
             <div className="headerTopRow">
               <div className="headerTitleGroup">
                 <button
                   type="button"
                   className="mobileRailButton"
+                  aria-label="Open navigation"
+                  aria-expanded={railOpen}
+                  aria-controls={NAVIGATION_ID}
                   onClick={() => setRailOpen((prev) => !prev)}
                 >
-                  Menu
+                  Navigation
                 </button>
                   <div className="headerTitleCopy">
                     <div className="headerEyebrow">
@@ -2005,15 +1059,20 @@ export default function App() {
                       type="button"
                       className="iconButton"
                       onClick={
-                        hasStackedEditor && threadMobilePanel === "editor"
+                        hasStackedEditor && editor.mobilePanel === "editor"
                           ? showThreadTranscript
-                          : codeServerSession
-                            ? showThreadEditor
-                            : launchEditor
+                          : showThreadEditor
                       }
-                      disabled={codeServerBusy || (!codeServerSession && !codeServerReady)}
+                      disabled={editor.busy || (!editor.session && !codeServerReady)}
+                      title={!editor.session && !codeServerReady ? "Workspace editor unavailable on this server" : undefined}
                     >
-                      {codeServerBusy ? "Launching..." : hasStackedEditor && threadMobilePanel === "editor" ? "Transcript" : codeServerSession ? "Editor" : "Launch Editor"}
+                      {editor.busyOperation === "launch"
+                        ? "Starting…"
+                        : hasStackedEditor && editor.mobilePanel === "editor"
+                          ? "Transcript"
+                          : editor.session
+                            ? "Editor"
+                            : "Launch Editor"}
                     </button>
                   ) : null}
                   {selectedTask && composeMode === "thread" && !hasSplitEditor ? (
@@ -2025,29 +1084,22 @@ export default function App() {
                       {isThreadFocusMode ? "Show Threads" : "Focus View"}
                     </button>
                   ) : null}
-                  <div className={`connectionStatus ${health?.ok ? "ready" : "notReady"}`}>
-                    <span className="statusDot" />
-                    {health?.ok ? "Server ready" : "Connection issue"}
-                  </div>
+                  <StatusIndicator label={connectionCopy.label} tone={connectionCopy.tone} />
                   <button type="button" className="iconButton" onClick={() => setServerModalOpen(true)}>
                     Switch Server
                   </button>
-                  <button
-                    type="button"
+                  <DisclosureButton
                     className="summaryToggle headerToggleButton"
-                    aria-label={headerCollapsed ? "Expand header" : "Collapse header"}
-                    title={headerCollapsed ? "Expand header" : "Collapse header"}
+                    expanded={!headerCollapsed}
+                    controls="main-header-details"
+                    label={headerCollapsed ? "Expand header" : "Collapse header"}
                     onClick={() => setHeaderCollapsed((prev) => !prev)}
-                  >
-                    <span
-                      className={`summaryToggleIcon ${headerCollapsed ? "collapsed" : "expanded"}`}
-                      aria-hidden="true"
-                    />
-                  </button>
+                  />
                 </div>
               </div>
             </div>
 
+            <div id="main-header-details" className="mainHeaderDetails">
             {!headerCollapsed && selectedTask && composeMode === "thread" ? (
               <div className="threadHeaderMetaStrip">
                 <span className={`statusPill headerStatusPill ${getStatusTone(effectiveStatus)}`}>
@@ -2062,7 +1114,6 @@ export default function App() {
                 {primaryApproval ? <span className="headerMetaTag attention mono">approval required</span> : null}
               </div>
             ) : null}
-
             {!headerCollapsed && (!selectedTask || composeMode !== "thread") ? (
               <div
                 className={`headerChipRow ${
@@ -2074,23 +1125,24 @@ export default function App() {
                   <span className="headerChipValue mono">{currentServer?.name || serverUrl}</span>
                 </div>
                 <div className="headerChip">
-                  <span className="headerChipLabel">Threads</span>
-                  <span className="headerChipValue mono">{activeTasks.length}</span>
+                  <span className="headerChipLabel">Versions</span>
+                  <span className="headerChipValue mono">UI {APP_VERSION} · server {serverAppVersion || "unknown"}</span>
                 </div>
                 <div className="headerChip">
-                  <span className="headerChipLabel">Timezone</span>
-                  <span className="headerChipValue mono">{Intl.DateTimeFormat().resolvedOptions().timeZone}</span>
+                  <span className="headerChipLabel">Runtime</span>
+                  <span className="headerChipValue mono">{healthSnapshot?.backend || "unknown"}</span>
                 </div>
                 <div className="headerChip">
-                  <span className="headerChipLabel">Archive</span>
-                  <span className="headerChipValue mono">{archivedTasks.length} hidden</span>
+                  <span className="headerChipLabel">API access</span>
+                  <span className="headerChipValue mono">{healthSnapshot?.services?.apiAccess?.mode || "unknown"}</span>
                 </div>
               </div>
             ) : null}
+            </div>
           </header>
 
           <section className={`mainBody ${isThreadFocusMode ? "reviewMode" : ""}`}>{renderMainContent()}</section>
-          {selectedTask && composeMode === "thread" && !(hasStackedEditor && threadMobilePanel === "editor") ? (
+          {selectedTask && composeMode === "thread" && !(hasStackedEditor && editor.mobilePanel === "editor") ? (
             threadBlockedByApproval ? (
               <section className="threadComposer composerBlockedState">
                 <div className="composerTop">
@@ -2120,142 +1172,10 @@ export default function App() {
             )
           ) : null}
         </main>
-        {hasSplitEditor ? (
-          <aside className="editorDock" role="dialog" aria-label="Docked workspace editor" style={{ width: `${editorDockWidth}px` }}>
-            <button
-              type="button"
-              className="editorDockResizeHandle"
-              aria-label="Resize docked editor"
-              title="Drag to resize"
-              onPointerDown={beginDockResize}
-            />
-            <div className="editorDockHeader">
-              <div className="editorDockTopBar">
-                <div className="editorDockHeading">
-                  <div className="panelLabel mono">thread.editor</div>
-                  <div className="editorDockTitle">Docked workspace editor</div>
-                </div>
-                <div className="editorDockActions">
-                  <span className="statusPill success">running</span>
-                  {renderEditorPasswordButton()}
-                  <button type="button" className="miniButton" onClick={() => setEditorDetailsCollapsed((value) => !value)}>
-                    {editorDetailsCollapsed ? "Show Details" : "Hide Details"}
-                  </button>
-                  <button type="button" className="miniButton" onClick={openEditorTab}>
-                    New Tab
-                  </button>
-                  <button type="button" className="miniButton" onClick={openEditorModal}>
-                    Modal
-                  </button>
-                  <button type="button" className="miniButton miniButtonDanger" onClick={() => setEditorSurface(null)}>
-                    Close
-                  </button>
-                </div>
-              </div>
-              {!editorDetailsCollapsed ? (
-                <div className="editorDockDetails">
-                  <div className="panelNote">If the embed is blocked by the browser or editor headers, open it in a new tab instead.</div>
-                  <div className="editorCredentials editorDockCredentials">
-                    <div className="editorCredential">
-                      <span className="headerChipLabel">URL</span>
-                      <a className="editorLink mono" href={codeServerEditorUrl} target="_blank" rel="noreferrer">
-                        {codeServerEditorUrl}
-                      </a>
-                    </div>
-                    {renderEditorPasswordCredential()}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-            {renderEditorFrame("split")}
-          </aside>
-        ) : null}
-      </div>
+        <DockedThreadEditor editor={editor} workspace={selectedTask?.workspace} />
+      </ApplicationShell>
 
-      {editorSurface === "modal" && codeServerSession?.url ? (
-        <div className="modalBackdrop" onClick={() => setEditorSurface(null)}>
-          <div
-            className="modalCard editorModal"
-            onClick={(event) => event.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Workspace editor"
-          >
-            <div className="panelChrome">
-              <div className="panelLabel mono">thread.editor</div>
-              <button type="button" className="iconButton" aria-label="Close workspace editor" onClick={() => setEditorSurface(null)}>
-                Close
-              </button>
-            </div>
-
-            <div className="editorModalBody">
-              <div className="editorModalHeader">
-                <div>
-                  <div className="modalTitle">Workspace editor</div>
-                  <div className="modalSubtitle">
-                    This embed stays scoped to the active thread workspace. If the iframe is blocked, use a new tab instead.
-                  </div>
-                </div>
-                {!editorDetailsCollapsed ? (
-                  <>
-                    <div className="editorMetaGrid">
-                      <div className="editorMetaItem">
-                        <span className="headerChipLabel">Workspace</span>
-                        <span className="editorMetaValue mono" title={selectedTask?.workspace || "none"}>
-                          {formatPathTail(selectedTask?.workspace, 4)}
-                        </span>
-                      </div>
-                      <div className="editorMetaItem">
-                        <span className="headerChipLabel">Status</span>
-                        <span className="statusPill success">running</span>
-                      </div>
-                      <div className="editorMetaItem">
-                        <span className="headerChipLabel">Mode</span>
-                        <span className="editorMetaValue mono">{codeServerSession.mode || "local"}</span>
-                      </div>
-                      <div className="editorMetaItem">
-                        <span className="headerChipLabel">Port</span>
-                        <span className="editorMetaValue mono">{codeServerSession.port}</span>
-                      </div>
-                    </div>
-                    <div className="editorCredentials">
-                      <div className="editorCredential">
-                        <span className="headerChipLabel">URL</span>
-                        <a className="editorLink mono" href={codeServerEditorUrl} target="_blank" rel="noreferrer">
-                          {codeServerEditorUrl}
-                        </a>
-                      </div>
-                      {renderEditorPasswordCredential()}
-                    </div>
-                  </>
-                ) : null}
-                <div className="editorModalActions">
-                  {renderEditorPasswordButton()}
-                  <button type="button" className="miniButton" onClick={() => setEditorDetailsCollapsed((value) => !value)}>
-                    {editorDetailsCollapsed ? "Show Details" : "Hide Details"}
-                  </button>
-                  {!shouldUseModalEditor() ? (
-                    <button type="button" className="primaryButton" onClick={openEditorSplit}>
-                      Dock Right
-                    </button>
-                  ) : null}
-                  <button type="button" className="miniButton" onClick={openEditorTab}>
-                    New Tab
-                  </button>
-                  <button type="button" className="miniButton miniButtonDanger" onClick={stopEditor} disabled={codeServerBusy}>
-                    {codeServerBusy ? "Stopping..." : "Stop"}
-                  </button>
-                  <button type="button" className="miniButton miniButtonDanger" onClick={() => setEditorSurface(null)}>
-                    Close
-                  </button>
-                </div>
-                {codeServerError ? <div className="errorBanner editorErrorBanner">{codeServerError}</div> : null}
-              </div>
-              {renderEditorFrame("modal", "editorModalViewport")}
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <ModalThreadEditor editor={editor} workspace={selectedTask?.workspace} />
     </>
   );
 }

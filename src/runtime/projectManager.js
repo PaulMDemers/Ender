@@ -5,6 +5,7 @@ const { randomUUID } = require("node:crypto");
 const { cloneRepository, runGit } = require("../tools/gitTools");
 const { createSafeJoin } = require("../utils/safePath");
 const { sanitizeJsonValue } = require("../utils/jsonSafe");
+const { migratePersistedRecord, versionPersistedRecord } = require("../persistence/jsonRecord");
 
 function slugify(value, fallback = "project") {
   const slug = String(value || "")
@@ -285,9 +286,14 @@ class ProjectManager {
     for (const entry of entries.filter((item) => item.isFile() && item.name.endsWith(".json"))) {
       const filePath = path.join(this.projectsDir, entry.name);
       try {
-        const data = JSON.parse(await fs.readFile(filePath, "utf8"));
+        const migrated = migratePersistedRecord(
+          JSON.parse(await fs.readFile(filePath, "utf8")),
+          "project"
+        );
+        const data = migrated.record;
         const project = this._hydrate(data);
         this.projects.set(project.id, project);
+        if (migrated.migrated) await this._persistProject(project);
       } catch (err) {
         console.warn(`Failed to load project ${filePath}: ${err.message || String(err)}`);
       }
@@ -295,7 +301,7 @@ class ProjectManager {
   }
 
   async _persistProject(project) {
-    const snapshot = JSON.stringify(this._serialize(project), null, 2);
+    const snapshot = JSON.stringify(versionPersistedRecord("project", this._serialize(project)), null, 2);
     const target = this._projectFile(project.id);
     const temp = `${target}.tmp`;
     const writeProject = async () => {

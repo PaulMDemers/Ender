@@ -1,121 +1,32 @@
-# UI Operator Console
+# UI Operator Console: Developer Addendum
 
-## Main entrypoints
+The maintained UI ownership map is [`FRONTEND_ARCHITECTURE.md`](../FRONTEND_ARCHITECTURE.md); operator instructions start at [`docs/README.md`](../docs/README.md).
 
-- `ui/src/App.jsx`
-- `ui/src/agentClient.js`
-- `ui/src/hooks/useTaskLogs.js`
+## Information architecture
 
-## What the UI does
+Primary destinations are **New thread**, **Workflows**, **Schedules**, and **Task ledger**. Selecting a task opens its live transcript. Server management is a modal with endpoint state, versions, REST/SSE compatibility, exposure mode, and runtime capabilities. The editor can be docked, modal, or stacked depending on viewport and operator choice.
 
-The React app is the operator console for:
+## State ownership
 
-- starting direct tasks
-- browsing and selecting threads
-- viewing live logs and final results
-- approving sensitive actions
-- running guided workflows
-- creating and editing schedules
-- switching between saved server endpoints
-- showing readiness/setup hints from `/health`
+- `useServerConnection`: endpoints, health, catalogs, compatibility, and connection history
+- `useTaskThreads`: task collection, selection support, collection mutations, and local thread metadata
+- `useTaskLogs`: selected-task SSE/log/approval state
+- `useAutomations`: workflows, schedules, session recovery, and automation mutations
+- `useTaskLedger`: ledger collection, polling, mutations, capacity, and outcomes
+- `useThreadEditor`: discovery, launch/stop, reachability, retry, credentials, and responsive presentation
+- `App.jsx`: page-level composition, navigation transitions, and explicit cross-domain handoffs
 
-## App shell
+Do not duplicate domain collections in `App.jsx`. A mutation should return its result; the composing layer explicitly refreshes/selects through the owning collection hook.
 
-`ui/src/App.jsx` is the main orchestrator.
-It owns state for:
+## Interaction contracts
 
-- tasks and selected task
-- server URL and saved servers
-- compose mode: new, thread, workflow, schedule
-- workflow session state
-- schedules
-- health/readiness
-- archived/pinned thread UI state
-- reconnect notices and sidebar state
+- Advanced launch, follow-up, ledger, and credential controls remain available behind labelled disclosures.
+- Initial health is **Checking**, not **Unavailable**. A reconnect message requires a prior success, failure, then recovery.
+- Failed launch/follow-up/editor/automation operations retain the operator's inputs and expose a matching retry.
+- Modal and mobile-navigation surfaces trap focus, dismiss with Escape, and restore focus.
+- Recurring polls pause while the document is hidden, refresh on foreground, and never overlap.
+- The same React build powers the browser and sandboxed Electron renderer.
 
-## Data flow
+## Verification
 
-`agentClient.js` wraps all REST calls and SSE setup.
-Important methods include:
-
-- `listTasks`, `startTask`, `continueTask`, `terminateTask`, `rerunTask`
-- `resolveApproval`
-- `listWorkflows`, `createWorkflowSession`, `advanceWorkflowSession`, `retreatWorkflowSession`
-- `listSchedules`, `createSchedule`, `updateSchedule`, `runScheduleNow`, `deleteSchedule`
-- `getHealth`
-- `streamLogs`
-
-## Live transcript flow
-
-When a thread is selected, `useTaskLogs` attaches to `/tasks/:id/stream` via `EventSource`.
-The stream handles:
-
-- `status`
-- `log`
-- `approval_required`
-- `complete`
-- `ping`
-
-The UI merges streamed state with periodic polling of `/tasks`.
-
-## Modes in the UI
-
-### New Thread
-
-Shows `NewTaskForm` and launches a direct task.
-
-### Thread
-
-Shows:
-
-- `ApprovalPrompt` when approvals are pending
-- `LogViewer` for transcript/logs
-- `ThreadComposer` for follow-up prompts when the thread is idle
-
-### Workflow
-
-Shows `WorkflowPanel`, which:
-
-- lists available workflows
-- starts a workflow session
-- renders current step through `WorkflowStepRenderer`
-- supports back navigation
-- shows workflow debug trace
-- transitions to thread view when a workflow starts a task
-
-### Schedule
-
-Shows `SchedulePanel`, which:
-
-- creates/edits schedules
-- supports prompt/thread/workflow targets
-- embeds workflow configuration for schedulable workflows
-- lists current schedules and last-run metadata
-
-## Persistence in the browser
-
-The UI stores some local state in `localStorage`, including:
-
-- saved server endpoints
-- selected API base
-- per-server thread UI state like pinned/archived
-- sidebar collapse state
-- resumable workflow session ids per server
-
-## Readiness UX
-
-The UI polls `/health` every 15 seconds and surfaces:
-
-- LLM readiness
-- workflow readiness
-- browser capture readiness
-- GitHub token readiness
-- self-update readiness
-- stream attachment state
-
-This is important because many features are conditionally usable based on env config.
-
-## Important UI assumption
-
-Workflow rendering is generic and contract-driven.
-If a new workflow stays within the shared step schema, the UI usually does not need custom code.
+Use the matching Playwright file under `e2e/tests/`, then run `npm run verify`. Inspect visual output before accepting or updating a snapshot.

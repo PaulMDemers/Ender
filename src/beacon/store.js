@@ -1,6 +1,7 @@
 const crypto = require("node:crypto");
 const fs = require("node:fs/promises");
 const path = require("node:path");
+const { migratePersistedRecord, versionPersistedRecord } = require("../persistence/jsonRecord");
 
 function nowIso() {
   return new Date().toISOString();
@@ -51,12 +52,14 @@ class BeaconStore {
     await fs.mkdir(path.dirname(this.dataFile), { recursive: true });
     try {
       const raw = await fs.readFile(this.dataFile, "utf8");
-      const parsed = JSON.parse(raw);
+      const migrated = migratePersistedRecord(JSON.parse(raw), "beaconStore");
+      const parsed = migrated.record;
       this.data = {
         devices: parsed.devices && typeof parsed.devices === "object" ? parsed.devices : {},
         servers: parsed.servers && typeof parsed.servers === "object" ? parsed.servers : {},
         notifications: parsed.notifications && typeof parsed.notifications === "object" ? parsed.notifications : {}
       };
+      if (migrated.migrated) await this.persist();
     } catch (err) {
       if (err.code !== "ENOENT") throw err;
       await this.persist();
@@ -66,7 +69,7 @@ class BeaconStore {
   persist() {
     this.writeQueue = this.writeQueue.then(async () => {
       const tmp = `${this.dataFile}.tmp`;
-      await fs.writeFile(tmp, JSON.stringify(this.data, null, 2));
+      await fs.writeFile(tmp, JSON.stringify(versionPersistedRecord("beaconStore", this.data), null, 2));
       await fs.rename(tmp, this.dataFile);
     });
     return this.writeQueue;

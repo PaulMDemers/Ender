@@ -5,6 +5,12 @@ const cors = require("cors");
 const { createUserAuth } = require("../beacon/auth");
 const { PillarStore } = require("./store");
 const { CloudPostgresStore } = require("../cloud/postgresStore");
+const {
+  TASK_SSE_CONTRACT_EVENT,
+  createTaskSseContractPayload,
+  setTaskSseContractHeaders,
+  writeTaskSseEvent
+} = require("../shared/apiContracts");
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 60_000;
 const DEFAULT_POLL_TIMEOUT_MS = 25_000;
@@ -328,11 +334,6 @@ function isTerminalStatus(status) {
     || status === "needs_input";
 }
 
-function writeSse(res, event, data) {
-  res.write(`event: ${event}\n`);
-  res.write(`data: ${JSON.stringify(data)}\n\n`);
-}
-
 function parseRelayedJson(response) {
   if (!response || response.status < 200 || response.status >= 300) {
     const err = new Error(`relayed_request_failed_${response?.status || 502}`);
@@ -374,13 +375,15 @@ function createTaskStreamHandler(relay, config) {
     res.on("close", close);
     res.on("finish", close);
 
+    setTaskSseContractHeaders(res);
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache, no-transform");
     res.setHeader("Connection", "keep-alive");
     res.flushHeaders?.();
+    writeTaskSseEvent(res, TASK_SSE_CONTRACT_EVENT, createTaskSseContractPayload());
 
     const heartbeat = setInterval(() => {
-      if (!closed) writeSse(res, "ping", Date.now());
+      if (!closed) writeTaskSseEvent(res, "ping", Date.now());
     }, heartbeatMs);
     heartbeat.unref?.();
 
@@ -396,12 +399,12 @@ function createTaskStreamHandler(relay, config) {
       if (statusChanged && !sentInitialStatus) {
         lastStatus = task.status;
         sentInitialStatus = true;
-        writeSse(res, "status", { t: Date.now(), status: task.status });
+        writeTaskSseEvent(res, "status", { t: Date.now(), status: task.status });
       }
 
       if (Array.isArray(logs?.entries)) {
         for (const log of logs.entries) {
-          writeSse(res, "log", log);
+          writeTaskSseEvent(res, "log", log);
         }
         if (Number.isFinite(Number(logs.to))) {
           logCursor = Number(logs.to);
@@ -412,19 +415,19 @@ function createTaskStreamHandler(relay, config) {
 
       if (statusChanged && sentInitialStatus && task.status !== lastStatus) {
         lastStatus = task.status;
-        writeSse(res, "status", { t: Date.now(), status: task.status });
+        writeTaskSseEvent(res, "status", { t: Date.now(), status: task.status });
       }
 
       if (Array.isArray(task?.pendingApprovals)) {
         for (const approval of task.pendingApprovals) {
           if (!approval?.id || seenApprovalIds.has(approval.id)) continue;
           seenApprovalIds.add(approval.id);
-          writeSse(res, "approval_required", approval);
+          writeTaskSseEvent(res, "approval_required", approval);
         }
       }
 
       if (isTerminalStatus(task?.status)) {
-        writeSse(res, "complete", { status: task.status, result: task.result || null });
+        writeTaskSseEvent(res, "complete", { status: task.status, result: task.result || null });
         return false;
       }
 
@@ -442,7 +445,7 @@ function createTaskStreamHandler(relay, config) {
       }
     } catch (err) {
       if (!closed) {
-        writeSse(res, "error", {
+        writeTaskSseEvent(res, "error", {
           t: Date.now(),
           level: "error",
           data: err.message || String(err)

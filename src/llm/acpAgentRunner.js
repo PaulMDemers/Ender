@@ -1,6 +1,7 @@
 const { spawn } = require("node:child_process");
 const { Writable, Readable } = require("node:stream");
 const acp = require("@agentclientprotocol/sdk");
+const { createAbortError, isAbortError, throwIfAborted } = require("../utils/abort");
 
 const DEFAULT_HANDSHAKE_TIMEOUT_MS = 10_000;
 const AGENT_LOG_FLUSH_MS = 900;
@@ -288,7 +289,8 @@ async function runAcpSession({
   onLog,
   requestApproval,
   toolsByName,
-  transport
+  transport,
+  signal = null
 }) {
   const stream = transport.stream;
   let agentOutput = "";
@@ -347,7 +349,8 @@ async function runAcpSession({
       }
 
       try {
-        const result = await tool.invoke(args);
+        throwIfAborted(signal);
+        const result = await tool.invoke(args, { signal });
         const resultContent = typeof result === "string" ? result : JSON.stringify(result);
         return {
           outcome: {
@@ -371,7 +374,8 @@ async function runAcpSession({
       const tool = toolsByName["file_read"];
       if (!tool) return { error: "file_read tool not available" };
       try {
-        const result = await tool.invoke({ path: params.path });
+        throwIfAborted(signal);
+        const result = await tool.invoke({ path: params.path }, { signal });
         return { content: typeof result === "string" ? result : JSON.stringify(result) };
       } catch (err) {
         return { error: err.message };
@@ -382,7 +386,8 @@ async function runAcpSession({
       const tool = toolsByName["file_write"];
       if (!tool) return { error: "file_write tool not available" };
       try {
-        await tool.invoke({ path: params.path, content: params.content });
+        throwIfAborted(signal);
+        await tool.invoke({ path: params.path, content: params.content }, { signal });
         return { success: true };
       } catch (err) {
         return { error: err.message };
@@ -391,28 +396,43 @@ async function runAcpSession({
   };
 
   const client = new acp.ClientSideConnection(() => clientHandler, stream);
+  let sessionId = null;
+  let rejectOnAbort = null;
+  const aborted = new Promise((_, reject) => {
+    rejectOnAbort = reject;
+  });
+  const abort = () => {
+    if (sessionId) {
+      client.cancel({ sessionId }).catch(() => {});
+    }
+    rejectOnAbort(createAbortError(signal?.reason));
+  };
+  signal?.addEventListener("abort", abort, { once: true });
 
   try {
+    throwIfAborted(signal);
     await withTimeout(
-      client.initialize({
+      Promise.race([client.initialize({
         protocolVersion: acp.PROTOCOL_VERSION,
         clientInfo: { name: "ender-acp-client", version: "1.0.0" },
         clientCapabilities: {
           fs: { readTextFile: true, writeTextFile: true }
         }
-      }),
+      }), aborted]),
       getHandshakeTimeoutMs(),
       () => createHandshakeTimeoutError(transport, "initialize")
     );
 
     const { sessionId: newSessionId } = await withTimeout(
-      client.newSession({
+      Promise.race([client.newSession({
         cwd: activeWorkdir,
         mcpServers: []
-      }),
+      }), aborted]),
       getHandshakeTimeoutMs(),
       () => createHandshakeTimeoutError(transport, "newSession")
     );
+    sessionId = newSessionId;
+    throwIfAborted(signal);
 
     onLog({ level: "info", data: `acp session started: ${newSessionId}` });
     onLog({ level: "info", data: `workspace=${activeWorkdir}` });
@@ -428,10 +448,10 @@ async function runAcpSession({
     }
     promptParts.push({ type: "text", text: String(goal || "") });
 
-    const response = await client.prompt({
+    const response = await Promise.race([client.prompt({
       sessionId: newSessionId,
       prompt: promptParts
-    });
+    }), aborted]);
 
     agentTextLogger.flush();
     onLog({ level: "info", data: `acp prompt finished: stopReason=${response.stopReason}` });
@@ -450,6 +470,7 @@ async function runAcpSession({
     }
     throw err;
   } finally {
+    signal?.removeEventListener("abort", abort);
     agentTextLogger.flush();
     transport.kill();
   }
@@ -462,7 +483,8 @@ async function runAcpAgent({
   onLog,
   requestApproval,
   workspaceDir,
-  tools
+  tools,
+  signal = null
 }) {
   const activeWorkdir = workspaceDir || config.workdir;
   const toolsByName = Object.fromEntries(tools.map((t) => [t.name, t]));
@@ -482,10 +504,11 @@ async function runAcpAgent({
       onLog,
       requestApproval,
       toolsByName,
-      transport: stdioTransport
+      transport: stdioTransport,
+      signal
     });
   } catch (err) {
-    if (!shouldRetryWithPty(err, stdioTransport)) {
+    if (isAbortError(err) || signal?.aborted || !shouldRetryWithPty(err, stdioTransport)) {
       throw err;
     }
 
@@ -501,7 +524,8 @@ async function runAcpAgent({
       onLog,
       requestApproval,
       toolsByName,
-      transport: createPtyTransport(transportParams)
+      transport: createPtyTransport(transportParams),
+      signal
     });
   }
 }

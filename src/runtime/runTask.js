@@ -82,7 +82,9 @@ async function runTask({
   selfUpdateManager,
   taskLedgerManager,
   projectManager,
-  memoryManager
+  memoryManager,
+  createModel = createChatModel,
+  signal = null
 }) {
   const activeWorkdir = workspaceDir || config.workdir;
   await fs.mkdir(activeWorkdir, { recursive: true });
@@ -123,7 +125,7 @@ async function runTask({
     ...(isLedgerTask && taskLedgerManager && taskManager
       ? createTaskLedgerRuntimeTools(taskLedgerManager, taskManager, { taskId, onLog })
       : []),
-    createExecTool(activeWorkdir, { requestApproval, onLog }),
+    createExecTool(activeWorkdir, { requestApproval, onLog, signal }),
     ...createLedgerTools(ledger, {
       onFinalize(outcome) {
         finalizedOutcome = outcome;
@@ -149,7 +151,8 @@ async function runTask({
       onLog,
       requestApproval,
       workspaceDir: activeWorkdir,
-      tools
+      tools,
+      signal
     });
     ledger.progress.turns = 1;
     return {
@@ -159,6 +162,7 @@ async function runTask({
     };
   }
 
+  const model = createModel(config);
   const result = await runAgentLoop({
     model,
     tools,
@@ -170,7 +174,8 @@ async function runTask({
     thread,
     maxSteps: config.maxSteps,
     stallLimit: config.stallLimit,
-    onLog
+    onLog,
+    signal
   });
   const finalText = result.result;
   ledger.progress.turns = result.steps;

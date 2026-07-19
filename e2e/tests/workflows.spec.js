@@ -90,14 +90,14 @@ test('renders workflow list and advances through mocked steps', async ({ page })
   await expect(page.locator('.workflowList')).toHaveScreenshot('workflow-list.png');
 
   await page.getByRole('button', { name: /jira to repo task/i }).click();
-  await expect(page.getByText('Choose a project')).toBeVisible();
+  await expect(page.locator('.workflowHero .launchTitle')).toHaveText('Choose a project');
   await page.locator('.workflowConsole').screenshot({ path: 'test-results/workflow-select-state.png' });
   await expect(page.locator('.workflowConsole')).toHaveScreenshot('workflow-select-state.png');
 
   await page.getByLabel('Team').selectOption('platform');
   await page.getByRole('button', { name: /engineering/i }).click();
 
-  await expect(page.getByText('Provide launch details')).toBeVisible();
+  await expect(page.locator('.workflowHero .launchTitle')).toHaveText('Provide launch details');
   await expect(page.getByLabel('Issue key')).toBeVisible();
   await expect(page.locator('.workflowConsole')).toHaveScreenshot('workflow-form-state.png');
 });

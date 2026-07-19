@@ -108,4 +108,6 @@ When the last pending approval is resolved, the task returns to `running`.
 - workspace metadata
 - project id, model profile id, and memory loading mode
 
-Workflow sessions are separate and are not persisted here.
+Workflow sessions are persisted separately in `workflow-sessions/`; scheduled workflow replays remain intentionally ephemeral. Task-ledger entries are also separate records and link to the task ID created for each dispatched run.
+
+For record versions, migration behavior, and the complete storage inventory, see [`PERSISTENCE.md`](../../PERSISTENCE.md).

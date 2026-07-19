@@ -1,4 +1,6 @@
 import ServerPickerPanel from "./ServerPickerPanel";
+import StatusIndicator from "./ui/StatusIndicator";
+import StateNotice from "./ui/StateNotice";
 
 const logoIcon = "/icons/icon-rounded-master.png";
 
@@ -34,7 +36,9 @@ export default function ServerPickerShell({
   servers,
   busy,
   error,
+  connectionState,
   onConnect,
+  onRetry,
   onToggleFavorite,
   onRemove
 }) {
@@ -65,10 +69,7 @@ export default function ServerPickerShell({
           </div>
 
           <div className="serverPickerHeroStatus">
-            <div className={`connectionStatus ${status.tone}`}>
-              <span className="statusDot" />
-              {status.label}
-            </div>
+            <StatusIndicator label={status.label} tone={status.tone} />
             <div className="panelNote">{status.detail}</div>
             {showLastTarget && currentEndpoint ? (
               <div className="serverPickerLastTarget">
@@ -86,7 +87,7 @@ export default function ServerPickerShell({
             <div className="panelLabel mono">server.connections</div>
           </div>
           <div className="panelBody serverPickerShellBody">
-            {error ? <div className="errorBanner">{error}</div> : null}
+            {error ? <StateNotice tone="danger" title="Connection failed" detail={error} actionLabel="Retry last target" onAction={onRetry} busy={busy} /> : null}
             <ServerPickerPanel
               currentEndpoint={currentEndpoint}
               servers={servers}
@@ -97,6 +98,8 @@ export default function ServerPickerShell({
               activeConnectionLabel={busy ? "Trying" : "Selected"}
               inactiveConnectionLabel="Saved"
               busy={busy}
+              connectionState={connectionState}
+              error={error}
             />
           </div>
         </section>

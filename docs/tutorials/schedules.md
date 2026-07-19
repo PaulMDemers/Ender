@@ -4,6 +4,8 @@ Schedules let Ender run work automatically on a cron cadence.
 
 Schedule data is persisted in `schedules/` and reloaded on server start.
 
+Choose **Schedules** in the primary navigation to create, inspect, run, enable/disable, edit, or delete schedules.
+
 ## Supported schedule targets
 
 Ender supports three schedule target kinds:
@@ -94,3 +96,6 @@ If a run fails, Ender persists the error message to the schedule record.
 - Schedule deletion is approval-gated when triggered through the cron tool inside a running task.
 - Workflow schedules only work well when the workflow can complete from replayed saved inputs without extra interactive choices.
 
+Use **Task ledger** instead when the work is a durable queue item that needs attempts, dispatch policy, execution outcomes, and a linked task record rather than a fixed cron cadence.
+
+For failed runs, stale state, timezone problems, and task-ledger dispatch diagnosis, see [Troubleshoot Ender](../guides/troubleshooting.md).

@@ -16,11 +16,17 @@ function jsonRoute(page, method, path, body, status = 200) {
 async function mockHealth(page, overrides = {}) {
   const body = {
     ok: true,
+    app: { name: 'Ender', version: '0.1.1' },
+    backend: 'acp',
     services: {
+      apiAccess: { ready: true, mode: 'local', bindHost: '127.0.0.1', corsOrigins: [], remoteAccess: false },
       llm: { ready: true, missing: [] },
       browserCapture: { ready: true, detail: 'Chromium installed' },
       github: { ready: true, missing: [] },
-      selfUpdate: { ready: true, rootDir: '/Users/test/Ender' }
+      codeServer: { ready: true, mode: 'auto' },
+      selfUpdate: { ready: true, rootDir: '/Users/test/Ender' },
+      pillar: { ready: true, enabled: false, missing: [] },
+      beacon: { ready: true, enabled: false, missing: [] }
     },
     workflows: {
       jira_to_repo_task: { ready: true, missing: [] }

@@ -34,7 +34,7 @@ You also need a working LLM backend, since the workflow ultimately starts a norm
 
 In the UI:
 
-1. Switch to the workflow panel.
+1. Choose **Workflows** in the primary navigation.
 2. Choose `Jira -> Repo -> Work`.
 
 Under the hood, the UI creates a session with:
@@ -104,4 +104,4 @@ See:
 
 - [Create a recurring schedule](schedules.md)
 - [Create a custom workflow](../guides/custom-workflow.md)
-
+- [Troubleshoot Ender](../guides/troubleshooting.md)

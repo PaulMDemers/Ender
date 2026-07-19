@@ -3,6 +3,7 @@ const { z } = require("zod");
 const { tool } = require("@langchain/core/tools");
 const { createSafeJoin } = require("../utils/safePath");
 const { sanitizeJsonValue } = require("../utils/jsonSafe");
+const { createAbortError, throwIfAborted } = require("../utils/abort");
 
 function inferMissingCommand(cmd, stderrText) {
   const stderr = String(stderrText || "");
@@ -44,11 +45,29 @@ function inferApprovalReason(cmd) {
   return null;
 }
 
-function createExecTool(rootDir, { requestApproval, onLog } = {}) {
+function terminateCommand(child) {
+  if (!child || child.killed) return;
+  try {
+    if (process.platform !== "win32" && child.pid) {
+      process.kill(-child.pid, "SIGTERM");
+      return;
+    }
+  } catch {
+    // Fall back to the direct shell process.
+  }
+  try {
+    child.kill("SIGTERM");
+  } catch {
+    // The command may already have exited.
+  }
+}
+
+function createExecTool(rootDir, { requestApproval, onLog, signal = null } = {}) {
   const safeJoin = createSafeJoin(rootDir);
 
   return tool(
     async ({ cmd, cwd }) => {
+      throwIfAborted(signal);
       const workingDir = cwd ? safeJoin(cwd) : rootDir;
       const approval = inferApprovalReason(cmd);
       if (approval) {
@@ -73,11 +92,25 @@ function createExecTool(rootDir, { requestApproval, onLog } = {}) {
         }
       }
 
-      const result = await new Promise((resolve) => {
-        cp.exec(
+      throwIfAborted(signal);
+      const result = await new Promise((resolve, reject) => {
+        let settled = false;
+        const child = cp.exec(
           cmd,
-          { cwd: workingDir, timeout: 90_000, maxBuffer: 1024 * 1024 },
+          {
+            cwd: workingDir,
+            timeout: 90_000,
+            maxBuffer: 1024 * 1024,
+            detached: process.platform !== "win32"
+          },
           (error, stdout, stderr) => {
+            if (settled) return;
+            settled = true;
+            signal?.removeEventListener("abort", abort);
+            if (signal?.aborted) {
+              reject(createAbortError(signal.reason));
+              return;
+            }
             const code = error && typeof error.code === "number" ? error.code : 0;
             const stderrText = String(stderr || "");
             const isTimeout = Boolean(error && error.killed);
@@ -100,6 +133,16 @@ function createExecTool(rootDir, { requestApproval, onLog } = {}) {
             });
           }
         );
+
+        const abort = () => {
+          if (settled) return;
+          settled = true;
+          terminateCommand(child);
+          reject(createAbortError(signal?.reason));
+        };
+
+        signal?.addEventListener("abort", abort, { once: true });
+        if (signal?.aborted) abort();
       });
       return JSON.stringify(sanitizeJsonValue(result));
     },

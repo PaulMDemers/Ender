@@ -5,6 +5,7 @@ const net = require("node:net");
 const os = require("node:os");
 const cp = require("node:child_process");
 const { randomBytes } = require("node:crypto");
+const { migratePersistedRecord, versionPersistedRecord } = require("../persistence/jsonRecord");
 
 function runDockerCommand(args, options = {}) {
   return new Promise((resolve) => {
@@ -418,6 +419,29 @@ class CodeServerManager {
     return { ok: true, stopped: true };
   }
 
+  async stopAllTaskSessions() {
+    let entries = [];
+    try {
+      entries = await fs.readdir(this.codeServerConfig.stateDir, { withFileTypes: true });
+    } catch {
+      return [];
+    }
+
+    const taskIds = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+    return Promise.all(taskIds.map(async (taskId) => {
+      try {
+        return await this.stopTaskSession(taskId);
+      } catch (err) {
+        return {
+          ok: false,
+          error: "code_server_stop_failed",
+          message: err?.message || String(err),
+          taskId
+        };
+      }
+    }));
+  }
+
   _launchStrategies() {
     const mode = this.codeServerConfig.mode || "auto";
     if (mode === "local") {
@@ -816,7 +840,10 @@ class CodeServerManager {
   async _readSessionMetadata(taskId) {
     try {
       const raw = await fs.readFile(this._metadataFile(taskId), "utf8");
-      return JSON.parse(raw);
+      const migrated = migratePersistedRecord(JSON.parse(raw), "codeServerSession");
+      const { recordVersion: _recordVersion, ...metadata } = migrated.record;
+      if (migrated.migrated) await this._writeSessionMetadata(taskId, metadata);
+      return metadata;
     } catch {
       return null;
     }
@@ -825,7 +852,11 @@ class CodeServerManager {
   async _writeSessionMetadata(taskId, metadata) {
     const file = this._metadataFile(taskId);
     const temp = `${file}.tmp`;
-    await fs.writeFile(temp, JSON.stringify(metadata, null, 2), "utf8");
+    await fs.writeFile(
+      temp,
+      JSON.stringify(versionPersistedRecord("codeServerSession", metadata), null, 2),
+      "utf8"
+    );
     await fs.rename(temp, file);
   }
 

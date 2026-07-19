@@ -1,8 +1,29 @@
+// @ts-check
+
 const fs = require("node:fs/promises");
 const fsSync = require("node:fs");
 const path = require("node:path");
 const { randomUUID } = require("node:crypto");
 const { sanitizeJsonValue, sanitizeString } = require("../utils/jsonSafe");
+const { isAbortError } = require("../utils/abort");
+const {
+  TASK_STATUS,
+  canTransitionTaskStatus,
+  isActiveTaskStatus,
+  isTerminalTaskStatus,
+  outcomeStatusToTaskStatus
+} = require("./taskLifecycle");
+const { JsonTaskRepository } = require("./jsonTaskRepository");
+const { TaskApprovalCoordinator } = require("./taskApprovalCoordinator");
+const { TaskExecutionRunner } = require("./taskExecutionRunner");
+const { TASK_RECORD_VERSION, migrateTaskRecord } = require("./taskRecord");
+const {
+  TASK_SSE_CONTRACT_EVENT,
+  createTaskSseContractPayload,
+  formatTaskSseEvent,
+  setTaskSseContractHeaders,
+  writeTaskSseEvent
+} = require("../shared/apiContracts");
 
 const THREAD_CONTEXT_LIMIT = 12;
 const ALLOWED_IMAGE_DETAILS = new Set(["auto", "low", "high"]);
@@ -115,7 +136,7 @@ function normalizeContinueTaskInput(input) {
 }
 
 class TaskManager {
-  constructor(config) {
+  constructor(config, options = {}) {
     this.config = config;
     this.scheduleManager = null;
     this.selfUpdateManager = null;
@@ -124,23 +145,22 @@ class TaskManager {
     this.memoryManager = null;
     this.llmProfileManager = null;
     this.notificationClient = null;
+    this.logger = options.logger || console;
     this.tasks = new Map();
+    this.shuttingDown = false;
     this.maxLogs = 5000;
     this.threadsDir = path.resolve(this.config.threadsDir || path.resolve(process.cwd(), "threads"));
-    this._persistQueue = Promise.resolve();
+    this.taskRepository = options.taskRepository || new JsonTaskRepository({ threadsDir: this.threadsDir });
+    this.taskRunner = options.taskRunner || new TaskExecutionRunner();
+    this.approvalCoordinator = options.approvalCoordinator || new TaskApprovalCoordinator();
   }
 
   _isTerminalStatus(status) {
-    return status === "done"
-      || status === "error"
-      || status === "canceled"
-      || status === "terminated"
-      || status === "blocked"
-      || status === "needs_input";
+    return isTerminalTaskStatus(status);
   }
 
   async init() {
-    await fs.mkdir(this.threadsDir, { recursive: true });
+    await this.taskRepository.init();
     await this._loadPersistedTasks();
   }
 
@@ -170,6 +190,59 @@ class TaskManager {
 
   setNotificationClient(notificationClient) {
     this.notificationClient = notificationClient || null;
+  }
+
+  _transitionTask(task, nextStatus, options = {}) {
+    const previousStatus = task.status;
+    if (!canTransitionTaskStatus(previousStatus, nextStatus)) {
+      throw new Error(`Invalid task status transition: ${previousStatus} -> ${nextStatus}`);
+    }
+
+    task.status = nextStatus;
+    if (options.clearFinishedAt) task.finishedAt = null;
+    if (Object.prototype.hasOwnProperty.call(options, "finishedAt")) {
+      task.finishedAt = options.finishedAt;
+    }
+    if (Object.prototype.hasOwnProperty.call(options, "result")) {
+      task.result = options.result;
+    }
+
+    if (options.publishStatus !== false) this._broadcastStatus(task);
+    if (options.schedulePersist) this._schedulePersist(task);
+    return { previousStatus, status: nextStatus };
+  }
+
+  _publishTerminalState(task, notification = null) {
+    if (!isTerminalTaskStatus(task.status)) {
+      throw new Error(`Cannot publish completion for non-terminal task status: ${task.status}`);
+    }
+
+    this._broadcastEvent(task, "complete", {
+      status: task.status,
+      result: task.result || null
+    });
+    this._resolveWaiters(task);
+    if (notification) {
+      this._notifyTaskEvent(task, notification.type, notification.input);
+    }
+    this._closeSubscribers(task);
+  }
+
+  _publishApprovalRequired(task, approval) {
+    this._broadcastEvent(task, "approval_required", {
+      id: approval.id,
+      type: approval.type,
+      title: approval.title,
+      description: approval.description,
+      details: approval.details,
+      requestedAt: approval.requestedAt
+    });
+    this._notifyTaskEvent(task, "approval_required", {
+      title: approval.title || "Ender approval required",
+      body: approval.description || task.goal,
+      approvalId: approval.id,
+      approvalType: approval.type
+    });
   }
 
   async listWorkspaces() {
@@ -223,7 +296,7 @@ class TaskManager {
       finishedAt: t.finishedAt || null,
       logCount: t.logs.length,
       runCount: t.runCount,
-      pendingApprovalCount: t.pendingApprovals.size,
+      pendingApprovalCount: this.approvalCoordinator.count(t),
       workspace: t.workspace,
       workspaceLabel: t.workspaceLabel,
       projectId: t.projectId || null,
@@ -255,14 +328,7 @@ class TaskManager {
       ledgerEntryId: t.ledgerEntryId || null,
       parentTaskId: t.parentTaskId || null,
       childTaskIds: Array.isArray(t.childTaskIds) ? [...t.childTaskIds] : [],
-      pendingApprovals: [...t.pendingApprovals.values()].map((a) => ({
-        id: a.id,
-        type: a.type,
-        title: a.title,
-        description: a.description,
-        details: a.details,
-        requestedAt: a.requestedAt
-      }))
+      pendingApprovals: this.approvalCoordinator.list(t)
     };
   }
 
@@ -347,6 +413,7 @@ class TaskManager {
   }
 
   rerun(id) {
+    if (this.shuttingDown) return { ok: false, error: "shutting_down", message: "Ender is shutting down" };
     const t = this.tasks.get(id);
     if (!t) return { ok: false, error: "not_found" };
     const rerunGoal = String(t.initialGoal || t.goal || "").trim();
@@ -360,9 +427,10 @@ class TaskManager {
   }
 
   continueTask(id, input) {
+    if (this.shuttingDown) return { ok: false, error: "shutting_down", message: "Ender is shutting down" };
     const t = this.tasks.get(id);
     if (!t) return { ok: false, error: "not_found" };
-    if (t.status === "running" || t.status === "awaiting_approval") {
+    if (isActiveTaskStatus(t.status)) {
       return { ok: false, error: "task_busy" };
     }
 
@@ -384,19 +452,15 @@ class TaskManager {
     const task = this.tasks.get(taskId);
     if (!task) return { ok: false, error: "not_found" };
 
-    const approval = task.pendingApprovals.get(approvalId);
-    if (!approval) return { ok: false, error: "approval_not_found" };
-
-    task.pendingApprovals.delete(approvalId);
-    approval.resolve(Boolean(approved));
+    const resolution = this.approvalCoordinator.resolve(task, approvalId, approved);
+    if (!resolution.ok) return resolution;
 
     const msg = approved ? `approval granted (${approvalId})` : `approval denied (${approvalId})`;
     this._push(task, { level: approved ? "info" : "warn", data: msg });
     this._broadcastLog(task, this._normalizeLog({ level: approved ? "info" : "warn", data: msg }));
 
-    if (task.pendingApprovals.size === 0 && task.status === "awaiting_approval") {
-      task.status = "running";
-      this._broadcastStatus(task);
+    if (resolution.remaining === 0 && task.status === TASK_STATUS.AWAITING_APPROVAL) {
+      this._transitionTask(task, TASK_STATUS.RUNNING);
     }
 
     this._schedulePersist(task);
@@ -407,20 +471,16 @@ class TaskManager {
     const t = this.tasks.get(id);
     if (!t) return { ok: false, error: "not_found" };
 
-    if (t.status === "running" || t.status === "awaiting_approval") {
-      t.status = "terminated";
+    if (isActiveTaskStatus(t.status)) {
+      t.runController?.abort(new Error("Task terminated by user"));
+      this._transitionTask(t, TASK_STATUS.TERMINATED, {
+        finishedAt: t.finishedAt || new Date().toISOString(),
+        schedulePersist: true
+      });
       this._push(t, { level: "warn", data: "Task marked as terminated" });
-      this._broadcastStatus(t);
-      this._broadcastEvent(t, "complete", { status: t.status, result: t.result || null });
-      this._closeSubscribers(t);
 
-      for (const approval of t.pendingApprovals.values()) {
-        approval.resolve(false);
-      }
-      t.pendingApprovals.clear();
-      t.finishedAt = t.finishedAt || new Date().toISOString();
-      this._schedulePersist(t);
-      this._resolveWaiters(t);
+      this.approvalCoordinator.rejectAll(t);
+      this._publishTerminalState(t);
     }
 
     return { ok: true };
@@ -453,12 +513,10 @@ class TaskManager {
       }
     }
 
-    if (task.status === "running" || task.status === "awaiting_approval") {
-      task.status = "terminated";
-      for (const approval of task.pendingApprovals.values()) {
-        approval.resolve(false);
-      }
-      task.pendingApprovals.clear();
+    if (isActiveTaskStatus(task.status)) {
+      task.runController?.abort(new Error("Task deleted by user"));
+      this._transitionTask(task, TASK_STATUS.TERMINATED, { publishStatus: false });
+      this.approvalCoordinator.rejectAll(task);
       this._closeSubscribers(task);
       this._resolveWaiters(task);
     }
@@ -489,13 +547,14 @@ class TaskManager {
     try {
       await this._deleteTaskFile(id);
     } catch (err) {
-      console.warn(`Failed to delete persisted thread ${id}: ${err.message || String(err)}`);
+      this.logger.warn(`Failed to delete persisted thread ${id}: ${err.message || String(err)}`);
     }
 
     return { ok: true, workspaceDeletion };
   }
 
   start(goal, workspaceInput, options = {}) {
+    if (this.shuttingDown) return { ok: false, error: "shutting_down", message: "Ender is shutting down" };
     let workspace;
     let workspaceLabel;
     try {
@@ -513,7 +572,7 @@ class TaskManager {
       goal: cleanGoal,
       initialGoal: cleanGoal,
       latestPrompt: cleanGoal,
-      status: "running",
+      status: TASK_STATUS.RUNNING,
       startedAt: new Date().toISOString(),
       finishedAt: null,
       logs: [],
@@ -521,7 +580,7 @@ class TaskManager {
       result: null,
       runCount: 0,
       thread: [{ role: "user", content: cleanGoal }],
-      pendingApprovals: new Map(),
+      pendingApprovals: this.approvalCoordinator.createStore(),
       workspace,
       workspaceLabel,
       projectId: options.projectId ? String(options.projectId) : null,
@@ -580,17 +639,19 @@ class TaskManager {
     const t = this.tasks.get(id);
     if (!t) return false;
 
+    setTaskSseContractHeaders(res);
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache, no-transform");
     res.setHeader("Connection", "keep-alive");
     res.flushHeaders?.();
 
-    res.write(`event: status\ndata: ${JSON.stringify({ t: Date.now(), status: t.status })}\n\n`);
+    writeTaskSseEvent(res, TASK_SSE_CONTRACT_EVENT, createTaskSseContractPayload());
+    writeTaskSseEvent(res, "status", { t: Date.now(), status: t.status });
     for (const log of t.logs) {
-      res.write(`event: log\ndata: ${JSON.stringify(log)}\n\n`);
+      writeTaskSseEvent(res, "log", log);
     }
 
-    for (const approval of t.pendingApprovals.values()) {
+    for (const approval of this.approvalCoordinator.list(t)) {
       const payload = {
         id: approval.id,
         type: approval.type,
@@ -599,17 +660,17 @@ class TaskManager {
         details: approval.details,
         requestedAt: approval.requestedAt
       };
-      res.write(`event: approval_required\ndata: ${JSON.stringify(payload)}\n\n`);
+      writeTaskSseEvent(res, "approval_required", payload);
     }
 
     if (this._isTerminalStatus(t.status)) {
-      res.write(`event: complete\ndata: ${JSON.stringify({ status: t.status, result: t.result || null })}\n\n`);
+      writeTaskSseEvent(res, "complete", { status: t.status, result: t.result || null });
       res.end();
       return true;
     }
 
     const hb = setInterval(() => {
-      res.write(`event: ping\ndata: ${Date.now()}\n\n`);
+      writeTaskSseEvent(res, "ping", Date.now());
     }, 15000);
 
     t.subs.add(res);
@@ -706,130 +767,146 @@ class TaskManager {
   }
 
   _requestApproval(task, payload) {
-    const id = randomUUID();
-    return new Promise((resolve) => {
-      const approval = {
-        id,
-        type: payload.type || "generic",
-        title: payload.title || "Approval required",
-        description: payload.description || "Please confirm this action",
-        details: payload.details || {},
-        requestedAt: new Date().toISOString(),
-        resolve
-      };
-
-      task.pendingApprovals.set(id, approval);
-      task.status = "awaiting_approval";
-      this._broadcastStatus(task);
-      this._schedulePersist(task);
-      this._broadcastEvent(task, "approval_required", {
-        id: approval.id,
-        type: approval.type,
-        title: approval.title,
-        description: approval.description,
-        details: approval.details,
-        requestedAt: approval.requestedAt
-      });
-      this._notifyTaskEvent(task, "approval_required", {
-        title: approval.title || "Ender approval required",
-        body: approval.description || task.goal,
-        approvalId: approval.id,
-        approvalType: approval.type
-      });
+    const { approval, decision } = this.approvalCoordinator.request(task, payload);
+    this._transitionTask(task, TASK_STATUS.AWAITING_APPROVAL, {
+      schedulePersist: true
     });
+    this._publishApprovalRequired(task, approval);
+    return decision;
   }
 
   _runThread(task) {
-    task.status = "running";
-    task.finishedAt = null;
+    task.runController?.abort(new Error("Task execution superseded"));
+    this.approvalCoordinator.rejectAll(task);
+    const runController = new AbortController();
+    task.runController = runController;
+    this._transitionTask(task, TASK_STATUS.RUNNING, {
+      clearFinishedAt: true,
+      schedulePersist: true
+    });
     task.runCount += 1;
-    this._broadcastStatus(task);
-    this._schedulePersist(task);
 
+    const isCurrentRun = () => (
+      task.runController === runController
+      && !runController.signal.aborted
+      && !task.deleted
+    );
     const onLog = (entry) => {
+      if (!isCurrentRun()) return;
       this._push(task, entry);
       this._broadcastLog(task, this._normalizeLog(entry));
     };
 
-    const requestApproval = (payload) => this._requestApproval(task, payload);
-    const goal = String(task.goal || "");
+    const requestApproval = (payload) => (
+      isCurrentRun() ? this._requestApproval(task, payload) : Promise.resolve(false)
+    );
     const thread = this._getRunThread(task.thread);
 
-    (async () => {
+    const runPromise = (async () => {
       try {
-        const { runTask } = require("./runTask");
-        if (task.projectId && this.projectManager?.ensureWorkspace) {
-          const ensured = await this.projectManager.ensureWorkspace(task.projectId);
-          if (!ensured.ok) {
-            throw new Error(ensured.message || ensured.error || "Unable to prepare project workspace");
-          }
-          if (ensured.workspacePath && ensured.workspacePath !== task.workspace) {
-            task.workspace = ensured.workspacePath;
-            task.workspaceLabel = ensured.workspacePath;
-            this._schedulePersist(task);
-          }
-        }
-        const runConfig = this.llmProfileManager?.buildRunConfig
-          ? this.llmProfileManager.buildRunConfig(task.llmProfileId)
-          : this.config;
-        const { result, outcomeStatus } = await runTask({
-          goal,
+        const { result, outcomeStatus } = await this.taskRunner.run({
+          task,
           thread,
-          config: runConfig,
+          signal: runController.signal,
           onLog,
           requestApproval,
-          workspaceDir: task.workspace,
-          taskId: task.id,
-          taskMeta: this.getTaskForContext(task.id),
-          scheduleManager: this.scheduleManager,
-          taskManager: this,
-          selfUpdateManager: this.selfUpdateManager,
-          taskLedgerManager: this.taskLedgerManager,
-          projectManager: this.projectManager,
-          memoryManager: this.memoryManager
+          onWorkspacePrepared: (workspacePath) => {
+            if (!isCurrentRun()) return;
+            task.workspace = workspacePath;
+            task.workspaceLabel = workspacePath;
+            this._schedulePersist(task);
+          },
+          runtime: {
+            config: this.config,
+            scheduleManager: this.scheduleManager,
+            taskManager: this,
+            selfUpdateManager: this.selfUpdateManager,
+            taskLedgerManager: this.taskLedgerManager,
+            projectManager: this.projectManager,
+            memoryManager: this.memoryManager,
+            llmProfileManager: this.llmProfileManager
+          }
         });
 
-        if (task.deleted || task.status === "canceled" || task.status === "terminated") return;
+        if (
+          !isCurrentRun()
+          || task.status === TASK_STATUS.CANCELED
+          || task.status === TASK_STATUS.TERMINATED
+        ) return;
 
-        task.status = outcomeStatus === "blocked"
-          ? "blocked"
-          : outcomeStatus === "needs_input"
-            ? "needs_input"
-            : "done";
-        task.result = result;
-        task.finishedAt = new Date().toISOString();
+        const terminalStatus = outcomeStatusToTaskStatus(outcomeStatus);
         const assistantContent = String(result);
         task.thread.push({ role: "assistant", content: assistantContent });
         const assistantEntry = { level: "info", data: { kind: "chat", role: "assistant", content: assistantContent } };
         this._push(task, assistantEntry);
         this._broadcastLog(task, this._normalizeLog(assistantEntry));
-        this._broadcastStatus(task);
-        await this._persistTask(task);
-        this._resolveWaiters(task);
-        this._broadcastEvent(task, "complete", { status: task.status, result: task.result });
-        this._notifyTaskEvent(task, "task_completed", {
-          title: task.status === "done" ? "Ender task completed" : "Ender task needs attention",
-          body: task.result || task.goal
+        this._transitionTask(task, terminalStatus, {
+          finishedAt: new Date().toISOString(),
+          result
         });
-        this._closeSubscribers(task);
+        await this._persistTask(task);
+        this._publishTerminalState(task, {
+          type: "task_completed",
+          input: {
+            title: task.status === TASK_STATUS.DONE ? "Ender task completed" : "Ender task needs attention",
+            body: task.result || task.goal
+          }
+        });
       } catch (err) {
-        task.status = "error";
-        task.finishedAt = new Date().toISOString();
-        task.result = null;
+        if (task.runController !== runController) return;
+        if (
+          runController.signal.aborted
+          || isAbortError(err)
+          || task.deleted
+          || task.status === TASK_STATUS.CANCELED
+          || task.status === TASK_STATUS.TERMINATED
+        ) {
+          await this._persistTask(task);
+          return;
+        }
         const errorEntry = { level: "error", data: err && err.stack ? err.stack : String(err) };
         this._push(task, errorEntry);
         this._broadcastLog(task, this._normalizeLog(errorEntry));
-        this._broadcastStatus(task);
-        await this._persistTask(task);
-        this._resolveWaiters(task);
-        this._broadcastEvent(task, "complete", { status: task.status, result: null });
-        this._notifyTaskEvent(task, "task_failed", {
-          title: "Ender task failed",
-          body: err && err.message ? err.message : String(err)
+        this._transitionTask(task, TASK_STATUS.ERROR, {
+          finishedAt: new Date().toISOString(),
+          result: null
         });
-        this._closeSubscribers(task);
+        await this._persistTask(task);
+        this._publishTerminalState(task, {
+          type: "task_failed",
+          input: {
+            title: "Ender task failed",
+            body: err && err.message ? err.message : String(err)
+          }
+        });
+      } finally {
+        if (task.runController === runController) task.runController = null;
+        if (task.runPromise === runPromise) task.runPromise = null;
       }
     })();
+    task.runPromise = runPromise;
+  }
+
+  async shutdown() {
+    if (this.shuttingDown) {
+      const active = [...this.tasks.values()].map((task) => task.runPromise).filter(Boolean);
+      await Promise.allSettled(active);
+      await this.taskRepository.flush().catch(() => {});
+      return;
+    }
+
+    this.shuttingDown = true;
+    const active = [];
+    for (const task of this.tasks.values()) {
+      if (task.runPromise) active.push(task.runPromise);
+      task.runController?.abort(new Error("Ender server is shutting down"));
+      this.approvalCoordinator.rejectAll(task);
+      this._closeSubscribers(task);
+      await this._persistTask(task);
+    }
+
+    await Promise.allSettled(active);
+    await this.taskRepository.flush().catch(() => {});
   }
 
   _notifyTaskEvent(task, type, input = {}) {
@@ -870,7 +947,7 @@ class TaskManager {
   }
 
   _safeBroadcast(task, eventName, data) {
-    const payload = `event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`;
+    const payload = formatTaskSseEvent(eventName, data);
     const dead = [];
 
     for (const res of task.subs) {
@@ -928,7 +1005,7 @@ class TaskManager {
       ledgerEntryId: task.ledgerEntryId || null,
       parentTaskId: task.parentTaskId || null,
       childTaskIds: Array.isArray(task.childTaskIds) ? [...task.childTaskIds] : [],
-      pendingApprovalCount: task.pendingApprovals instanceof Map ? task.pendingApprovals.size : 0,
+      pendingApprovalCount: this.approvalCoordinator.count(task),
       logCount: Array.isArray(task.logs) ? task.logs.length : 0,
       logs: includeLogs ? (Array.isArray(task.logs) ? task.logs : []) : undefined
     };
@@ -946,12 +1023,9 @@ class TaskManager {
     task.waiters.clear();
   }
 
-  _taskFile(taskId) {
-    return path.join(this.threadsDir, `${taskId}.json`);
-  }
-
   _serializeTask(task) {
     return {
+      recordVersion: TASK_RECORD_VERSION,
       id: task.id,
       goal: task.goal,
       status: task.status,
@@ -972,14 +1046,7 @@ class TaskManager {
       parentTaskId: task.parentTaskId || null,
       childTaskIds: Array.isArray(task.childTaskIds) ? task.childTaskIds : [],
       autoRestartOnInterruption: Boolean(task.autoRestartOnInterruption),
-      pendingApprovals: [...task.pendingApprovals.values()].map((approval) => ({
-        id: approval.id,
-        type: approval.type,
-        title: approval.title,
-        description: approval.description,
-        details: approval.details,
-        requestedAt: approval.requestedAt
-      }))
+      pendingApprovals: this.approvalCoordinator.list(task)
     };
   }
 
@@ -987,7 +1054,7 @@ class TaskManager {
     const task = {
       id: String(data.id),
       goal: String(data.goal || ""),
-      status: String(data.status || "error"),
+      status: String(data.status || TASK_STATUS.ERROR),
       startedAt: data.startedAt || new Date().toISOString(),
       finishedAt: data.finishedAt || null,
       logs: Array.isArray(data.logs) ? data.logs.slice(-this.maxLogs) : [],
@@ -997,7 +1064,7 @@ class TaskManager {
       latestPrompt: String(data.latestPrompt || data.goal || ""),
       runCount: Number.isFinite(data.runCount) ? data.runCount : 0,
       thread: Array.isArray(data.thread) ? data.thread : [],
-      pendingApprovals: new Map(),
+      pendingApprovals: this.approvalCoordinator.createStore(data.pendingApprovals),
       workspace: String(data.workspace || this.config.workdir),
       workspaceLabel: String(data.workspaceLabel || data.workspace || this.config.workdir),
       projectId: data.projectId ? String(data.projectId) : null,
@@ -1014,23 +1081,9 @@ class TaskManager {
         : this._shouldAutoRestartWorkspace(data.workspace || this.config.workdir)
     };
 
-    const approvals = Array.isArray(data.pendingApprovals) ? data.pendingApprovals : [];
-    for (const approval of approvals) {
-      task.pendingApprovals.set(String(approval.id), {
-        id: String(approval.id),
-        type: approval.type || "generic",
-        title: approval.title || "Approval required",
-        description: approval.description || "Please confirm this action",
-        details: approval.details || {},
-        requestedAt: approval.requestedAt || new Date().toISOString(),
-        resolve: () => {}
-      });
-    }
-
-    if (task.status === "running" || task.status === "awaiting_approval") {
+    if (isActiveTaskStatus(task.status)) {
       const shouldRestart = Boolean(task.autoRestartOnInterruption);
-      task.pendingApprovals.clear();
-      task.finishedAt = shouldRestart ? null : new Date().toISOString();
+      this.approvalCoordinator.rejectAll(task);
       const restartEntry = this._normalizeLog({
         level: "warn",
         data: shouldRestart
@@ -1041,33 +1094,37 @@ class TaskManager {
       if (task.logs.length > this.maxLogs) {
         task.logs.splice(0, task.logs.length - this.maxLogs);
       }
-      task.status = shouldRestart ? "running" : "error";
+      this._transitionTask(
+        task,
+        shouldRestart ? TASK_STATUS.RUNNING : TASK_STATUS.ERROR,
+        {
+          publishStatus: false,
+          finishedAt: shouldRestart ? null : new Date().toISOString()
+        }
+      );
     }
 
     return task;
   }
 
   async _loadPersistedTasks() {
-    const entries = await fs.readdir(this.threadsDir, { withFileTypes: true });
-    const files = entries
-      .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
-      .map((entry) => entry.name)
-      .sort((a, b) => a.localeCompare(b));
-
-    for (const file of files) {
-      const filePath = path.join(this.threadsDir, file);
+    const entries = await this.taskRepository.loadAll();
+    for (const entry of entries) {
       try {
-        const raw = await fs.readFile(filePath, "utf8");
-        const data = JSON.parse(raw);
+        if (entry.error) throw entry.error;
+        const { record: data } = migrateTaskRecord(entry.record);
         if (!data || !data.id || this.tasks.has(String(data.id))) continue;
+        if (String(data.id) !== entry.taskId) {
+          throw new Error(`Task record id ${data.id} does not match filename ${entry.taskId}.json`);
+        }
         const task = this._hydrateTask(data);
         this.tasks.set(task.id, task);
         await this._persistTask(task);
-        if (task.status === "running") {
+        if (task.status === TASK_STATUS.RUNNING) {
           this._runThread(task);
         }
       } catch (err) {
-        console.warn(`Failed to load persisted thread ${filePath}: ${err.message || String(err)}`);
+        this.logger.warn(`Failed to load persisted thread ${entry.filePath}: ${err.message || String(err)}`);
       }
     }
   }
@@ -1076,7 +1133,7 @@ class TaskManager {
     clearTimeout(task.persistTimer);
     task.persistTimer = setTimeout(() => {
       this._persistTask(task).catch((err) => {
-        console.warn(`Failed to persist thread ${task.id}: ${err.message || String(err)}`);
+        this.logger.warn(`Failed to persist thread ${task.id}: ${err.message || String(err)}`);
       });
     }, 25);
     task.persistTimer.unref?.();
@@ -1085,31 +1142,11 @@ class TaskManager {
   async _persistTask(task) {
     if (task.deleted) return;
     clearTimeout(task.persistTimer);
-    const snapshot = JSON.stringify(this._serializeTask(task), null, 2);
-    const target = this._taskFile(task.id);
-    const temp = `${target}.tmp`;
-
-    const writeTask = async () => {
-      await fs.mkdir(this.threadsDir, { recursive: true });
-      await fs.writeFile(temp, snapshot, "utf8");
-      await fs.rename(temp, target);
-    };
-
-    this._persistQueue = this._persistQueue.catch(() => {}).then(writeTask);
-
-    return this._persistQueue;
+    return this.taskRepository.save(task.id, this._serializeTask(task));
   }
 
   async _deleteTaskFile(taskId) {
-    const target = this._taskFile(taskId);
-    const temp = `${target}.tmp`;
-    const removeTask = async () => {
-      await fs.rm(temp, { force: true });
-      await fs.rm(target, { force: true });
-    };
-
-    this._persistQueue = this._persistQueue.catch(() => {}).then(removeTask);
-    return this._persistQueue;
+    return this.taskRepository.delete(taskId);
   }
 }
 

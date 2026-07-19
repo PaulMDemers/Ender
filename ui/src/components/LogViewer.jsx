@@ -1,4 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import StateNotice from "./ui/StateNotice";
 
 const TOOL_TEXT_KEYS = ["stdout", "stderr", "output", "content", "message", "diff", "text", "result"];
 
@@ -19,6 +20,12 @@ function inferSource(message = "") {
   if (message.startsWith("goal=") || message.startsWith("workspace=") || message.startsWith("backend=")) return "context";
   if (message.includes("approval")) return "approval";
   return "system";
+}
+
+function isConversationEntry(item) {
+  if (item.kind === "chat" || item.kind === "tool-group") return true;
+  if (item.source === "assistant" || item.source === "approval") return true;
+  return item.tone === "danger" || item.tone === "warning" || item.tone === "success";
 }
 
 function getChatEntry(entry) {
@@ -468,12 +475,16 @@ function ChatRow({ item, messageClassName, isUserChat }) {
 export default function LogViewer({ entries, status, entryCount, taskId, scrollToBottomToken = 0 }) {
   const panelRef = useRef(null);
   const endRef = useRef(null);
+  const [showAllEvents, setShowAllEvents] = useState(false);
   const groupedEntries = useMemo(() => groupEntries(entries), [entries]);
+  const conversationEntries = useMemo(() => groupedEntries.filter(isConversationEntry), [groupedEntries]);
+  const visibleEntries = showAllEvents ? groupedEntries : conversationEntries;
+  const hiddenEntryCount = groupedEntries.length - conversationEntries.length;
   const progressLabel = useMemo(() => getProgressLabel(status, groupedEntries), [status, groupedEntries]);
   const runDetails = useMemo(() => extractRunDetails(entries), [entries]);
   const hasRunDetails = Boolean(runDetails.backend || runDetails.workspace || runDetails.stopReason);
   const autoScrollKey = useMemo(() => {
-    const lastItem = groupedEntries[groupedEntries.length - 1] || null;
+    const lastItem = visibleEntries[visibleEntries.length - 1] || null;
     return JSON.stringify({
       entryCount,
       status,
@@ -482,10 +493,11 @@ export default function LogViewer({ entries, status, entryCount, taskId, scrollT
       backend: runDetails.backend,
       workspace: runDetails.workspace,
       stopReason: runDetails.stopReason,
+      showAllEvents,
       lastKind: lastItem?.kind || null,
       lastTimestamp: lastItem?.timestamp || lastItem?.finishedAt || null
     });
-  }, [entryCount, groupedEntries, hasRunDetails, progressLabel, runDetails.backend, runDetails.workspace, runDetails.stopReason, status]);
+  }, [entryCount, hasRunDetails, progressLabel, runDetails.backend, runDetails.workspace, runDetails.stopReason, showAllEvents, status, visibleEntries]);
 
   useLayoutEffect(() => {
     const panel = panelRef.current;
@@ -506,26 +518,54 @@ export default function LogViewer({ entries, status, entryCount, taskId, scrollT
   }, [scrollToBottomToken]);
 
   return (
-    <section className="consolePanel logConsole">
+    <section className="consolePanel logConsole" aria-label="Thread transcript">
       <div className="logConsoleHeader">
         <div className="logConsoleMetaRow">
           <div className="logConsoleMetaGroup">
             <span className="logMetaChip neutral mono">transcript</span>
             <span className="logPanelMeta mono">
-              {taskId ? `${taskId.slice(0, 8)} · ${entryCount} lines · ${status || "idle"}` : "no thread selected"}
+              {taskId ? `${taskId.slice(0, 8)} · ${entryCount} events · ${status || "idle"}` : "no thread selected"}
             </span>
           </div>
-          {progressLabel ? (
-            <div className="logProgressIndicator">
-              <span className="logProgressDots" aria-hidden="true">
-                <span />
-                <span />
-                <span />
-              </span>
-              <span className="logProgressLabel">{progressLabel}</span>
+          <div className="logHeaderActions">
+            {progressLabel ? (
+              <div className="logProgressIndicator" role="status" aria-live="polite">
+                <span className="logProgressDots" aria-hidden="true">
+                  <span />
+                  <span />
+                  <span />
+                </span>
+                <span className="logProgressLabel">{progressLabel}</span>
+              </div>
+            ) : null}
+            <div className="logViewControls" role="group" aria-label="Transcript detail">
+              <button
+                type="button"
+                className="threadToggleButton mono"
+                aria-pressed={!showAllEvents}
+                onClick={() => setShowAllEvents(false)}
+              >
+                Conversation
+              </button>
+              <button
+                type="button"
+                className="threadToggleButton mono"
+                aria-pressed={showAllEvents}
+                onClick={() => setShowAllEvents(true)}
+              >
+                All activity
+              </button>
             </div>
-          ) : null}
+          </div>
         </div>
+        {!showAllEvents && hiddenEntryCount > 0 ? (
+          <div className="logFilterNotice" role="status">
+            <span>{hiddenEntryCount} routine {hiddenEntryCount === 1 ? "event" : "events"} hidden</span>
+            <button type="button" className="threadToggleButton mono" onClick={() => setShowAllEvents(true)}>
+              Show all
+            </button>
+          </div>
+        ) : null}
         {hasRunDetails ? (
           <details className="logRunDetails">
             <summary className="logRunDetailsSummary">
@@ -560,14 +600,18 @@ export default function LogViewer({ entries, status, entryCount, taskId, scrollT
         ref={panelRef}
         className="logPanel"
       >
-        {!entries.length ? (
-          <div className="logEmpty">
-            <div className="emptyState">No transcript events yet</div>
-            <div className="panelNote">When the agent starts acting, logs, tool calls, and state transitions will stream here.</div>
+        {!visibleEntries.length ? (
+          <div className="logEmpty" role="status">
+            <StateNotice
+              title={entries.length ? "No conversation events yet" : "Waiting for transcript activity"}
+              detail={entries.length
+                ? "Routine runtime activity is available in All activity. Conversation and important state changes will appear here."
+                : "Messages, tool calls, and important state changes will appear as soon as the run produces them."}
+            />
           </div>
         ) : (
           <div className="logStream">
-            {groupedEntries.map((item, index) => {
+            {visibleEntries.map((item, index) => {
               if (item.kind === "tool-group") {
                 const summary = summarizeToolGroup(item.items);
                 const toolCount = item.items.length;

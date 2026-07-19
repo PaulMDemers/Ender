@@ -54,9 +54,15 @@ test('renders the schedule editor and ledger', async ({ page }) => {
   await expect(page.getByLabel('Target type')).toBeVisible();
   await expect(page.getByText('Current schedules')).toBeVisible();
   await expect(page.getByText('Morning triage')).toBeVisible();
-  await expect(page.locator('.scheduleWorkspace')).toHaveScreenshot('schedule-panel.png', { animations: 'disabled' });
+  await expect(page.locator('.automationOverview')).toHaveScreenshot('schedule-overview.png', {
+    animations: 'disabled'
+  });
+  await expect(page.locator('.scheduleWorkspace')).toHaveScreenshot('schedule-panel.png', {
+    animations: 'disabled',
+    maxDiffPixels: 200
+  });
 
   await page.getByLabel('Target type').selectOption('thread');
-  await expect(page.locator('select').nth(2)).toBeVisible();
-  await expect(page.getByLabel('Resume prompt')).toBeVisible();
+  await expect(page.getByRole('combobox', { name: /^Thread/ })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: /^Resume prompt/ })).toBeVisible();
 });

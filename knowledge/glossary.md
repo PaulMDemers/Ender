@@ -73,7 +73,7 @@ A persisted pause point created when a tool or operation requires human confirma
 
 Approval flow:
 - runtime calls `requestApproval`
-- `TaskManager._requestApproval()` stores approval metadata
+- `TaskApprovalCoordinator` stores approval metadata and resolvers while `TaskManager` owns lifecycle publication
 - task status becomes `awaiting_approval`
 - SSE emits `approval_required`
 - UI resolves via `POST /tasks/:id/approvals/:approvalId`
@@ -90,7 +90,7 @@ This is not terminal. If approval is granted and no other approvals remain, the 
 
 ## Terminal task status
 
-Statuses treated as finished by `TaskManager._isTerminalStatus()`:
+Statuses treated as finished by the policy in `src/runtime/taskLifecycle.js`:
 - `done`
 - `error`
 - `canceled`

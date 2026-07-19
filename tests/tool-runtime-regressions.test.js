@@ -8,6 +8,7 @@ const { tool } = require("@langchain/core/tools");
 const { zodFunction } = require("openai/helpers/zod");
 
 const { createChatModel } = require("../src/llm/factory");
+const { runTask } = require("../src/runtime/runTask");
 const { runAgentLoop } = require("../src/runtime/runAgentLoop");
 const { validateToolSchemasForBackend } = require("../src/llm/toolSchemaPreflight");
 const { createCronTools } = require("../src/tools/cronTools");
@@ -74,6 +75,73 @@ test("createChatModel constructs upgraded LangChain backends", () => {
     assert.equal(typeof model?.invoke, "function", `${config.backend} should expose invoke()`);
     assert.equal(typeof model?.bindTools, "function", `${config.backend} should expose bindTools()`);
   }
+});
+
+test("runTask creates the configured model for non-ACP execution", async (t) => {
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "ender-run-task-model-"));
+  t.after(async () => {
+    await fs.rm(tmpRoot, { recursive: true, force: true });
+  });
+
+  let receivedConfig = null;
+  let boundToolNames = [];
+  const model = {
+    bindTools(tools) {
+      boundToolNames = tools.map((entry) => entry.name);
+      return this;
+    },
+    async invoke() {
+      return {
+        content: "",
+        tool_calls: [
+          {
+            id: "call-finalize",
+            name: "finalize",
+            args: {
+              note: "DONE:\nnon-ACP runtime initialized",
+              status: "completed"
+            }
+          }
+        ]
+      };
+    }
+  };
+  const config = {
+    backend: "ollama",
+    systemPrompt: "Test system prompt",
+    workdir: tmpRoot,
+    maxSteps: 2,
+    stallLimit: 2,
+    openai: {},
+    bedrock: {},
+    azure: {},
+    ollama: { baseUrl: "http://127.0.0.1:11434", model: "test-model" },
+    acp: {},
+    github: {},
+    gitlab: {},
+    jira: {},
+    confluence: {},
+    googleDrive: {},
+    email: {}
+  };
+
+  const result = await runTask({
+    goal: "Exercise the standard runtime",
+    thread: [{ role: "user", content: "Exercise the standard runtime" }],
+    config,
+    onLog: () => {},
+    requestApproval: async () => false,
+    workspaceDir: tmpRoot,
+    createModel(activeConfig) {
+      receivedConfig = activeConfig;
+      return model;
+    }
+  });
+
+  assert.equal(receivedConfig, config);
+  assert.ok(boundToolNames.includes("finalize"));
+  assert.equal(result.result, "DONE:\nnon-ACP runtime initialized");
+  assert.equal(result.outcomeStatus, "completed");
 });
 
 test("tool schemas accept provider-safe null placeholders", async () => {

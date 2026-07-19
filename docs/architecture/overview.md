@@ -1,118 +1,93 @@
 # Architecture Overview
 
-Ender is split into three major surfaces:
+Ender has four primary surfaces:
 
-- the API/runtime server in `src/`
-- the React/Electron operator UI in `ui/`
-- persisted task and schedule state on disk
+- the Express API composition and domain routers in `src/api/`;
+- the task, workflow, schedule, ledger, editor, and persistence runtime in `src/`;
+- the React operator console and Electron shell in `ui/`;
+- versioned JSON state on disk, with optional Postgres-backed Pillar and Beacon cloud state.
 
 ## High-level component map
 
 ```mermaid
 flowchart LR
-    User["Operator"] --> UI["React UI / Electron Shell"]
-    UI --> API["Express API"]
-    API --> TM["TaskManager"]
-    API --> WM["WorkflowManager"]
-    API --> SM["ScheduleManager"]
-    API --> PM["ProjectManager"]
-    API --> MM["MemoryManager"]
-    TM --> Loop["runTask / runAgentLoop"]
-    Loop --> LLM["LLM Backend"]
-    Loop --> Memories["Memory context pack"]
-    Loop --> Tools["Tool Modules"]
-    TM --> Threads["threads/*.json"]
-    PM --> Projects["projects/*.json"]
-    MM --> MemoryFiles["memories/*.json"]
-    SM --> Schedules["schedules/*.json"]
-    Loop --> Workspace["workspace/ or selected workspace"]
+    Operator["Operator"] --> UI["React UI / Electron shell"]
+    UI --> API["Express API composition"]
+    Remote["Remote client"] --> Pillar["Authenticated Pillar relay"]
+    Pillar --> Connector["Outbound Ender connector"]
+    Connector --> API
+    API --> Routes["Domain routers"]
+    Routes --> Tasks["TaskManager"]
+    Routes --> Workflows["WorkflowManager"]
+    Routes --> Schedules["ScheduleManager"]
+    Routes --> Ledger["TaskLedgerManager"]
+    Routes --> Context["Projects and memories"]
+    Tasks --> Runner["TaskExecutionRunner"]
+    Runner --> Loop["runTask / runAgentLoop"]
+    Loop --> Models["Configured model backend"]
+    Loop --> Tools["Tool modules"]
+    Tasks --> Records["Versioned JSON records"]
+    Workflows --> Records
+    Schedules --> Records
+    Ledger --> Records
+    Context --> Records
 ```
 
-## Core responsibilities
+## Backend boundaries
 
-### API layer
+[`src/server.js`](../../src/server.js) loads configuration, constructs managers, starts the API, and coordinates bounded shutdown. [`src/api/app.js`](../../src/api/app.js) owns middleware and dependency composition; public endpoints are grouped under [`src/api/routes/`](../../src/api/routes/):
 
-[`src/api/app.js`](../../src/api/app.js) exposes REST endpoints for:
+- `systemRoutes.js`: health, workspaces, profiles, filesystem discovery, connector status, and self-update;
+- `contextRoutes.js`: projects and memories;
+- `automationRoutes.js`: workflows and schedules;
+- `taskLedgerRoutes.js`: global task-ledger administration;
+- `taskRoutes.js`: task lifecycle, logs, SSE, approvals, and editor sessions.
 
-- threads
-- approvals
-- workflow sessions
-- schedules
-- projects
-- memories
-- readiness and workspace browsing
+This split is an ownership boundary, not a public API migration. Compatibility rules and version headers are recorded in [`API_CONTRACTS.md`](../../API_CONTRACTS.md).
 
-### Task runtime
+## Task execution and lifecycle
 
-[`src/runtime/taskManager.js`](../../src/runtime/taskManager.js) owns:
+[`src/runtime/taskManager.js`](../../src/runtime/taskManager.js) owns task identity, public lifecycle orchestration, event publication, subscriber management, and coordination of persistence, approvals, and execution.
 
-- thread lifecycle
-- log fanout and SSE
-- approval resolution
-- persistence to disk
-- reruns and follow-up prompts
-- per-thread model profile, project, and memory-mode metadata
+Its extracted collaborators keep the risky boundaries explicit:
 
-### Project layer
+- `TaskExecutionRunner` prepares project workspaces and model profiles, then invokes the runtime;
+- `TaskApprovalCoordinator` stores and resolves pending approvals;
+- `JsonTaskRepository` loads, migrates, serializes, and atomically replaces task records;
+- `taskLifecycle.js` defines legal status transitions and terminal outcomes;
+- `shutdown.js` bounds cleanup of HTTP intake, schedules, ledger polling, Pillar polling, active runs, and editor sessions.
 
-[`src/runtime/projectManager.js`](../../src/runtime/projectManager.js) owns reusable project records:
+[`src/runtime/runTask.js`](../../src/runtime/runTask.js) assembles the selected model, memory context, prompt, and tools. [`src/runtime/runAgentLoop.js`](../../src/runtime/runAgentLoop.js) performs iterative model/tool execution until completion, cancellation, stalling, or a configured step limit.
 
-- project names and aliases
-- repo URLs and resource links
-- local workspace paths
-- workspace preparation by cloning the configured repo when missing
+## Automation and context
 
-Threads can attach a `projectId`; project workspaces are protected from thread-delete workspace cleanup.
+- `WorkflowManager` persists interactive workflow sessions and renders server-defined `form`, `select`, and `complete` steps. Scheduled workflow replays remain intentionally ephemeral.
+- `ScheduleManager` persists cron-backed `prompt`, `thread`, and `workflow` targets.
+- `TaskLedgerManager` persists durable queue entries, manual or automatic dispatch policy, attempts, results, and linked task IDs.
+- `ProjectManager` and `MemoryManager` persist reusable workspace/project context and global, project, or thread memories.
 
-### Memory layer
+## Frontend boundary
 
-[`src/runtime/memoryManager.js`](../../src/runtime/memoryManager.js) owns durable global, project, and thread memories. `runTask(...)` asks it for a bounded context pack based on the thread's `memoryMode`, project, and current goal. Memory records remain separate from prompt text so they can be searched, edited, archived, or loaded selectively.
+[`ui/src/App.jsx`](../../ui/src/App.jsx) composes page-level state. Domain hooks own server connection, task collection, transcript, workflow/schedule administration, task-ledger administration, and editor lifecycle. The same React build powers the browser and the sandboxed Electron renderer.
 
-### Workflow layer
+The current information architecture and ownership rules are maintained in [`FRONTEND_ARCHITECTURE.md`](../../FRONTEND_ARCHITECTURE.md).
 
-[`src/workflows/workflowManager.js`](../../src/workflows/workflowManager.js) owns:
+## Persistence and compatibility
 
-- workflow definitions
-- in-memory workflow sessions
-- step serialization for the UI
-- back navigation
-- scheduled workflow replay
+Local state includes threads, projects, memories, schedules, task-ledger entries, workflow sessions, editor sessions, self-update checkpoints, and optional JSON-backed Pillar/Beacon state. Current records use `recordVersion: 1`; compatible legacy records migrate sequentially and unsupported future records are not overwritten.
 
-### Schedule layer
+See [`PERSISTENCE.md`](../../PERSISTENCE.md) for the complete inventory and migration policy.
 
-[`src/runtime/scheduleManager.js`](../../src/runtime/scheduleManager.js) owns:
+## Security and deployment boundary
 
-- cron registration through `node-cron`
-- schedule persistence
-- run-now execution
-- dispatch to prompt, thread, or workflow targets
+Direct API access defaults to loopback-only enforcement. Docker explicitly opts into open direct access because forwarded host traffic is non-loopback inside the container; that port must stay behind a trusted boundary. Pillar is the authenticated remote-access path and uses an outbound Ender connector, avoiding inbound access to the on-prem API.
 
-### UI layer
-
-The React app in `ui/src/` acts as the operator console for:
-
-- thread launch
-- transcript viewing
-- approvals
-- workflow interaction
-- schedule creation
-
-## State persistence model
-
-Persisted:
-
-- threads
-- projects
-- memories
-- schedules
-- workflow sessions
-
-In-memory only:
-
-- live SSE subscribers
-- active approval resolvers
+See the [release readiness matrix](../../RELEASE_READINESS.md) for tested environments and the [troubleshooting guide](../guides/troubleshooting.md) for operational diagnosis.
 
 ## Where to read next
 
 - [Runtime loop and execution lifecycle](runtime-loop.md)
 - [Workflows and schedules](workflows-and-schedules.md)
+- [Frontend architecture](../../FRONTEND_ARCHITECTURE.md)
+- [API contracts](../../API_CONTRACTS.md)
+- [Persistence contracts](../../PERSISTENCE.md)

@@ -8,6 +8,10 @@ const path = require("node:path");
 const { createPillarApp } = require("../src/pillar/server");
 const { PillarClient, loadPillarClientConfig } = require("../src/pillar/client");
 const { getReadiness } = require("../src/health/readiness");
+const {
+  API_CONTRACT_HEADER,
+  TASK_SSE_CONTRACT_HEADER
+} = require("../src/shared/apiContracts");
 
 function listen(app) {
   return new Promise((resolve) => {
@@ -76,6 +80,7 @@ test("Pillar relays client requests through an outbound Ender connector", async 
   const local = express();
   local.use(express.json());
   local.get("/health", (_req, res) => {
+    res.setHeader(API_CONTRACT_HEADER, "1");
     res.json({ ok: true, source: "local-ender" });
   });
   local.post("/echo", (req, res) => {
@@ -118,6 +123,7 @@ test("Pillar relays client requests through an outbound Ender connector", async 
     headers: { authorization: "Bearer client-secret" }
   });
   assert.equal(healthRes.status, 200);
+  assert.equal(healthRes.headers.get(API_CONTRACT_HEADER), "1");
   assert.deepEqual(await healthRes.json(), { ok: true, source: "local-ender" });
 
   const echoRes = await fetch(`${pillarServer.baseUrl}/api/home/echo`, {
@@ -209,15 +215,18 @@ test("Pillar synthesizes task SSE streams over the outbound connector", async (t
     headers: { authorization: "Bearer client-secret" }
   });
   assert.equal(res.status, 200);
+  assert.equal(res.headers.get(API_CONTRACT_HEADER), "1");
+  assert.equal(res.headers.get(TASK_SSE_CONTRACT_HEADER), "1");
   assert.match(res.headers.get("content-type") || "", /text\/event-stream/);
 
   const events = await readSseEvents(res);
-  assert.deepEqual(events.map((entry) => entry.event), ["status", "log", "log", "status", "complete"]);
-  assert.equal(events[0].data.status, "running");
-  assert.equal(events[1].data.data, "started");
-  assert.equal(events[2].data.data, "finished");
-  assert.equal(events[3].data.status, "done");
-  assert.deepEqual(events[4].data, { status: "done", result: "ok" });
+  assert.deepEqual(events.map((entry) => entry.event), ["contract", "status", "log", "log", "status", "complete"]);
+  assert.deepEqual(events[0].data, { version: 1, apiVersion: 1 });
+  assert.equal(events[1].data.status, "running");
+  assert.equal(events[2].data.data, "started");
+  assert.equal(events[3].data.data, "finished");
+  assert.equal(events[4].data.status, "done");
+  assert.deepEqual(events[5].data, { status: "done", result: "ok" });
 });
 
 test("Pillar rejects unauthenticated cloud client requests", async (t) => {

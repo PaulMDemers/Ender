@@ -7,6 +7,10 @@ const { createSystemPrompt } = require("./agents/systemPrompt");
 
 const schema = z.object({
   PORT: z.string().optional(),
+  ENDER_API_ACCESS_MODE: z.string().optional(),
+  ENDER_API_BIND_HOST: z.string().optional(),
+  ENDER_CORS_ORIGINS: z.string().optional(),
+  ENDER_SHUTDOWN_TIMEOUT_MS: z.string().optional(),
   AGENT_WORKDIR: z.string().optional(),
   AGENT_WORKSPACE_BASE: z.string().optional(),
   AGENT_THREADS_DIR: z.string().optional(),
@@ -141,6 +145,23 @@ function loadConfig(env = process.env) {
     parsed.AGENT_WORKFLOW_SESSIONS_DIR || path.resolve(process.cwd(), "workflow-sessions")
   );
   const selfRoot = path.resolve(parsed.AGENT_SELF_ROOT || process.cwd());
+  const apiAccessMode = String(parsed.ENDER_API_ACCESS_MODE || "local").trim().toLowerCase();
+  if (!new Set(["local", "open"]).has(apiAccessMode)) {
+    throw new Error("ENDER_API_ACCESS_MODE must be local or open when set");
+  }
+  const apiCorsOrigins = String(parsed.ENDER_CORS_ORIGINS || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const shutdownTimeoutRaw = String(parsed.ENDER_SHUTDOWN_TIMEOUT_MS || "").trim();
+  let shutdownTimeoutMs = 10_000;
+  if (shutdownTimeoutRaw) {
+    const n = Number(shutdownTimeoutRaw);
+    if (!Number.isFinite(n) || n <= 0) {
+      throw new Error("ENDER_SHUTDOWN_TIMEOUT_MS must be a positive number when set");
+    }
+    shutdownTimeoutMs = Math.floor(n);
+  }
   const maxStepsRaw = String(parsed.AGENT_MAX_STEPS || "").trim();
   let maxSteps = null;
   if (maxStepsRaw) {
@@ -233,6 +254,12 @@ function loadConfig(env = process.env) {
 
   return {
     port: Number(parsed.PORT || 3000),
+    apiAccess: {
+      mode: apiAccessMode,
+      bindHost: String(parsed.ENDER_API_BIND_HOST || "0.0.0.0").trim() || "0.0.0.0",
+      corsOrigins: apiCorsOrigins
+    },
+    shutdownTimeoutMs,
     maxSteps,
     stallLimit,
     backend: parsed.LLM_BACKEND,

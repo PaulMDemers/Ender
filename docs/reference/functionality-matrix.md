@@ -7,13 +7,13 @@ This document summarizes the tools, workflows, orchestration layers, and operato
 | Area | What it does | Key files / endpoints | Notes |
 | --- | --- | --- | --- |
 | Task runtime | Runs the iterative model + tool loop for a thread until completion, stall, cancellation, or step cap. | `src/runtime/runTask.js`, `src/runtime/runAgentLoop.js`, `src/runtime/taskManager.js` | Uses LangChain tool calling and persists thread state to disk. |
-| REST API | Exposes health, tasks, approvals, workflows, schedules, self-update, and workspace browsing. | `src/api/app.js` | Main local API surface used by the UI and Electron shell. |
-| React / Electron UI | Operator console for launching tasks, watching logs, handling approvals, running workflows, and managing schedules. | `ui/src/App.jsx`, `ui/` | Same frontend powers browser UI and desktop app. |
+| REST API | Exposes health, tasks, approvals, context, workflows, schedules, task ledger, editor sessions, connectors, self-update, and workspace browsing. | `src/api/app.js`, `src/api/routes/` | Main local API surface used by the UI and Electron shell. |
+| React / Electron UI | Operator console for launching tasks, watching transcripts, handling approvals, running workflows, managing schedules/ledger work, switching servers, and opening editor sessions. | `ui/src/App.jsx`, `ui/src/hooks/`, `ui/src/components/` | Same frontend powers browser UI and desktop app. |
 | Workflow engine | Runs server-defined workflow state machines and emits generic UI steps. | `src/workflows/workflowManager.js`, `src/workflows/index.js` | Supports `interactive`, `schedule_config`, and `scheduled_run` modes. |
 | Schedule engine | Persists cron jobs and dispatches them to prompt, thread, or workflow targets. | `src/runtime/scheduleManager.js` | Backed by `node-cron` and JSON files in `schedules/`. |
 | Global task ledger | Persists queue entries, auto-dispatches queued work when capacity is free, and records the thread that completed each item. | `src/runtime/taskLedgerManager.js`, `/task-ledger/*` | Separate from the per-thread internal ledger used for facts/todos. |
 | Self-update supervisor integration | Lets Ender checkpoint, verify, restart, and roll back its own repo when running under the external supervisor. | `src/selfUpdate/*`, `src/tools/selfUpdateTools.js`, `/self-update/*` | Only available when configured and when the active workspace is the Ender repo root. |
-| Persistence | Stores threads, schedules, task-ledger entries, and workflow sessions on disk. | `threads/`, `schedules/`, `task-ledger/`, `workflow-sessions/` | Survives server restarts. |
+| Persistence | Stores versioned threads, projects, memories, schedules, task-ledger entries, workflow sessions, and supporting service state. | `src/persistence/jsonRecord.js`, `PERSISTENCE.md` | Compatible legacy records migrate; unsupported future records are not overwritten. |
 | Readiness / setup reporting | Reports missing integration config and workflow readiness. | `src/health/readiness.js`, `GET /health` | Used by the UI to surface setup guidance. |
 
 ## Tool Catalog
@@ -172,11 +172,13 @@ This document summarizes the tools, workflows, orchestration layers, and operato
 
 | Area | Endpoints |
 | --- | --- |
-| Health and discovery | `GET /health`, `GET /workspaces`, `GET /filesystem/directories` |
+| Health and discovery | `GET /health`, `GET /workspaces`, `GET /llm-profiles`, `GET /filesystem/directories`, `GET /pillar/status`, `GET /beacon/status` |
+| Projects and memories | `GET/POST /projects`, `PUT /projects/:id`, `POST /projects/:id/ensure-workspace`, `GET/POST /memories`, `PUT/DELETE /memories/:id` |
 | Tasks | `GET /tasks`, `POST /tasks`, `GET /tasks/:id`, `POST /tasks/:id/messages`, `POST /tasks/:id/terminate`, `POST /tasks/:id/rerun`, `DELETE /tasks/:id`, `GET /tasks/:id/logs`, `GET /tasks/:id/stream`, `POST /tasks/:id/approvals/:approvalId` |
+| Task editors | `GET /tasks/:id/code-server`, `POST /tasks/:id/code-server`, `DELETE /tasks/:id/code-server`, proxied HTTP/WebSocket editor paths |
 | Workflows | `GET /workflows`, `POST /workflows/:id/sessions`, `GET /workflow-sessions/:id`, `POST /workflow-sessions/:id/advance`, `POST /workflow-sessions/:id/back` |
 | Schedules | `GET /schedules`, `POST /schedules`, `PUT /schedules/:id`, `POST /schedules/:id/run`, `DELETE /schedules/:id` |
-| Task ledger | `GET /task-ledger`, `GET /task-ledger/:id`, `POST /task-ledger`, `PUT /task-ledger/:id`, `POST /task-ledger/:id/run` |
+| Task ledger | `GET /task-ledger`, `GET /task-ledger/:id`, `POST /task-ledger`, `PUT /task-ledger/:id`, `POST /task-ledger/:id/run`, `DELETE /task-ledger/:id` |
 | Self-update | `GET /self-update/status`, `GET /self-update/operations`, `GET /self-update/operations/:id` |
 
 ## Approval-Gated Actions
@@ -199,6 +201,8 @@ This document summarizes the tools, workflows, orchestration layers, and operato
 | Persisted artifact | Location | Notes |
 | --- | --- | --- |
 | Threads | `threads/*.json` | Includes task state, logs, approvals, and thread history. |
+| Projects | `projects/*.json` | Reusable repository, resource, alias, and workspace context. |
+| Memories | `memories/*.json` | Global, project, and thread memory records. |
 | Schedules | `schedules/*.json` | Includes cron config, target, and last-run metadata. |
 | Global task ledger | `task-ledger/*.json` | Includes queued work, auto-run policy, attempt count, linked thread ids, and completion state. |
 | Workflow sessions | `workflow-sessions/*.json` | Interactive and schedule-config sessions persist; `scheduled_run` sessions do not. |

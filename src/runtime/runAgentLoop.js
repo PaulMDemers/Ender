@@ -1,5 +1,6 @@
 const { HumanMessage, SystemMessage, AIMessage, ToolMessage } = require("@langchain/core/messages");
 const { sanitizeJsonValue, sanitizeString } = require("../utils/jsonSafe");
+const { isAbortError, throwIfAborted } = require("../utils/abort");
 
 function sanitizeMessageContent(value) {
   if (Array.isArray(value)) {
@@ -77,7 +78,8 @@ async function runAgentLoop({
   thread = null,
   maxSteps = null,
   stallLimit = 4,
-  onLog
+  onLog,
+  signal = null
 }) {
   const conversation = Array.isArray(thread) && thread.length
     ? thread.map(toConversationMessage).filter(Boolean)
@@ -96,6 +98,7 @@ async function runAgentLoop({
   let repeatedIterationCount = 0;
 
   while (true) {
+    throwIfAborted(signal);
     if (maxSteps !== null && step >= maxSteps) {
       return {
         result: "Loop limit reached without completion",
@@ -105,7 +108,8 @@ async function runAgentLoop({
     }
     step += 1;
     onLog({ level: "info", data: `step ${step}: invoking model` });
-    const ai = await bound.invoke(messages);
+    const ai = await bound.invoke(messages, { signal });
+    throwIfAborted(signal);
     const toolCalls = sanitizeJsonValue(ai.tool_calls || ai.toolCalls || []);
     const aiContent = normalizeAssistantMessageContent(ai.content);
 
@@ -124,6 +128,7 @@ async function runAgentLoop({
 
     const fingerprintParts = [];
     for (const call of toolCalls) {
+      throwIfAborted(signal);
       const name = call.name;
       const tool = toolsByName[name];
       const callId = call.id;
@@ -156,8 +161,10 @@ async function runAgentLoop({
       onLog({ level: "info", data: `tool call: ${name}` });
       let result;
       try {
-        result = await tool.invoke(args);
+        result = await tool.invoke(args, { signal });
+        throwIfAborted(signal);
       } catch (err) {
+        if (isAbortError(err) || signal?.aborted) throw err;
         const content = JSON.stringify(sanitizeJsonValue({
           ok: false,
           error: "tool_invocation_failed",

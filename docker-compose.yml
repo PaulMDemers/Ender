@@ -7,6 +7,9 @@ services:
       - .env
     environment:
       PORT: 3000
+      # Container port forwarding is non-loopback from the API container's perspective.
+      ENDER_API_ACCESS_MODE: open
+      ENDER_CORS_ORIGINS: http://localhost:5173
       AGENT_WORKDIR: /app/workspace
       AGENT_WORKSPACE_BASE: /app/workspace
       AGENT_THREADS_DIR: /app/threads

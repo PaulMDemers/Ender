@@ -1,6 +1,7 @@
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
+const { migratePersistedRecord, versionPersistedRecord } = require("../persistence/jsonRecord");
 
 function nowIso() {
   return new Date().toISOString();
@@ -34,10 +35,12 @@ class PillarStore {
     fs.mkdirSync(path.dirname(this.dataFile), { recursive: true });
     try {
       const raw = fs.readFileSync(this.dataFile, "utf8");
-      const parsed = JSON.parse(raw);
+      const migrated = migratePersistedRecord(JSON.parse(raw), "pillarStore");
+      const parsed = migrated.record;
       this.data = {
         servers: parsed.servers && typeof parsed.servers === "object" ? parsed.servers : {}
       };
+      if (migrated.migrated) this.persist();
     } catch (err) {
       if (err.code !== "ENOENT") throw err;
       this.persist();
@@ -46,7 +49,7 @@ class PillarStore {
 
   persist() {
     const tmp = `${this.dataFile}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(this.data, null, 2));
+    fs.writeFileSync(tmp, JSON.stringify(versionPersistedRecord("pillarStore", this.data), null, 2));
     fs.renameSync(tmp, this.dataFile);
   }
 
