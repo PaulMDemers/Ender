@@ -3,6 +3,8 @@
 > Sources: Ender knowledge/runtime-loop.md, 2026-05-14
 > Raw: [2026-05-14-runtime-loop.md](../../raw/runtime/2026-05-14-runtime-loop.md)
 
+> **Historical snapshot.** Use the maintained [runtime-loop architecture](../../docs/architecture/runtime-loop.md) for the current provider-neutral activity and transcript contracts.
+
 ## Overview
 
 The runtime loop is the core of Ender's agent execution. It runs an iterative tool-calling loop until the task completes, stalls, is canceled, or reaches a configured step cap. All task execution flows through `runAgentLoop.js` and its orchestration chain.

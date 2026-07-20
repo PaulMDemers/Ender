@@ -19,15 +19,12 @@ import ThreadComposer from "./components/ThreadComposer";
 import ApprovalPrompt from "./components/ApprovalPrompt";
 import ServerModal from "./components/ServerModal";
 import ServerPickerShell from "./components/ServerPickerShell";
-import ServerDiagnostics from "./components/ServerDiagnostics";
 import WorkflowPanel from "./components/WorkflowPanel";
 import SchedulePanel from "./components/SchedulePanel";
 import TaskLedgerPanel from "./components/TaskLedgerPanel";
 import SimpleTaskLedgerView from "./components/SimpleTaskLedgerView";
 import ApplicationShell, { MAIN_CONTENT_ID, NAVIGATION_ID } from "./components/ApplicationShell";
 import PrimaryNavigation from "./components/PrimaryNavigation";
-import DisclosureButton from "./components/ui/DisclosureButton";
-import StatusIndicator from "./components/ui/StatusIndicator";
 import StateNotice from "./components/ui/StateNotice";
 import {
   DockedThreadEditor,
@@ -41,6 +38,10 @@ import { formatConnectionState } from "./serverPresentation";
 const logoIcon = "/icons/icon-rounded-master.png";
 
 const RAIL_COLLAPSED_KEY = "ender_rail_collapsed";
+const THREAD_TRANSCRIPT_TAB_ID = "thread-transcript-tab";
+const THREAD_EDITOR_TAB_ID = "thread-editor-tab";
+const THREAD_TRANSCRIPT_PANEL_ID = "thread-transcript-panel";
+const THREAD_EDITOR_PANEL_ID = "thread-editor-panel";
 
 function loadRailCollapsed() {
   try {
@@ -77,33 +78,6 @@ function getStatusLabel(status) {
   if (status === "done") return "completed";
   if (status === "needs_input") return "needs input";
   return String(status).replaceAll("_", " ");
-}
-
-function formatTimestamp(value) {
-  if (!value) return "n/a";
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit"
-  }).format(new Date(value));
-}
-
-function formatRelative(value) {
-  if (!value) return "No activity yet";
-  const deltaMs = new Date(value).getTime() - Date.now();
-  const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
-  const minute = 60_000;
-  const hour = 60 * minute;
-  const day = 24 * hour;
-
-  if (Math.abs(deltaMs) < hour) {
-    return formatter.format(Math.round(deltaMs / minute), "minute");
-  }
-  if (Math.abs(deltaMs) < day) {
-    return formatter.format(Math.round(deltaMs / hour), "hour");
-  }
-  return formatter.format(Math.round(deltaMs / day), "day");
 }
 
 function formatPathTail(value, segmentCount = 4) {
@@ -189,33 +163,11 @@ function summarizeHealth(health, hasSelectedThread) {
   ];
 }
 
-function getModeCopy(mode) {
-  if (mode === "workflow") {
-    return {
-      eyebrow: "Workflow",
-      title: "Run a guided launch",
-      subtitle: "Server-defined setup flows prepare parameters, validation, and task handoff before execution begins."
-    };
-  }
-  if (mode === "schedule") {
-    return {
-      eyebrow: "Schedules",
-      title: "Supervise recurring automations",
-      subtitle: "Create cron-driven prompts, thread continuations, and workflow launches without leaving the main console."
-    };
-  }
-  if (mode === "ledger") {
-    return {
-      eyebrow: "Task Ledger",
-      title: "Queue shared agent work",
-      subtitle: "Track generic queued work, dispatch it to available threads, and review completed items across sources."
-    };
-  }
-  return {
-    eyebrow: "Launch",
-    title: "Start a new task",
-    subtitle: "Set the goal, scope the workspace if needed, and move straight into the live transcript once the run starts."
-  };
+function getModeTitle(mode) {
+  if (mode === "workflow") return "Workflows";
+  if (mode === "schedule") return "Schedules";
+  if (mode === "ledger") return "Task ledger";
+  return "New task";
 }
 
 function getStandaloneViewFromHash() {
@@ -230,8 +182,6 @@ export default function App() {
   const [serverModalOpen, setServerModalOpen] = useState(false);
   const [composeMode, setComposeMode] = useState("new");
   const [standaloneView, setStandaloneView] = useState(() => getStandaloneViewFromHash());
-  const [headerCollapsed, setHeaderCollapsed] = useState(false);
-  const [serverSummaryCollapsed, setServerSummaryCollapsed] = useState(true);
   const [railCollapsed, setRailCollapsed] = useState(() => loadRailCollapsed());
   const [railOpen, setRailOpen] = useState(false);
   const [threadScrollToken, setThreadScrollToken] = useState(0);
@@ -341,7 +291,6 @@ export default function App() {
     entries: ledgerEntries,
     metadata: ledgerMetadata,
     loading: ledgerLoading,
-    refreshing: ledgerRefreshing,
     busy: ledgerBusy,
     operation: ledgerOperation,
     error: ledgerError,
@@ -380,22 +329,13 @@ export default function App() {
   const threadBlockedByApproval = effectiveStatus === "awaiting_approval";
   const activeMode = resolveActiveMode(composeMode, Boolean(selectedTask));
   const sendLocked = !selectedTask || !isThreadIdle(effectiveStatus);
-  const latestEntry = entries.length ? entries[entries.length - 1] : null;
-  const selectedTaskUpdatedAt = latestEntry?.t
-    ? new Date(latestEntry.t).toISOString()
-    : selectedTask?.finishedAt || selectedTask?.startedAt || null;
   const readinessChecks = useMemo(
     () => summarizeHealth(health, Boolean(selectedTask)),
     [health, selectedTask]
   );
-  const headerModeCopy = getModeCopy(activeMode);
-  const selfWorkspacePath = String(health?.services?.selfUpdate?.rootDir || "").trim() || "";
+  const headerModeTitle = getModeTitle(activeMode);
   const serverWorkspacePath = String(health?.paths?.workspaceRoot || "").trim() || "";
-  const selfUpdateReady = Boolean(health?.services?.selfUpdate?.ready);
-  const selfUpdateHint = health?.setupHints?.selfUpdate || "";
   const codeServerReady = Boolean(health?.services?.codeServer?.ready);
-  const healthSnapshot = health || lastHealth;
-  const serverAppVersion = String(healthSnapshot?.app?.version || "").trim();
   const connectionCopy = formatConnectionState(connectionState);
   const hasSplitEditor = editor.hasSplit;
   const hasStackedEditor = editor.hasStacked;
@@ -591,6 +531,7 @@ export default function App() {
     const result = await rerunTask(id);
     onStarted({
       id: result.id,
+      title: task.title || task.goal,
       goal: task.goal,
       workspace: task.workspace,
       projectId: task.projectId || null,
@@ -631,6 +572,25 @@ export default function App() {
   };
 
   const showThreadEditor = editor.showEditor;
+
+  const selectThreadMobilePanel = (panel, { moveFocus = false } = {}) => {
+    if (panel === "editor") editor.selectEditorPanel();
+    else showThreadTranscript();
+
+    if (moveFocus) {
+      const tabId = panel === "editor" ? THREAD_EDITOR_TAB_ID : THREAD_TRANSCRIPT_TAB_ID;
+      window.requestAnimationFrame(() => document.getElementById(tabId)?.focus({ preventScroll: true }));
+    }
+  };
+
+  const handleThreadMobileTabKeyDown = (event, currentPanel) => {
+    let nextPanel = null;
+    if (event.key === "ArrowLeft" || event.key === "ArrowUp" || event.key === "Home") nextPanel = "transcript";
+    if (event.key === "ArrowRight" || event.key === "ArrowDown" || event.key === "End") nextPanel = "editor";
+    if (!nextPanel || nextPanel === currentPanel) return;
+    event.preventDefault();
+    selectThreadMobilePanel(nextPanel, { moveFocus: true });
+  };
 
   const toggleThreadFocus = () => {
     setThreadFocusRequested((value) => !value);
@@ -680,7 +640,6 @@ export default function App() {
         entries={entries}
         status={effectiveStatus}
         entryCount={entries.length}
-        taskId={selectedTask.id}
         scrollToBottomToken={threadScrollToken}
       />
     </div>
@@ -732,7 +691,6 @@ export default function App() {
           entries={ledgerEntries}
           metadata={ledgerMetadata}
           loading={ledgerLoading}
-          refreshing={ledgerRefreshing}
           busy={ledgerBusy}
           operation={ledgerOperation}
           error={ledgerError}
@@ -755,27 +713,41 @@ export default function App() {
           <div className="threadMobileWorkspace">
             <div className="threadMobileSwitcher" role="tablist" aria-label="Thread workspace view">
               <button
+                id={THREAD_TRANSCRIPT_TAB_ID}
                 type="button"
                 role="tab"
                 aria-selected={editor.mobilePanel === "transcript"}
+                aria-controls={THREAD_TRANSCRIPT_PANEL_ID}
+                tabIndex={editor.mobilePanel === "transcript" ? 0 : -1}
                 className={`threadSurfaceButton ${editor.mobilePanel === "transcript" ? "active" : ""}`}
-                onClick={showThreadTranscript}
+                onClick={() => selectThreadMobilePanel("transcript")}
+                onKeyDown={(event) => handleThreadMobileTabKeyDown(event, "transcript")}
               >
                 Transcript
               </button>
               <button
+                id={THREAD_EDITOR_TAB_ID}
                 type="button"
                 role="tab"
                 aria-selected={editor.mobilePanel === "editor"}
+                aria-controls={THREAD_EDITOR_PANEL_ID}
+                tabIndex={editor.mobilePanel === "editor" ? 0 : -1}
                 className={`threadSurfaceButton ${editor.mobilePanel === "editor" ? "active" : ""}`}
-                onClick={editor.selectEditorPanel}
+                onClick={() => selectThreadMobilePanel("editor")}
+                onKeyDown={(event) => handleThreadMobileTabKeyDown(event, "editor")}
               >
                 Editor
               </button>
             </div>
             {editor.mobilePanel === "editor" ? (
-              <StackedThreadEditor editor={editor} workspace={selectedTask.workspace} />
-            ) : renderThreadTranscript()}
+              <div id={THREAD_EDITOR_PANEL_ID} role="tabpanel" aria-labelledby={THREAD_EDITOR_TAB_ID}>
+                <StackedThreadEditor editor={editor} workspace={selectedTask.workspace} />
+              </div>
+            ) : (
+              <div id={THREAD_TRANSCRIPT_PANEL_ID} role="tabpanel" aria-labelledby={THREAD_TRANSCRIPT_TAB_ID}>
+                {renderThreadTranscript()}
+              </div>
+            )}
           </div>
         );
       }
@@ -786,13 +758,8 @@ export default function App() {
     return (
       <NewTaskForm
         onStarted={onStarted}
-        serverName={currentServer?.name || "Direct connection"}
-        serverUrl={serverUrl}
         serverWorkspacePath={serverWorkspacePath}
         readinessChecks={readinessChecks}
-        selfWorkspacePath={selfWorkspacePath}
-        selfUpdateReady={selfUpdateReady}
-        selfUpdateHint={selfUpdateHint}
         llmProfiles={llmProfiles}
         projects={projects}
         defaultLlmProfileId={defaultLlmProfileId}
@@ -824,7 +791,6 @@ export default function App() {
         entries={ledgerEntries}
         metadata={ledgerMetadata}
         loading={ledgerLoading}
-        refreshing={ledgerRefreshing}
         busy={ledgerBusy}
         operation={ledgerOperation}
         error={ledgerError}
@@ -889,77 +855,14 @@ export default function App() {
                   <img className="brandMark" src={logoIcon} alt="Ender logo" />
                 </div>
                 <div className="brandCopy">
-                  <div className="brandEyebrow">Agent operations console</div>
                   <h1 className="title">Ender</h1>
-                  <p className="subtitle">Live supervision for long-running agent work.</p>
                 </div>
               </div>
             </div>
 
-            <section className="serverSummary">
-              <div className="connectionRow">
-                <div>
-                  <div className="sectionLabel">Current server</div>
-                  <div className="serverNameDisplay">{currentServer?.name || "Direct endpoint"}</div>
-                  <div className="serverEndpointDisplay mono">{serverUrl}</div>
-                </div>
-                <div className="serverSummaryActions">
-                  <StatusIndicator label={connectionCopy.label} tone={connectionCopy.tone} />
-                  <DisclosureButton
-                    className="summaryToggle"
-                    expanded={!serverSummaryCollapsed}
-                    controls="server-summary-details"
-                    label={serverSummaryCollapsed ? "Expand server details" : "Collapse server details"}
-                    onClick={() => setServerSummaryCollapsed((value) => !value)}
-                  >
-                    <span className={`chevronIcon ${serverSummaryCollapsed ? "down" : "up"}`} aria-hidden="true" />
-                  </DisclosureButton>
-                </div>
-              </div>
-
-              {reconnectNotice ? (
-                <StateNotice
-                  tone={reconnectNotice.startsWith("Reconnected") ? "success" : "warning"}
-                  title={reconnectNotice.startsWith("Reconnected") ? "Connection restored" : "Connection lost"}
-                  detail={reconnectNotice}
-                  compact
-                />
-              ) : null}
-
-              {!serverSummaryCollapsed ? (
-                <div id="server-summary-details" className="serverSummaryDetails">
-                  <ServerDiagnostics
-                    serverName={currentServer?.name || "Direct endpoint"}
-                    serverUrl={serverUrl}
-                    health={healthSnapshot}
-                    stale={!health && Boolean(lastHealth)}
-                    connectionState={connectionState}
-                    contractStatus={contractStatus}
-                    uiVersion={APP_VERSION}
-                    healthChecking={healthChecking}
-                    healthError={healthError}
-                    healthCheckedAt={healthCheckedAt}
-                    onRefresh={refreshHealth}
-                    compact
-                  />
-                </div>
-              ) : null}
-            </section>
-
-            {loadError ? (
-              <StateNotice
-                tone="danger"
-                title="Thread sync failed"
-                detail={loadError}
-                actionLabel="Retry thread sync"
-                onAction={refresh}
-                compact
-              />
-            ) : null}
-
             <PrimaryNavigation activeId={activeMode} onNavigate={openMode} />
 
-            <section className="railSection threadCollection">
+            <section className={`railSection threadCollection ${tasks.length > 4 ? "hasSearch" : ""}`}>
               <div className="railSectionHeader">
                 <div className="sectionHeading">
                   <span>{showArchived ? "Archived threads" : "Thread ledger"}</span>
@@ -967,6 +870,14 @@ export default function App() {
                     {showArchived ? archivedTasks.length : activeTasks.length}
                   </span>
                 </div>
+                <button
+                  type="button"
+                  className={`threadScopeButton ${showArchived ? "active" : ""}`}
+                  aria-label={showArchived ? `Show active threads (${activeTasks.length})` : `Show archived threads (${archivedTasks.length})`}
+                  onClick={toggleArchiveScope}
+                >
+                  {showArchived ? "Active" : "Archived"}
+                </button>
               </div>
               {tasks.length > 4 ? (
                 <div className="threadSearchRow">
@@ -1006,27 +917,11 @@ export default function App() {
                 onRerun={onRerun}
               />
             </section>
-
-            <div className="railFooter">
-              <button
-                type="button"
-                className={`modeButton modeButtonSecondary ${showArchived ? "active" : ""}`}
-                onClick={toggleArchiveScope}
-              >
-                <span className="modeButtonLabel">
-                  {showArchived ? `Show Active (${activeTasks.length})` : `Show Archived (${archivedTasks.length})`}
-                </span>
-                <span className="modeButtonMeta">Toggle archive scope</span>
-              </button>
-              <div className="railFootnote mono">
-                v{APP_VERSION} · {connectionState === "checking" ? "checking" : connectionState} · {tasks.length} total threads
-              </div>
-            </div>
           </div>
         </aside>
 
         <main id={MAIN_CONTENT_ID} tabIndex="-1" className={`mainPane ${isThreadFocusMode ? "reviewMode" : ""}`}>
-          <header className={`mainHeader ${headerCollapsed ? "collapsed" : ""} ${isThreadFocusMode ? "reviewMode" : ""}`}>
+          <header className={`mainHeader ${selectedTask && composeMode === "thread" ? "threadMode" : ""} ${isThreadFocusMode ? "reviewMode" : ""}`}>
             <div className="headerTopRow">
               <div className="headerTitleGroup">
                 <button
@@ -1037,21 +932,30 @@ export default function App() {
                   aria-controls={NAVIGATION_ID}
                   onClick={() => setRailOpen((prev) => !prev)}
                 >
-                  Navigation
+                  Menu
                 </button>
-                  <div className="headerTitleCopy">
-                    <div className="headerEyebrow">
-                      {selectedTask && composeMode === "thread" ? "Live transcript" : headerModeCopy.eyebrow}
-                    </div>
-                    <div
+                <div className="headerTitleCopy">
+                  <div className="headerTitleLine">
+                    <h2
                     className={`headerGoal ${selectedTask && composeMode === "thread" ? "threadPrompt" : ""}`}
-                    title={selectedTask && composeMode === "thread" ? selectedTask.goal : headerModeCopy.title}
+                    title={selectedTask && composeMode === "thread" ? (selectedTask.title || selectedTask.goal) : headerModeTitle}
                     >
-                      {selectedTask && composeMode === "thread" ? selectedTask.goal : headerModeCopy.title}
-                    </div>
-                    {!selectedTask || composeMode !== "thread" ? <div className="headerMeta">{headerModeCopy.subtitle}</div> : null}
+                      {selectedTask && composeMode === "thread" ? (selectedTask.title || selectedTask.goal) : headerModeTitle}
+                    </h2>
+                    {selectedTask && composeMode === "thread" ? (
+                      <div className="threadHeaderContext">
+                        <span className={`statusPill headerStatusPill ${getStatusTone(effectiveStatus)}`}>
+                          {getStatusLabel(effectiveStatus)}
+                        </span>
+                        <span className="headerMetaTag headerWorkspaceTag mono" title={selectedTask.workspace || "none"}>
+                          {formatPathTail(selectedTask.workspace, 3)}
+                        </span>
+                        {primaryApproval ? <span className="headerMetaTag attention">Approval required</span> : null}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
+              </div>
               <div className="headerActionColumn">
                 <div className="headerActions">
                   {selectedTask && composeMode === "thread" ? (
@@ -1084,87 +988,50 @@ export default function App() {
                       {isThreadFocusMode ? "Show Threads" : "Focus View"}
                     </button>
                   ) : null}
-                  <StatusIndicator label={connectionCopy.label} tone={connectionCopy.tone} />
-                  <button type="button" className="iconButton" onClick={() => setServerModalOpen(true)}>
-                    Switch Server
+                  <button
+                    type="button"
+                    className={`serverTargetButton ${connectionCopy.tone}`}
+                    aria-label={`Manage server ${currentServer?.name || "Direct endpoint"}, ${connectionCopy.label}`}
+                    title={serverUrl}
+                    onClick={() => setServerModalOpen(true)}
+                  >
+                    <span className="statusDot" aria-hidden="true" />
+                    <span className="serverTargetName">{currentServer?.name || "Direct endpoint"}</span>
+                    <span className="serverTargetState">{connectionCopy.label}</span>
                   </button>
-                  <DisclosureButton
-                    className="summaryToggle headerToggleButton"
-                    expanded={!headerCollapsed}
-                    controls="main-header-details"
-                    label={headerCollapsed ? "Expand header" : "Collapse header"}
-                    onClick={() => setHeaderCollapsed((prev) => !prev)}
-                  />
                 </div>
               </div>
             </div>
-
-            <div id="main-header-details" className="mainHeaderDetails">
-            {!headerCollapsed && selectedTask && composeMode === "thread" ? (
-              <div className="threadHeaderMetaStrip">
-                <span className={`statusPill headerStatusPill ${getStatusTone(effectiveStatus)}`}>
-                  {getStatusLabel(effectiveStatus)}
-                </span>
-                <span className="headerMetaTag mono">{`thread ${String(selectedTask.id).slice(0, 8)}`}</span>
-                <span className="headerMetaTag mono" title={selectedTask.workspace || "none"}>
-                  {`workspace ${formatPathTail(selectedTask.workspace, 3)}`}
-                </span>
-                <span className="headerMetaTag mono">{`updated ${formatTimestamp(selectedTaskUpdatedAt)}`}</span>
-                <span className="headerMetaTag mono">{formatRelative(selectedTaskUpdatedAt)}</span>
-                {primaryApproval ? <span className="headerMetaTag attention mono">approval required</span> : null}
-              </div>
+            {loadError ? (
+              <StateNotice
+                tone="danger"
+                title="Thread sync failed"
+                detail={loadError}
+                actionLabel="Retry thread sync"
+                onAction={refresh}
+                compact
+              />
+            ) : reconnectNotice ? (
+              <StateNotice
+                tone={reconnectNotice.startsWith("Reconnected") ? "success" : "warning"}
+                title={reconnectNotice.startsWith("Reconnected") ? "Connection restored" : "Connection lost"}
+                detail={reconnectNotice}
+                compact
+              />
             ) : null}
-            {!headerCollapsed && (!selectedTask || composeMode !== "thread") ? (
-              <div
-                className={`headerChipRow ${
-                  selectedTask && composeMode === "thread" ? "threadHeaderChipRow" : "overviewHeaderChipRow"
-                }`}
-              >
-                <div className="headerChip">
-                  <span className="headerChipLabel">Server</span>
-                  <span className="headerChipValue mono">{currentServer?.name || serverUrl}</span>
-                </div>
-                <div className="headerChip">
-                  <span className="headerChipLabel">Versions</span>
-                  <span className="headerChipValue mono">UI {APP_VERSION} · server {serverAppVersion || "unknown"}</span>
-                </div>
-                <div className="headerChip">
-                  <span className="headerChipLabel">Runtime</span>
-                  <span className="headerChipValue mono">{healthSnapshot?.backend || "unknown"}</span>
-                </div>
-                <div className="headerChip">
-                  <span className="headerChipLabel">API access</span>
-                  <span className="headerChipValue mono">{healthSnapshot?.services?.apiAccess?.mode || "unknown"}</span>
-                </div>
-              </div>
-            ) : null}
-            </div>
           </header>
 
           <section className={`mainBody ${isThreadFocusMode ? "reviewMode" : ""}`}>{renderMainContent()}</section>
           {selectedTask && composeMode === "thread" && !(hasStackedEditor && editor.mobilePanel === "editor") ? (
             threadBlockedByApproval ? (
               <section className="threadComposer composerBlockedState">
-                <div className="composerTop">
-                  <div>
-                    <div className="composerEyebrow">Run paused</div>
-                    <div className="composerContext mono">
-                      {selectedTask.id.slice(0, 8)} · approval needed
-                    </div>
-                  </div>
-                  <div className="composerContext mono">{selectedTask.workspace || "No workspace scope"}</div>
-                </div>
-                <div className="composerBlockedMessage">
-                  Resolve the pending approval above to continue this run. Follow-up prompts are disabled until the operator approves or denies the action.
-                </div>
+                <span className="composerBlockedLabel">Run paused</span>
+                <span className="composerBlockedMessage">Resolve the pending approval above to continue this run.</span>
               </section>
             ) : (
               <ThreadComposer
                 disabled={sendLocked}
-                status={effectiveStatus}
                 onSend={sendNextPrompt}
-                workspace={selectedTask.workspace}
-                taskId={selectedTask.id}
                 llmProfiles={llmProfiles}
                 currentLlmProfileId={selectedTask.llmProfileId || defaultLlmProfileId}
                 currentMemoryMode={selectedTask.memoryMode || "auto"}

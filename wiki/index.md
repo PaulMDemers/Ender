@@ -1,5 +1,7 @@
 # Knowledge Base Index
 
+> **Historical snapshot (2026-05-14).** These compiled articles preserve earlier implementation context and are not current operator or release guidance. Start with the maintained [Ender documentation](../docs/README.md), then use the current architecture and release-readiness records linked there.
+
 ## project
 
 Articles about the Ender project as a whole.

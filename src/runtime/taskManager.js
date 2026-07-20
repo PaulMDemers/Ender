@@ -290,6 +290,7 @@ class TaskManager {
   list() {
     return [...this.tasks.values()].map((t) => ({
       id: t.id,
+      title: t.title || t.goal,
       goal: t.goal,
       status: t.status,
       startedAt: t.startedAt,
@@ -313,6 +314,7 @@ class TaskManager {
     if (!t) return null;
     return {
       id: t.id,
+      title: t.title || t.goal,
       goal: t.goal,
       status: t.status,
       startedAt: t.startedAt,
@@ -418,6 +420,7 @@ class TaskManager {
     if (!t) return { ok: false, error: "not_found" };
     const rerunGoal = String(t.initialGoal || t.goal || "").trim();
     const started = this.start(rerunGoal, t.workspaceLabel || t.workspace, {
+      title: t.title || rerunGoal,
       projectId: t.projectId || null,
       llmProfileId: t.llmProfileId || null,
       memoryMode: t.memoryMode || "auto"
@@ -455,9 +458,17 @@ class TaskManager {
     const resolution = this.approvalCoordinator.resolve(task, approvalId, approved);
     if (!resolution.ok) return resolution;
 
-    const msg = approved ? `approval granted (${approvalId})` : `approval denied (${approvalId})`;
-    this._push(task, { level: approved ? "info" : "warn", data: msg });
-    this._broadcastLog(task, this._normalizeLog({ level: approved ? "info" : "warn", data: msg }));
+    const approvalEntry = this._push(task, {
+      level: approved ? "info" : "warn",
+      data: {
+        kind: "approval",
+        action: approved ? "granted" : "denied",
+        approvalId: resolution.approval.id,
+        title: resolution.approval.title,
+        type: resolution.approval.type
+      }
+    });
+    this._broadcastLog(task, approvalEntry);
 
     if (resolution.remaining === 0 && task.status === TASK_STATUS.AWAITING_APPROVAL) {
       this._transitionTask(task, TASK_STATUS.RUNNING);
@@ -567,9 +578,13 @@ class TaskManager {
 
     const id = this._createTaskId();
     const cleanGoal = String(goal || "").trim();
+    const executionPrompt = String(options.executionPrompt || cleanGoal).trim();
+    const title = String(options.title || cleanGoal.split("\n")[0] || "Task").trim().slice(0, 160);
     const task = {
       id,
+      title,
       goal: cleanGoal,
+      executionPrompt,
       initialGoal: cleanGoal,
       latestPrompt: cleanGoal,
       status: TASK_STATUS.RUNNING,
@@ -766,6 +781,29 @@ class TaskManager {
       .filter((entry) => (entry.role === "user" || entry.role === "assistant") && hasThreadContent(entry.content));
   }
 
+  _getExecutionThread(task) {
+    const thread = this._getRunThread(task?.thread);
+    const executionPrompt = String(task?.executionPrompt || "").trim();
+    if (!executionPrompt || !task?.ledgerEntryId) return thread;
+
+    const originalUserEntry = Array.isArray(task?.thread)
+      ? task.thread.find((entry) => entry?.role === "user" && hasThreadContent(entry?.content))
+      : null;
+    const originalUserContent = originalUserEntry ? sanitizeThreadContent(originalUserEntry.content) : null;
+    const firstUserIndex = thread.findIndex((entry) => entry.role === "user");
+    const originalRequestStillInContext = firstUserIndex >= 0
+      && JSON.stringify(thread[firstUserIndex].content) === JSON.stringify(originalUserContent);
+    if (originalRequestStillInContext) {
+      thread[firstUserIndex] = { ...thread[firstUserIndex], content: executionPrompt };
+      return thread;
+    }
+
+    return [
+      { role: "user", content: executionPrompt },
+      ...thread.slice(-(THREAD_CONTEXT_LIMIT - 1))
+    ];
+  }
+
   _requestApproval(task, payload) {
     const { approval, decision } = this.approvalCoordinator.request(task, payload);
     this._transitionTask(task, TASK_STATUS.AWAITING_APPROVAL, {
@@ -793,14 +831,14 @@ class TaskManager {
     );
     const onLog = (entry) => {
       if (!isCurrentRun()) return;
-      this._push(task, entry);
-      this._broadcastLog(task, this._normalizeLog(entry));
+      const item = this._push(task, entry);
+      this._broadcastLog(task, item);
     };
 
     const requestApproval = (payload) => (
       isCurrentRun() ? this._requestApproval(task, payload) : Promise.resolve(false)
     );
-    const thread = this._getRunThread(task.thread);
+    const thread = this._getExecutionThread(task);
 
     const runPromise = (async () => {
       try {
@@ -838,8 +876,8 @@ class TaskManager {
         const assistantContent = String(result);
         task.thread.push({ role: "assistant", content: assistantContent });
         const assistantEntry = { level: "info", data: { kind: "chat", role: "assistant", content: assistantContent } };
-        this._push(task, assistantEntry);
-        this._broadcastLog(task, this._normalizeLog(assistantEntry));
+        const assistantLog = this._push(task, assistantEntry);
+        this._broadcastLog(task, assistantLog);
         this._transitionTask(task, terminalStatus, {
           finishedAt: new Date().toISOString(),
           result
@@ -865,8 +903,8 @@ class TaskManager {
           return;
         }
         const errorEntry = { level: "error", data: err && err.stack ? err.stack : String(err) };
-        this._push(task, errorEntry);
-        this._broadcastLog(task, this._normalizeLog(errorEntry));
+        const errorLog = this._push(task, errorEntry);
+        this._broadcastLog(task, errorLog);
         this._transitionTask(task, TASK_STATUS.ERROR, {
           finishedAt: new Date().toISOString(),
           result: null
@@ -932,6 +970,7 @@ class TaskManager {
       task.logs.splice(0, task.logs.length - this.maxLogs);
     }
     this._schedulePersist(task);
+    return item;
   }
 
   _broadcastLog(task, item) {
@@ -991,6 +1030,7 @@ class TaskManager {
     const includeLogs = Boolean(options.includeLogs);
     return {
       id: task.id,
+      title: task.title || task.goal,
       goal: task.goal,
       status: task.status,
       startedAt: task.startedAt,
@@ -1027,7 +1067,9 @@ class TaskManager {
     return {
       recordVersion: TASK_RECORD_VERSION,
       id: task.id,
+      title: task.title || task.goal,
       goal: task.goal,
+      executionPrompt: task.executionPrompt || task.goal,
       status: task.status,
       startedAt: task.startedAt,
       finishedAt: task.finishedAt || null,
@@ -1053,7 +1095,9 @@ class TaskManager {
   _hydrateTask(data) {
     const task = {
       id: String(data.id),
+      title: String(data.title || data.goal || "Task"),
       goal: String(data.goal || ""),
+      executionPrompt: String(data.executionPrompt || data.goal || ""),
       status: String(data.status || TASK_STATUS.ERROR),
       startedAt: data.startedAt || new Date().toISOString(),
       finishedAt: data.finishedAt || null,

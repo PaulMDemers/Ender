@@ -58,18 +58,22 @@ const schema = z.object({
 
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_MODEL: z.string().default("gpt-4.1-mini"),
+  OPENAI_MODELS: z.string().optional(),
 
   AWS_REGION: z.string().optional(),
-  BEDROCK_MODEL_ID: z.string().default("anthropic.claude-3-5-sonnet-20240620-v1:0"),
+  BEDROCK_MODEL_ID: z.string().default("us.anthropic.claude-sonnet-5"),
+  BEDROCK_MODEL_IDS: z.string().optional(),
 
   AZURE_OPENAI_API_KEY: z.string().optional(),
   AZURE_OPENAI_API_INSTANCE_NAME: z.string().optional(),
   AZURE_OPENAI_API_DEPLOYMENT_NAME: z.string().optional(),
+  AZURE_OPENAI_API_DEPLOYMENT_NAMES: z.string().optional(),
   AZURE_OPENAI_API_VERSION: z.string().default("2024-10-21"),
   AZURE_OPENAI_BASE_PATH: z.string().optional(),
 
   OLLAMA_BASE_URL: z.string().default("http://127.0.0.1:11434"),
   OLLAMA_MODEL: z.string().default("llama3.1:8b"),
+  OLLAMA_MODELS: z.string().optional(),
 
   ACP_COMMAND: z.string().optional(),
   ACP_ARGS: z.string().optional(),
@@ -129,6 +133,17 @@ function parseBooleanEnv(value, defaultValue = false) {
   if (["1", "true", "yes", "y", "on"].includes(raw)) return true;
   if (["0", "false", "no", "n", "off"].includes(raw)) return false;
   throw new Error("Boolean env value must be one of true/false/1/0/yes/no/on/off when set");
+}
+
+function hasExplicitEnvValue(env, key) {
+  return Object.prototype.hasOwnProperty.call(env || {}, key) && Boolean(String(env[key] || "").trim());
+}
+
+function parseConfiguredValues(primary, additional) {
+  const values = [primary, ...String(additional || "").split(",")]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+  return [...new Set(values)];
 }
 
 function loadConfig(env = process.env) {
@@ -252,6 +267,14 @@ function loadConfig(env = process.env) {
     throw new Error("BEACON_ENABLED must be one of true/false/1/0/yes/no/on/off when set");
   }
 
+  const openaiModels = parseConfiguredValues(parsed.OPENAI_MODEL, parsed.OPENAI_MODELS);
+  const bedrockModels = parseConfiguredValues(parsed.BEDROCK_MODEL_ID, parsed.BEDROCK_MODEL_IDS);
+  const azureDeploymentNames = parseConfiguredValues(
+    parsed.AZURE_OPENAI_API_DEPLOYMENT_NAME,
+    parsed.AZURE_OPENAI_API_DEPLOYMENT_NAMES
+  );
+  const ollamaModels = parseConfiguredValues(parsed.OLLAMA_MODEL, parsed.OLLAMA_MODELS);
+
   return {
     port: Number(parsed.PORT || 3000),
     apiAccess: {
@@ -318,30 +341,46 @@ function loadConfig(env = process.env) {
 
     openai: {
       apiKey: parsed.OPENAI_API_KEY,
-      model: parsed.OPENAI_MODEL
+      model: openaiModels[0],
+      models: openaiModels,
+      configured: Boolean(String(parsed.OPENAI_API_KEY || "").trim())
     },
 
     bedrock: {
       region: parsed.AWS_REGION,
-      model: parsed.BEDROCK_MODEL_ID
+      model: bedrockModels[0],
+      models: bedrockModels,
+      configured: Boolean(String(parsed.AWS_REGION || "").trim())
     },
 
     azure: {
       apiKey: parsed.AZURE_OPENAI_API_KEY,
       instanceName: parsed.AZURE_OPENAI_API_INSTANCE_NAME,
-      deploymentName: parsed.AZURE_OPENAI_API_DEPLOYMENT_NAME,
+      deploymentName: azureDeploymentNames[0],
+      deploymentNames: azureDeploymentNames,
       apiVersion: parsed.AZURE_OPENAI_API_VERSION,
-      basePath: parsed.AZURE_OPENAI_BASE_PATH
+      basePath: parsed.AZURE_OPENAI_BASE_PATH,
+      configured: Boolean(
+        String(parsed.AZURE_OPENAI_API_KEY || "").trim()
+        && azureDeploymentNames.length > 0
+        && (String(parsed.AZURE_OPENAI_API_INSTANCE_NAME || "").trim() || String(parsed.AZURE_OPENAI_BASE_PATH || "").trim())
+      )
     },
 
     ollama: {
       baseUrl: parsed.OLLAMA_BASE_URL,
-      model: parsed.OLLAMA_MODEL
+      model: ollamaModels[0],
+      models: ollamaModels,
+      configured: parsed.LLM_BACKEND === "ollama"
+        || hasExplicitEnvValue(env, "OLLAMA_BASE_URL")
+        || hasExplicitEnvValue(env, "OLLAMA_MODEL")
+        || hasExplicitEnvValue(env, "OLLAMA_MODELS")
     },
 
     acp: {
       command: parsed.ACP_COMMAND ? String(parsed.ACP_COMMAND).trim() : null,
-      args: parsed.ACP_ARGS ? String(parsed.ACP_ARGS).trim().split(/\s+/).filter(Boolean) : ["acp"]
+      args: parsed.ACP_ARGS ? String(parsed.ACP_ARGS).trim().split(/\s+/).filter(Boolean) : ["acp"],
+      configured: Boolean(String(parsed.ACP_COMMAND || "").trim())
     },
 
     gitlab: {

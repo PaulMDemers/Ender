@@ -20,8 +20,11 @@ function markdownFiles(dir) {
 const files = [
   ...rootMarkdown,
   ...markdownFiles(path.join(rootDir, "docs")),
-  ...markdownFiles(path.join(rootDir, "knowledge"))
+  ...markdownFiles(path.join(rootDir, "knowledge")),
+  ...markdownFiles(path.join(rootDir, "wiki")),
+  ...markdownFiles(path.join(rootDir, "raw"))
 ].sort();
+const maintainedRoots = new Set(["docs", "knowledge"]);
 const failures = [];
 const localLinkPattern = /!?\[[^\]]*\]\((<[^>]+>|[^\s)]+)(?:\s+["'][^)]*["'])?\)/g;
 const npmRunPattern = /\bnpm run ([a-zA-Z0-9:_-]+)/g;
@@ -48,6 +51,10 @@ for (const file of files) {
       failures.push(`${relativeFile}: missing local link target ${rawTarget}`);
     }
   }
+
+  const topLevelDirectory = relativeFile.split(path.sep)[0];
+  const validatesCommands = !relativeFile.includes(path.sep) || maintainedRoots.has(topLevelDirectory);
+  if (!validatesCommands) continue;
 
   for (const match of source.matchAll(npmRunPattern)) {
     const scriptName = match[1];

@@ -1,26 +1,21 @@
 import StateNotice from "./ui/StateNotice";
 import { useFocusTrap } from "../hooks/useFocusTrap";
 
-function EditorPassword({ editor, compact = false }) {
+function EditorPassword({ editor }) {
   if (!editor.session?.password) return null;
   return (
     <button
       type="button"
-      className={`${compact ? "editorPasswordButton" : "editorCredential editorCredentialButton"} ${editor.copiedPassword ? "copied" : ""}`}
+      className={`editorCredential editorCredentialButton ${editor.copiedPassword ? "copied" : ""}`}
       onClick={editor.copyPassword}
       aria-label="Copy editor password"
       title="Copy editor password"
     >
       <span className="headerChipLabel">Password</span>
-      {compact ? (
-        <span className="editorPasswordValue mono">{editor.session.password}</span>
-      ) : (
-        <span className="editorCredentialCopyRow">
-          <span className="editorMetaValue mono">{editor.session.password}</span>
-          <span className="editorPasswordState">{editor.copiedPassword ? "Copied" : "Copy"}</span>
-        </span>
-      )}
-      {compact ? <span className="editorPasswordState">{editor.copiedPassword ? "Copied" : "Copy"}</span> : null}
+      <span className="editorCredentialCopyRow">
+        <span className="editorMetaValue mono">{editor.session.password}</span>
+        <span className="editorPasswordState">{editor.copiedPassword ? "Copied" : "Copy"}</span>
+      </span>
     </button>
   );
 }
@@ -29,7 +24,6 @@ function EditorDetails({ editor, workspace }) {
   if (!editor.detailsExpanded) return null;
   return (
     <div className="editorSessionDetails">
-      <div className="panelNote">Use the direct URL if browser policy prevents the embedded editor from loading.</div>
       <div className="editorMetaGrid">
         <div className="editorMetaItem">
           <span className="headerChipLabel">Workspace</span>
@@ -84,7 +78,6 @@ function EditorToolbar({ editor, surface }) {
       <span className={`statusPill ${connected ? "success" : "running"}`}>
         {connected ? "connected" : "connecting"}
       </span>
-      <EditorPassword editor={editor} compact />
       <button type="button" className="miniButton" onClick={editor.toggleDetails} aria-expanded={editor.detailsExpanded}>
         {editor.detailsExpanded ? "Hide connection" : "Connection"}
       </button>
@@ -132,7 +125,6 @@ function EditorFrame({ editor, surface, className = "" }) {
 function EditorHeading({ title }) {
   return (
     <div className="editorDockHeading">
-      <div className="panelLabel mono">thread.editor</div>
       <div className="editorDockTitle">{title}</div>
     </div>
   );
@@ -203,7 +195,6 @@ export function ModalThreadEditor({ editor, workspace }) {
           <div className="editorModalHeader">
             <div>
               <div className="modalTitle">Workspace editor</div>
-              <div className="modalSubtitle">A live editor scoped to this thread workspace, with direct access available if embedding is blocked.</div>
             </div>
             <EditorToolbar editor={editor} surface="modal" />
             <EditorDetails editor={editor} workspace={workspace} />

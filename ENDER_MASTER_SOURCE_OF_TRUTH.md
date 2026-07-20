@@ -1,6 +1,6 @@
 # Ender Master Source of Truth
 
-Last reviewed: 2026-05-08
+Last reviewed: 2026-07-20
 
 Product version observed: 0.1.1
 
@@ -31,16 +31,16 @@ Ender has two main user surfaces:
 
 The console can connect to an Ender server by base URL. It supports saved servers, favorites, last-used ordering, quick reconnect, and a disconnected/offline server picker. The default local server target is `http://localhost:3000` unless configured otherwise.
 
-The main console modes are:
+The main console destinations are:
 
-- Launch: start a new supervised task.
-- Workflow: run a guided server-defined launch flow.
+- New task: start a supervised task.
+- Workflows: run a guided server-defined launch flow.
 - Schedules: create and manage recurring automations.
-- Task Ledger: queue and monitor shared work items.
+- Task ledger: queue and monitor shared work items.
 - Thread view: inspect and continue an existing task thread.
-- Isolated Task Ledger view: a simpler shared-queue screen available from the ledger mode.
+- Isolated task-ledger view: a simpler shared-queue screen available from the ledger destination.
 
-The UI also exposes health/readiness information for the connected server, including LLM readiness, Jira workflow readiness, browser capture readiness, code-server/editor readiness, GitHub token readiness, and self-update readiness.
+The UI also exposes health/readiness information for the connected server, including configured model-profile readiness, ACP command readiness, Jira workflow readiness, browser capture readiness, code-server/editor readiness, GitHub token readiness, and self-update readiness.
 
 ## Core Concepts
 
@@ -108,7 +108,7 @@ The thread composer supports text plus attachments. Up to 6 attachments can be a
 
 ### Transcript
 
-The transcript is the live and historical view of a task. It groups tool calls, renders assistant/user markdown, shows structured JSON when relevant, displays attached images, and hides noisy internal step details by default. Operators can still see run details such as backend, workspace, and loop stop reason.
+The transcript is the live and historical view of a task. Conversation is the default presentation: it renders human and assistant markdown, approvals, outcomes, attachments, and one compact live work summary for each user turn. Operators can expand that summary for tool detail or switch to All activity for the complete provider-neutral model, tool, diagnostic, and timing event stream. Internal runtime phases such as model invocation are not represented as assistant speech. Run details such as backend, workspace, and loop stop reason remain available on demand.
 
 Live task updates are streamed to the UI. A selected task receives status events, log events, approval-required events, completion events, and keepalive pings.
 
@@ -176,8 +176,9 @@ Supported backend families are:
 - AWS Bedrock
 - Azure OpenAI
 - Ollama
+- ACP-compliant agent adapters
 
-When no explicit profile list is configured, Ender exposes one default profile derived from the selected backend. A configured profile can have a label, description, backend, model, and provider-specific settings. The UI shows profile label, backend, model when available, and the default marker.
+When no explicit profile list is configured, Ender automatically exposes the selected default backend plus every other provider whose required environment values are configured. Comma-separated model or deployment variables can publish multiple profiles for OpenAI, Bedrock, Azure OpenAI, and Ollama; an ACP adapter owns its own model selection and therefore publishes as one profile. `LLM_BACKEND` chooses the default provider, while `LLM_PROFILES_JSON` remains authoritative when an explicit profile catalog is supplied. A profile can have a label, description, backend, model, and provider-specific settings. The UI shows its label, backend, model when available, readiness, and default marker.
 
 ### Workflow
 

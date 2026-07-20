@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   createTaskLedgerEntry,
   deleteTaskLedgerEntry,
@@ -13,24 +13,32 @@ export function useTaskLedger({ serverUrl, connectionRequested, composeMode, sta
   const [entries, setEntries] = useState([]);
   const [metadata, setMetadata] = useState(EMPTY_METADATA);
   const [loading, setLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   const [operation, setOperation] = useState(null);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
+  const collectionSignatureRef = useRef("");
 
   const applyCollection = useCallback((data) => {
     const items = data?.items || [];
-    setEntries(items);
-    setMetadata({
+    const signature = JSON.stringify(items);
+    if (signature !== collectionSignatureRef.current) {
+      collectionSignatureRef.current = signature;
+      setEntries(items);
+    }
+    const nextMetadata = {
       maxAutoAgents: Number.isFinite(data?.maxAutoAgents) ? data.maxAutoAgents : 0,
       pollIntervalMs: Number.isFinite(data?.pollIntervalMs) ? data.pollIntervalMs : 0
-    });
+    };
+    setMetadata((current) => (
+      current.maxAutoAgents === nextMetadata.maxAutoAgents && current.pollIntervalMs === nextMetadata.pollIntervalMs
+        ? current
+        : nextMetadata
+    ));
     return items;
   }, []);
 
   const refresh = useCallback(async ({ silent = false } = {}) => {
-    if (silent) setRefreshing(true);
-    else setLoading(true);
+    if (!silent) setLoading(true);
     try {
       const data = await listTaskLedger();
       const items = applyCollection(data);
@@ -40,16 +48,15 @@ export function useTaskLedger({ serverUrl, connectionRequested, composeMode, sta
       setError(loadError.message || "Unable to load task ledger");
       return null;
     } finally {
-      if (silent) setRefreshing(false);
-      else setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [applyCollection, serverUrl]);
 
   const reset = useCallback(() => {
     setEntries([]);
+    collectionSignatureRef.current = "";
     setMetadata(EMPTY_METADATA);
     setLoading(false);
-    setRefreshing(false);
     setOperation(null);
     setError("");
     setResult(null);
@@ -64,8 +71,7 @@ export function useTaskLedger({ serverUrl, connectionRequested, composeMode, sta
     let live = true;
 
     const load = async ({ silent = false } = {}) => {
-      if (silent) setRefreshing(true);
-      else setLoading(true);
+      if (!silent) setLoading(true);
       try {
         const data = await listTaskLedger();
         if (!live) return;
@@ -74,10 +80,7 @@ export function useTaskLedger({ serverUrl, connectionRequested, composeMode, sta
       } catch (loadError) {
         if (live) setError(loadError.message || "Unable to load task ledger");
       } finally {
-        if (live) {
-          if (silent) setRefreshing(false);
-          else setLoading(false);
-        }
+        if (live && !silent) setLoading(false);
       }
     };
 
@@ -114,7 +117,6 @@ export function useTaskLedger({ serverUrl, connectionRequested, composeMode, sta
     entries,
     metadata,
     loading,
-    refreshing,
     busy: Boolean(operation),
     operation,
     error,

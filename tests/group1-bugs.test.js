@@ -51,6 +51,49 @@ test("continueTask preserves the original goal for reruns", async (t) => {
   assert.equal(rerunWorkspace, task.workspaceLabel || task.workspace);
 });
 
+test("ledger tasks keep operator-facing chat separate from private execution context", async (t) => {
+  const root = await makeTempDir();
+  t.after(async () => {
+    await fs.rm(root, { recursive: true, force: true });
+  });
+
+  const manager = new TaskManager({
+    workdir: root,
+    workspaceBase: root,
+    threadsDir: path.join(root, "threads")
+  });
+  manager._runThread = () => {};
+
+  const started = manager.start("Respond with hello", root, {
+    title: "Example ledger task",
+    ledgerEntryId: "ledger-1",
+    executionPrompt: "Private ledger envelope\nOriginal task request:\nRespond with hello"
+  });
+  assert.equal(started.ok, true);
+
+  const task = manager.tasks.get(started.id);
+  assert.equal(task.title, "Example ledger task");
+  assert.equal(task.goal, "Respond with hello");
+  assert.equal(task.thread[0].content, "Respond with hello");
+  assert.equal(task.logs[0].data.content, "Respond with hello");
+  assert.equal(manager.getTaskSummary(started.id).goal, "Respond with hello");
+  assert.equal(manager.getTaskSummary(started.id).title, "Example ledger task");
+  assert.equal(manager._getExecutionThread(task)[0].content, task.executionPrompt);
+
+  for (let index = 0; index < 13; index += 1) {
+    task.thread.push({ role: index % 2 === 0 ? "assistant" : "user", content: `Follow-up ${index}` });
+  }
+  const boundedExecutionThread = manager._getExecutionThread(task);
+  assert.equal(boundedExecutionThread.length, 12);
+  assert.equal(boundedExecutionThread[0].content, task.executionPrompt);
+  assert.equal(boundedExecutionThread.at(-1).content, "Follow-up 12");
+  assert.ok(boundedExecutionThread.some((entry) => entry.content === "Follow-up 11"));
+
+  const serialized = manager._serializeTask(task);
+  assert.equal(serialized.executionPrompt, task.executionPrompt);
+  assert.equal(serialized.title, "Example ledger task");
+});
+
 test("continueTask accepts structured multimodal user content", async (t) => {
   const root = await makeTempDir();
   t.after(async () => {

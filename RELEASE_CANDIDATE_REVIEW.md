@@ -1,5 +1,7 @@
 # Ender Release Candidate Review
 
+> **Historical candidate snapshot (2026-07-18).** Counts and publication state below describe that review point, not the current tree. Use [`RELEASE_READINESS.md`](RELEASE_READINESS.md) and rerun the repository gates for current evidence.
+
 This artifact packages the accumulated modernization work for review without staging, committing, pushing, or publishing it. It records the worktree observed on 2026-07-18; rerun the inventory before acting if the tree changes.
 
 ## Candidate snapshot
@@ -103,4 +105,4 @@ The candidate was revalidated after this review artifact was added:
 - `npm run smoke:release:local`: direct API, built UI assets, real local legacy Pillar relay, contract metadata, isolated shutdown, and temporary-state cleanup passed;
 - `npm run verify`: version synchronization, documentation checks across 54 Markdown files, 118 backend tests, targeted typechecking, syntax checks, production UI build, and 41 Playwright tests passed.
 
-G1 performed no Git mutation. Under the product owner's subsequent explicit G2 authorization, the reviewed candidate was placed on `codex/modernization-release-candidate`, staged exactly, revalidated, and recorded in one local atomic commit. The product owner then explicitly replaced the draft-PR plan with a direct publication: local `dev` was fast-forwarded to the candidate. The push is pending because this host has no usable GitHub HTTPS credential, GitHub CLI installation/token, or SSH identity. No PR, tag, release artifact, or deployment was created.
+G1 performed no Git mutation. Under the product owner's subsequent explicit G2 authorization, the reviewed candidate was placed on `codex/modernization-release-candidate`, staged exactly, revalidated, and recorded in one local atomic commit. The product owner then explicitly replaced the draft-PR plan with a direct publication: local `dev` was fast-forwarded to the candidate. At that review point this host could not push; the product owner later confirmed that they pushed the changes. No PR, tag, release artifact, or deployment was created as part of the recorded candidate workflow.

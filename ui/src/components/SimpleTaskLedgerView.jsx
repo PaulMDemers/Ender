@@ -4,7 +4,6 @@ import {
   formatLedgerLabel,
   getLedgerStatusTone,
   ledgerOutcomeSummary,
-  linkedLedgerTaskId,
   summarizeLedger
 } from "../taskLedgerPresentation";
 import StateNotice from "./ui/StateNotice";
@@ -13,7 +12,6 @@ export default function SimpleTaskLedgerView({
   entries,
   metadata,
   loading,
-  refreshing,
   busy,
   operation,
   error,
@@ -28,13 +26,17 @@ export default function SimpleTaskLedgerView({
 }) {
   const [prompt, setPrompt] = useState("");
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("open");
+  const [ledgerView, setLedgerView] = useState("active");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [formError, setFormError] = useState("");
   const [lastPayload, setLastPayload] = useState(null);
   const summary = useMemo(() => summarizeLedger(entries || []), [entries]);
   const visibleEntries = useMemo(
-    () => filterLedgerEntries(entries || [], { query, status: statusFilter }),
-    [entries, query, statusFilter]
+    () => filterLedgerEntries(entries || [], {
+      query,
+      status: statusFilter === "all" ? (ledgerView === "active" ? "open" : "finished") : statusFilter
+    }),
+    [entries, ledgerView, query, statusFilter]
   );
 
   const create = async (payload) => {
@@ -62,7 +64,7 @@ export default function SimpleTaskLedgerView({
     else await onReload?.();
   };
 
-  const filtersActive = Boolean(query || statusFilter !== "open");
+  const filtersActive = Boolean(query || statusFilter !== "all");
   const capacityLabel = metadata?.maxAutoAgents
     ? `${metadata.maxAutoAgents} auto-agent slot${metadata.maxAutoAgents === 1 ? "" : "s"}`
     : "manual dispatch";
@@ -74,7 +76,7 @@ export default function SimpleTaskLedgerView({
           <div className="simpleLedgerHeaderCopy">
             <div className="workflowBadge">TASK LEDGER</div>
             <h1 className="simpleLedgerTitle">Shared work queue</h1>
-            <div className="simpleLedgerMeta"><span>{serverName}</span><span className="mono">{serverUrl}</span><span className="mono">{capacityLabel}</span>{refreshing ? <span>Syncing…</span> : null}</div>
+            <div className="simpleLedgerMeta"><span>{serverName}</span><span className="mono">{serverUrl}</span><span className="mono">{capacityLabel}</span></div>
           </div>
           <div className="workflowActionBar">
             <button type="button" className="secondaryButton" onClick={() => onReload?.()} disabled={loading || busy}>Refresh</button>
@@ -108,22 +110,28 @@ export default function SimpleTaskLedgerView({
         <section className="consolePanel">
           <div className="panelBody simpleLedgerListBody">
             <div className="simpleLedgerListHeader">
-              <div><div className="sectionLabel">Tasks</div><div className="stepProgress mono">{visibleEntries.length} shown · {summary.total} total</div></div>
+              <div>
+                <div className="sectionLabel">Ledger</div>
+                <div className="collectionPanelTitle">{ledgerView === "active" ? "Active work" : "History"}</div>
+                <div className="stepProgress mono">{visibleEntries.length} shown · {summary.total} total</div>
+              </div>
+              <div className="taskLedgerViewControls" role="group" aria-label="Ledger view">
+                <button type="button" className="threadToggleButton" aria-pressed={ledgerView === "active"} onClick={() => { setLedgerView("active"); setStatusFilter("all"); }}>Active <span className="mono">{summary.open}</span></button>
+                <button type="button" className="threadToggleButton" aria-pressed={ledgerView === "history"} onClick={() => { setLedgerView("history"); setStatusFilter("all"); }}>History <span className="mono">{summary.finished}</span></button>
+              </div>
               <div className="simpleLedgerFilters" role="search" aria-label="Filter task ledger">
                 <label className="workflowField"><span className="workflowFieldLabel">Search</span><input className="consoleInput" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search queue" /></label>
-                <label className="workflowField"><span className="workflowFieldLabel">Status</span><select className="consoleInput" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="open">open</option><option value="all">all</option><option value="pending">pending</option><option value="running">running</option><option value="needs_input">needs input</option><option value="failed">failed</option><option value="completed">completed</option><option value="finished">finished</option></select></label>
+                <label className="workflowField"><span className="workflowFieldLabel">State</span><select className="consoleInput" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">all {ledgerView}</option>{ledgerView === "active" ? <><option value="pending">pending</option><option value="running">running</option><option value="needs_input">needs input</option><option value="blocked">blocked</option><option value="failed">failed</option></> : <><option value="completed">completed</option><option value="canceled">canceled</option></>}</select></label>
               </div>
             </div>
             <div className="simpleLedgerList">
-              {!visibleEntries.length && !loading ? <StateNotice title={filtersActive ? "No matching tasks" : "Queue is clear"} detail={filtersActive ? "Reset the filters to see more work." : "Add the first task above."} actionLabel={filtersActive ? "Reset filters" : undefined} onAction={filtersActive ? () => { setQuery(""); setStatusFilter("open"); } : undefined} /> : null}
+              {!visibleEntries.length && !loading ? <StateNotice title={filtersActive ? "No matching tasks" : ledgerView === "active" ? "No active work" : "No completed work yet"} detail={filtersActive ? "Reset the filters to see more work." : ledgerView === "active" && summary.finished ? `${summary.finished} finished ${summary.finished === 1 ? "entry is" : "entries are"} available in History.` : ledgerView === "active" ? "Add the first task above." : "Completed and canceled work will appear here."} actionLabel={filtersActive ? "Reset filters" : undefined} onAction={filtersActive ? () => { setQuery(""); setStatusFilter("all"); } : undefined} /> : null}
               {visibleEntries.map((entry) => {
-                const taskId = linkedLedgerTaskId(entry);
                 return (
                   <button key={entry.id} type="button" className="simpleLedgerRow" onClick={() => onOpenEntry?.(entry)}>
                     <div className="simpleLedgerRowTop">
                       <span className={`statusPill ${getLedgerStatusTone(entry.status)}`}>{formatLedgerLabel(entry.status)}</span>
                       <span className="scheduleMetaChip mono">stage {formatLedgerLabel(entry.lifecycle?.currentStage, "queued")}</span>
-                      {taskId ? <span className="scheduleMetaChip mono">thread {String(taskId).slice(0, 8)}</span> : null}
                     </div>
                     <div className="simpleLedgerRowTitle">{entry.title || "Untitled task"}</div>
                     <div className="simpleLedgerRowPrompt">{entry.prompt}</div>

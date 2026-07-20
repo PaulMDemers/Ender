@@ -168,6 +168,7 @@ test('validates and retains a failed schedule create before retrying in place', 
   });
 
   await openSchedules(page);
+  await page.getByRole('button', { name: 'New schedule' }).click();
   await page.getByRole('button', { name: 'Create schedule' }).click();
   await expect(page.getByText('Add a name so operators can identify this schedule.')).toBeVisible();
 
@@ -188,7 +189,7 @@ test('validates and retains a failed schedule create before retrying in place', 
   await expect.poll(() => createAttempts).toBe(2);
   await expect(page.getByText('Schedule created')).toBeVisible();
   await expect(page.getByText('Nightly review')).toBeVisible();
-  await expect(name).toHaveValue('');
+  await expect(name).toHaveCount(0);
 });
 
 test('recovers edit, run, and delete operations while refreshing persisted outcomes', async ({ page }) => {
@@ -294,6 +295,7 @@ test('keeps schedule administration contained on a narrow viewport', async ({ pa
   await page.getByRole('button', { name: /schedules/i }).click();
 
   await expect(page.getByText('Recurring operations')).toBeVisible();
+  await page.getByRole('button', { name: 'New schedule' }).click();
   await page.getByRole('button', { name: 'Show advanced options' }).click();
   await expect(page.getByLabel('Timezone')).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);

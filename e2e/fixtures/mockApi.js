@@ -122,7 +122,7 @@ async function openLaunchModes(page) {
   if (await toggle.isVisible()) {
     await toggle.click();
   }
-  await expect(page.getByRole('button', { name: /new thread/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /new task/i })).toBeVisible();
 }
 
 module.exports = {

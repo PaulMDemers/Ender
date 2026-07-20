@@ -24,11 +24,11 @@ The UI preserves the last successful health snapshot during an outage and labels
 
 Read `services.llm` in `/health` or the **Runtime capabilities** cards.
 
-- OpenAI requires `OPENAI_API_KEY` and a model selection.
-- Bedrock requires AWS credentials/region available to the SDK and a model ID.
-- Azure requires its API key, instance/base path, deployment name, and API version.
-- Ollama requires a reachable `OLLAMA_BASE_URL` and available model.
-- ACP requires a real ACP-compliant command in `ACP_COMMAND`; the raw Codex CLI is not itself an ACP server.
+- OpenAI requires `OPENAI_API_KEY` and a model selection. Additional models come from `OPENAI_MODELS`.
+- Bedrock requires AWS credentials/region available to the SDK and an active model or inference-profile ID. Additional IDs come from `BEDROCK_MODEL_IDS`; use `npm run smoke:bedrock-server` after changing them.
+- Azure requires its API key, instance/base path, deployment name, and API version. Additional deployments come from `AZURE_OPENAI_API_DEPLOYMENT_NAMES`.
+- Ollama requires a reachable `OLLAMA_BASE_URL` and available model. Additional models come from `OLLAMA_MODELS`.
+- ACP requires a real ACP-compliant command in `ACP_COMMAND`; the raw Codex CLI is not itself an ACP server. For Codex, use `ACP_COMMAND=npx` with `ACP_ARGS=--yes @agentclientprotocol/codex-acp`.
 
 Jira, GitHub, browser capture, email, code-server, Pillar, Beacon, and self-update are optional capabilities. Their attention state does not make the core API unavailable. Configure only the capabilities required by the intended task.
 
@@ -40,6 +40,15 @@ Jira, GitHub, browser capture, email, code-server, Pillar, Beacon, and self-upda
 - Check the LLM capability card for missing variables, then restart the API after changing `.env`.
 - Inspect the selected thread's transcript for model authentication, tool initialization, approval, `stall_detected`, or step-limit output.
 - A task in `awaiting_approval` is paused by design. Resolve the single approval surface before sending a follow-up.
+
+If the transcript mentions deprecated `@zed-industries/codex-acp`, an unknown `max` reasoning variant, or a model that requires a newer Codex version:
+
+1. Replace `ACP_ARGS` with `--yes @agentclientprotocol/codex-acp`.
+2. Remove a stale `CODEX_PATH` override if one is configured.
+3. Restart Ender so the subprocess configuration is reloaded.
+4. Run `npm run smoke:acp-server` to verify an isolated server, HTTP task launch, ACP handshake/session, and one minimal model turn.
+
+The ACP smoke uses the configured Codex login or API key and makes a real model request. Its temporary server state is isolated from the normal Ender workspace and removed after the run.
 
 ## Threads or automation do not refresh
 

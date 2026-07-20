@@ -167,9 +167,9 @@ function buildTaskLedgerTaskPrompt(entry) {
   };
 
   return [
-    "This task was assigned from Ender's global task ledger.",
+    "Ender execution context: this request originated in the global task ledger.",
     "",
-    `Ledger entry: ${title}`,
+    `Task: ${title}`,
     sourceKind || sourceLabel || sourceReferenceId
       ? `Source: ${[sourceKind, sourceLabel, sourceReferenceId].filter(Boolean).join(" · ")}`
       : "Source: manual",
@@ -178,14 +178,12 @@ function buildTaskLedgerTaskPrompt(entry) {
     "Task envelope:",
     JSON.stringify(envelope, null, 2),
     "",
-    "Required procedure and execution lifecycle:",
-    "1. intake: read the task envelope, restate the objective, and call ledger_set_stage(stage=intake, ...).",
-    "2. feasibility_check: evaluate whether the task can be accomplished with the current workspace, information, permissions, and constraints, then call ledger_report_feasibility(...).",
-    "3. workspace_scan: inspect the workspace first for the files, scripts, or artifacts needed for the task, then call ledger_set_stage(stage=workspace_scan, ...).",
-    "4. plan: build a concrete plan and a checklist, define verification steps, and call ledger_save_plan(...).",
-    "5. implement: for coding tasks, identify the likely affected files and verification commands before editing. Then perform the requested work end to end and call ledger_set_stage(stage=implement, ...) when execution begins.",
-    "6. verify: add tests when practical, or at minimum run the lightest useful verification commands or checks, then call ledger_report_verification(...).",
-    "7. finalize: only use finalize status=completed when the success criteria are actually satisfied. If required information is missing, use finalize status=needs_input. If autonomy truly cannot continue because of a blocker, use finalize status=blocked.",
+    "Execution policy:",
+    "- Complete the original request autonomously when it is safe and feasible.",
+    "- Inspect the workspace before changing files. For coding work, form a concrete plan and run useful verification.",
+    "- Ender owns the ledger lifecycle. If ledger tools are available, use them for richer progress reporting; their absence is not a blocker and should not be mentioned in the final response.",
+    "- Return the requested result directly. Do not narrate this envelope, the ledger procedure, or internal tool availability unless an actual blocker prevents completion.",
+    "- Only report success when the request and its success criteria are satisfied. Otherwise state the missing input or blocker clearly.",
     "",
     "Original task request:",
     String(entry.prompt || "").trim()
@@ -527,6 +525,33 @@ class TaskLedgerManager {
       entry.updatedAt = entry.completedAt;
       entry.result = task.result ?? null;
 
+      if (entry.lifecycle.feasibility.outcome === "unknown") {
+        entry.lifecycle.feasibility = {
+          outcome: task.status === "done" ? "ready" : "blocked",
+          summary: task.status === "done"
+            ? "The linked worker completed the request without structured feasibility reporting."
+            : "The linked worker ended before structured feasibility reporting completed.",
+          updatedAt: entry.updatedAt
+        };
+      }
+
+      if (entry.lifecycle.verification.status === "pending") {
+        entry.lifecycle.verification = {
+          status: task.status === "done" ? "skipped" : "failed",
+          summary: task.status === "done"
+            ? "The worker backend completed without structured verification evidence."
+            : "Verification did not complete before the worker stopped.",
+          evidence: [],
+          updatedAt: entry.updatedAt
+        };
+        appendStageHistory(
+          entry.lifecycle,
+          "verify",
+          entry.lifecycle.verification.summary,
+          entry.updatedAt
+        );
+      }
+
       if (task.status === "done") {
         entry.status = "completed";
         entry.lastError = null;
@@ -607,9 +632,13 @@ class TaskLedgerManager {
     }
 
     const started = this.taskManager?.start?.(
-      buildTaskLedgerTaskPrompt(entry),
+      entry.prompt,
       entry.workspace || undefined,
-      { ledgerEntryId: entry.id }
+      {
+        ledgerEntryId: entry.id,
+        title: entry.title,
+        executionPrompt: buildTaskLedgerTaskPrompt(entry)
+      }
     );
 
     if (!started || !started.ok) {

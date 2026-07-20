@@ -20,7 +20,7 @@ It is designed for operator-driven work: launch a task against a workspace, watc
 - Works with multiple LLM backends: OpenAI, AWS Bedrock, Azure OpenAI, Ollama, and ACP-compliant agents (Claude Code, etc.)
 - Includes tools for files, shell execution, git, GitHub, GitLab, Jira, Confluence, Google Drive, email, browser capture, schedules, and child threads.
 
-![Ender live thread view](docs/website/screenshots/hero-thread-view.jpg)
+![Ender live thread view](docs/website/screenshots/hero-thread-view.png)
 
 ## Core Functionality at a Glance
 
@@ -55,7 +55,7 @@ It is designed for operator-driven work: launch a task against a workspace, watc
 | --- | --- | --- |
 | `jira_to_repo_task` | Select a Jira issue, clone a repository, choose commit/push and Jira outcome policy, then start a task in the repo. | Supported |
 
-![Ender workflow step](docs/website/screenshots/workflow-step-view.jpg)
+![Ender workflow step](docs/website/screenshots/workflow-step-view.png)
 
 Sensitive actions stay operator-visible instead of disappearing into a black box.
 
@@ -97,14 +97,15 @@ Running `npm install` from the repository root installs both the API/runtime and
 
 ### Configure
 
-Pick a backend in `.env`:
+Choose the default backend in `.env`:
 
 - `LLM_BACKEND=openai`
 - `LLM_BACKEND=bedrock`
 - `LLM_BACKEND=azure`
 - `LLM_BACKEND=ollama`
+- `LLM_BACKEND=acp`
 
-Then fill in the matching credentials. For the default OpenAI setup, the minimum is:
+Then fill in the matching credentials. Ender automatically publishes the selected backend plus every other configured provider through `GET /llm-profiles`; comma-separated plural model variables publish additional profiles for the same provider. The launch and follow-up pickers can switch provider or model per turn without restarting the server. For the default OpenAI setup, the minimum is:
 
 ```env
 LLM_BACKEND=openai
@@ -123,7 +124,7 @@ This starts:
 - API: [http://localhost:3000](http://localhost:3000)
 - UI: [http://localhost:5173](http://localhost:5173)
 
-![Ender new thread launch](docs/website/screenshots/new-thread-full.jpg)
+![Ender new task launch](docs/website/screenshots/new-task-full.png)
 
 ## Knowledge Base for Future Threads
 
@@ -267,7 +268,7 @@ For isolated image build/runtime checks that do not load the repository `.env`, 
 
 For connection, readiness, Docker exposure, editor, automation, and persistence diagnosis, use the [operator troubleshooting guide](docs/guides/troubleshooting.md).
 
-![Ender schedule manager](docs/website/screenshots/schedule-manager-view.jpg)
+![Ender schedule manager](docs/website/screenshots/schedule-manager-view.png)
 
 ## Pillar Lighthouse Relay
 
@@ -457,35 +458,43 @@ The local API posts approval and terminal task events to Beacon best-effort. `GE
 
 ### LLM Backends
 
+`LLM_BACKEND` selects the default provider; it does not limit the server to one provider or model. When `LLM_PROFILES_JSON` is unset, Ender discovers configured OpenAI, Bedrock, Azure OpenAI, Ollama, and ACP providers. The singular model or deployment variable becomes that provider's stable default profile (`openai`, `bedrock`, `azure`, or `ollama`), and each value in its optional comma-separated plural variable becomes another selectable profile. `DEFAULT_LLM_PROFILE_ID` can select any generated profile ID. Set `LLM_PROFILES_JSON` only when you need custom labels, per-profile credentials, or an explicit authoritative allowlist.
+
 OpenAI:
 
 - `OPENAI_API_KEY`
-- `OPENAI_MODEL`
+- `OPENAI_MODEL` — default model
+- `OPENAI_MODELS` — optional comma-separated additional models
 
 AWS Bedrock:
 
 - `AWS_REGION`
-- `BEDROCK_MODEL_ID`
+- `BEDROCK_MODEL_ID` — default model or inference-profile ID; defaults to the US Claude Sonnet 5 inference profile
+- `BEDROCK_MODEL_IDS` — optional comma-separated additional model or inference-profile IDs
 
 Azure OpenAI:
 
 - `AZURE_OPENAI_API_KEY`
-- `AZURE_OPENAI_API_DEPLOYMENT_NAME`
+- `AZURE_OPENAI_API_DEPLOYMENT_NAME` — default deployment
+- `AZURE_OPENAI_API_DEPLOYMENT_NAMES` — optional comma-separated additional deployments
 - `AZURE_OPENAI_API_INSTANCE_NAME` or `AZURE_OPENAI_BASE_PATH`
 - `AZURE_OPENAI_API_VERSION`
 
 Ollama:
 
 - `OLLAMA_BASE_URL`
-- `OLLAMA_MODEL`
+- `OLLAMA_MODEL` — default local model
+- `OLLAMA_MODELS` — optional comma-separated additional local models
 
 ACP (Agent Client Protocol):
 
 - `ACP_COMMAND` — the agent binary to spawn (e.g. `claude-code`)
 - `ACP_ARGS` — CLI args passed to the agent (default: `acp`)
-- `ENDER_ACP_HANDSHAKE_TIMEOUT_MS` — optional startup timeout for ACP `initialize`/`newSession` handshakes, default `10000`
+- `ENDER_ACP_HANDSHAKE_TIMEOUT_MS` — optional startup timeout for ACP `initialize`/`newSession` handshakes, default `30000`
 
 The ACP backend runs an external ACP-compliant agent as a subprocess. When the agent requests permissions (file read/write, shell commands), Ender routes them through its own tool layer and approval system. This lets you use agents like Claude Code as the LLM backend while Ender handles tool execution, approvals, logging, and persistence.
+
+ACP remains one Ender profile because its spawned agent owns model selection. Use the ACP adapter's own configuration when that agent supports multiple models, or define distinct commands with `LLM_PROFILES_JSON`.
 
 Example:
 ```env
@@ -494,17 +503,33 @@ ACP_COMMAND=claude-code
 ACP_ARGS=acp
 ```
 
-For Codex, use an ACP adapter instead of the raw `codex` CLI. The OpenAI Codex CLI `0.130.0` does not expose a `codex acp` subcommand; `codex acp` starts the interactive TUI with `acp` as the prompt. A working Codex ACP configuration is:
+For Codex, use the [maintained Agent Client Protocol adapter](https://github.com/agentclientprotocol/codex-acp) instead of the raw `codex` CLI or the [deprecated `@zed-industries/codex-acp` package](https://www.npmjs.com/package/%40zed-industries/codex-acp). The maintained package includes a compatible Codex runtime:
 
 ```env
 LLM_BACKEND=acp
 ACP_COMMAND=npx
-ACP_ARGS=--yes @zed-industries/codex-acp
+ACP_ARGS=--yes @agentclientprotocol/codex-acp
 ```
 
-If installed as a binary, prefer `ACP_COMMAND=codex-acp` with empty `ACP_ARGS`.
+If installed globally as a binary, use `ACP_COMMAND=codex-acp` with empty `ACP_ARGS`. If `CODEX_PATH` is set, it overrides the adapter's bundled Codex; remove stale overrides when the server reports that a model requires a newer Codex version.
 
-ACP agents also support LLM profiles for different agent binaries or configurations.
+After configuring Codex authentication and restarting Ender, exercise the actual HTTP task path, ACP handshake, session, and one minimal model turn with:
+
+```bash
+npm run smoke:acp-server
+```
+
+This smoke starts an isolated loopback server with temporary persistence and workspace directories, then removes them. It intentionally uses the configured Codex authentication, network access, and one model request; it is therefore separate from `npm run verify`.
+
+To prove that one running server can execute both the automatically discovered ACP and OpenAI profiles, run:
+
+```bash
+npm run smoke:configured-backends
+```
+
+The combined smoke makes one minimal request through each configured profile and has the same credential, network, and model-usage boundary as the ACP-only smoke.
+
+ACP agents also support custom LLM profiles for different agent binaries or configurations.
 
 ### SCM and Knowledge Sources
 

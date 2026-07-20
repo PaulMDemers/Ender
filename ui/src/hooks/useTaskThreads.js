@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { listTasks } from "../agentClient";
+import { getTaskRevision } from "../utils/taskRevision";
 import { startVisibilityAwarePolling } from "./visiblePolling";
 
 const TASK_UI_STATE_KEY = "ender_task_ui_state";
@@ -152,6 +153,15 @@ export function useTaskThreads({
 
   const taskStateForServer = taskUiState[serverUrl] || {};
 
+  useEffect(() => {
+    if (!selectedId) return;
+    const selectedTask = tasks.find((task) => task.id === selectedId);
+    if (!selectedTask) return;
+    const seenRevision = getTaskRevision(selectedTask);
+    if (taskStateForServer[selectedId]?.seenRevision === seenRevision) return;
+    patchTaskUi(selectedId, { seenRevision });
+  }, [selectedId, tasks, taskStateForServer, patchTaskUi]);
+
   const togglePinned = useCallback((taskId) => {
     patchTaskUi(taskId, { pinned: !taskStateForServer[taskId]?.pinned });
   }, [patchTaskUi, taskStateForServer]);
@@ -201,6 +211,7 @@ export function useTaskThreads({
     const query = taskQuery.trim().toLowerCase();
     if (!query) return source;
     return source.filter((task) => [
+      task.title,
       task.goal,
       task.id,
       task.status,

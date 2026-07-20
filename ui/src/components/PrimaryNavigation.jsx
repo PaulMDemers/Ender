@@ -30,11 +30,7 @@ function NavigationIcon({ name }) {
 
 export default function PrimaryNavigation({ activeId, onNavigate }) {
   return (
-    <section className="primaryNavigation" aria-labelledby="primary-navigation-label">
-      <div className="primaryNavigationHeader">
-        <div id="primary-navigation-label" className="sectionLabel">Workspace</div>
-        <span className="primaryNavigationHint mono">Navigate</span>
-      </div>
+    <section className="primaryNavigation">
       <nav className="primaryNavigationList" aria-label="Primary">
         {PRIMARY_DESTINATIONS.map((destination) => {
           const active = destination.id === activeId;

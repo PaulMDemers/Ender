@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { advanceWorkflowSession, createWorkflowSession, retreatWorkflowSession } from "../agentClient";
 import WorkflowStepRenderer from "./WorkflowStepRenderer";
 import StateNotice from "./ui/StateNotice";
+import CollectionHeader from "./ui/CollectionHeader";
 import contractDefinitions from "../../../shared/contracts.json";
 
 const [PROMPT_TARGET, THREAD_TARGET, WORKFLOW_TARGET] = contractDefinitions.scheduleTargetKinds;
@@ -95,6 +96,7 @@ export default function SchedulePanel({
   onClearFeedback
 }) {
   const [editingId, setEditingId] = useState(null);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [name, setName] = useState("");
   const [cronExpr, setCronExpr] = useState("0 9 * * 1-5");
   const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone || "");
@@ -114,7 +116,7 @@ export default function SchedulePanel({
   const [lastRequest, setLastRequest] = useState(null);
 
   const threadOptions = useMemo(
-    () => (tasks || []).map((task) => ({ value: task.id, label: `${task.id.slice(0, 8)} · ${task.goal}` })),
+    () => (tasks || []).map((task) => ({ value: task.id, label: `${task.id.slice(0, 8)} · ${task.title || task.goal}` })),
     [tasks]
   );
 
@@ -143,7 +145,8 @@ export default function SchedulePanel({
     setWorkflowBootstrap({ nonce: 0, inputs: [] });
   };
 
-  const beginCreate = () => {
+  const beginCreate = ({ open = true } = {}) => {
+    setEditorOpen(open);
     setEditingId(null);
     setName("");
     setCronExpr("0 9 * * 1-5");
@@ -161,7 +164,7 @@ export default function SchedulePanel({
   };
 
   useEffect(() => {
-    beginCreate();
+    beginCreate({ open: false });
   }, []);
 
   useEffect(() => {
@@ -210,6 +213,7 @@ export default function SchedulePanel({
 
   const startEdit = (schedule) => {
     onClearFeedback?.();
+    setEditorOpen(true);
     setEditingId(schedule.id);
     setName(schedule.name || "");
     setCronExpr(schedule.cron || "");
@@ -325,7 +329,7 @@ export default function SchedulePanel({
     const saved = editingId
       ? await onUpdate?.(editingId, payload)
       : await onCreate?.(payload);
-    if (saved) beginCreate();
+    if (saved) beginCreate({ open: false });
   };
 
   const performRequest = async (request) => {
@@ -341,7 +345,7 @@ export default function SchedulePanel({
       setLastRequest(null);
       return response;
     }
-    if (response && request.resetForm) beginCreate();
+    if (response && request.resetForm) beginCreate({ open: false });
     if (response) setLastRequest(null);
     return response;
   };
@@ -406,19 +410,24 @@ export default function SchedulePanel({
 
   return (
     <div className="scheduleStack">
-      <section className="automationOverview" aria-label="Schedule overview">
-        <div className="workflowHero">
-          <span className="workflowBadge">AUTOMATION</span>
-          <div className="launchTitle">Recurring operations</div>
-          <div className="launchDescription">Create, inspect, run, pause, and recover server-managed schedules from one workspace.</div>
-        </div>
-        <div className="automationSummaryGrid">
-          <div className="automationSummaryItem"><span>Total</span><strong>{(schedules || []).length}</strong></div>
-          <div className="automationSummaryItem"><span>Enabled</span><strong>{enabledCount}</strong></div>
-          <div className="automationSummaryItem"><span>Needs review</span><strong>{failedCount}</strong></div>
-          <div className="automationSummaryItem"><span>Never run</span><strong>{neverRunCount}</strong></div>
-        </div>
-      </section>
+      <CollectionHeader
+        label="Automation"
+        title="Recurring operations"
+        description="Inspect outcomes and run, pause, or edit server-managed schedules. Open the editor only when configuration changes."
+        stats={[
+          { label: "total", value: (schedules || []).length },
+          { label: "enabled", value: enabledCount },
+          { label: "review", value: failedCount, tone: failedCount ? "attention" : "" },
+          { label: "never run", value: neverRunCount }
+        ]}
+        ariaLabel="Schedule overview"
+      >
+        {editorOpen ? (
+          <button type="button" className="secondaryButton" onClick={() => beginCreate({ open: false })} disabled={busy || workflowConfigBusy}>Close editor</button>
+        ) : (
+          <button type="button" className="primaryButton" onClick={() => beginCreate()} disabled={busy}>New schedule</button>
+        )}
+      </CollectionHeader>
 
       {loading && !schedules?.length ? (
         <StateNotice title="Loading schedules" detail="Reading recurring jobs and their latest outcomes from the server." busy />
@@ -441,15 +450,12 @@ export default function SchedulePanel({
         <StateNotice tone="success" title={resultTitle} detail={resultDetail} compact />
       ) : null}
 
-      <div className="scheduleWorkspace">
-      <section className="consolePanel scheduleEditor">
+      <div className={`scheduleWorkspace collectionWorkspace ${editorOpen ? "editorOpen" : "collectionOnly"}`}>
+      {editorOpen ? <section className="consolePanel scheduleEditor">
         <div className="panelBody workflowPanelBody">
-          <div className="workflowHero">
-            <span className="workflowBadge">SCHEDULE</span>
+          <div className="workflowHero compact">
+            <span className="workflowBadge">{editingId ? "Edit schedule" : "New schedule"}</span>
             <div className="launchTitle">{editingId ? "Edit automation" : "Create a recurring run"}</div>
-            <div className="launchDescription">
-              Start prompts, resume threads, or trigger workflows on a recurring cadence.
-            </div>
           </div>
 
           <form className="workflowStep" onSubmit={submit} noValidate>
@@ -662,34 +668,53 @@ export default function SchedulePanel({
                 {busy ? "Saving..." : editingId ? "Save schedule" : "Create schedule"}
               </button>
               {editingId ? (
-                <button type="button" className="secondaryButton" disabled={busy || workflowConfigBusy} onClick={beginCreate}>
+                <button type="button" className="secondaryButton" disabled={busy || workflowConfigBusy} onClick={() => beginCreate({ open: false })}>
                   Cancel edit
                 </button>
-              ) : null}
+              ) : (
+                <button type="button" className="secondaryButton" disabled={busy || workflowConfigBusy} onClick={() => beginCreate({ open: false })}>
+                  Close
+                </button>
+              )}
             </div>
           </form>
 
         </div>
-      </section>
+      </section> : null}
 
       <section className="consolePanel scheduleLedger">
         <div className="panelBody workflowPanelBody">
-          <div className="workflowHero compact">
-            <span className="workflowBadge">ACTIVE JOBS</span>
-            <div className="launchTitle">Current schedules</div>
+          <div className="collectionPanelHeader">
+            <div>
+              <div className="sectionLabel">Schedule collection</div>
+              <div className="collectionPanelTitle">Current schedules</div>
+            </div>
+            <div className="stepProgress mono">{(schedules || []).length} configured</div>
           </div>
 
           <div className="scheduleList">
             {(schedules || []).map((schedule) => (
-              <div key={schedule.id} className="scheduleRow">
+              <div key={schedule.id} className="scheduleRow collectionRow">
                 <div className="scheduleRowHeader">
                   <div>
                     <div className="workflowName">{schedule.name}</div>
                     <div className="workflowDesc">{targetSummary(schedule)}</div>
                   </div>
-                  <div className={`scheduleStatus ${schedule.enabled ? "ready" : "notReady"}`}>
-                    <span className="statusDot" />
-                    {schedule.enabled ? "Enabled" : "Disabled"}
+                  <div className="scheduleRowControls">
+                    <div className={`scheduleStatus ${schedule.enabled ? "ready" : "notReady"}`}>
+                      <span className="statusDot" />
+                      {schedule.enabled ? "Enabled" : "Disabled"}
+                    </div>
+                    <div className="scheduleActions scheduleActionsCompact">
+                      <button type="button" className="miniButton" disabled={busy} onClick={() => startEdit(schedule)}>Edit</button>
+                      <button type="button" className="miniButton" disabled={busy} onClick={() => toggleEnabled(schedule)}>{schedule.enabled ? "Disable" : "Enable"}</button>
+                      <button type="button" className="miniButton" disabled={busy} onClick={() => runNow(schedule)}>
+                        {operation?.type === "run" && operation.id === schedule.id ? "Running…" : "Run now"}
+                      </button>
+                      <button type="button" className="miniButton miniButtonDanger" disabled={busy} onClick={() => deleteEntry(schedule)}>
+                        {operation?.type === "delete" && operation.id === schedule.id ? "Deleting…" : "Delete"}
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -720,25 +745,11 @@ export default function SchedulePanel({
                   </div>
                 </details>
 
-                <div className="scheduleActions scheduleActionsCompact">
-                  <button type="button" className="miniButton" disabled={busy} onClick={() => startEdit(schedule)}>
-                    Edit
-                  </button>
-                  <button type="button" className="miniButton" disabled={busy} onClick={() => toggleEnabled(schedule)}>
-                    {schedule.enabled ? "Disable" : "Enable"}
-                  </button>
-                  <button type="button" className="miniButton" disabled={busy} onClick={() => runNow(schedule)}>
-                    {operation?.type === "run" && operation.id === schedule.id ? "Running…" : "Run now"}
-                  </button>
-                  <button type="button" className="miniButton miniButtonDanger" disabled={busy} onClick={() => deleteEntry(schedule)}>
-                    {operation?.type === "delete" && operation.id === schedule.id ? "Deleting…" : "Delete"}
-                  </button>
-                </div>
               </div>
             ))}
 
             {!schedules?.length && !loading ? (
-              <StateNotice title="No schedules yet" detail="Create the first recurring run with the editor beside this list." />
+              <StateNotice title="No schedules yet" detail="Create the first recurring run when this server needs automated work." actionLabel="Create first schedule" onAction={() => beginCreate()} />
             ) : null}
           </div>
         </div>

@@ -10,9 +10,13 @@ import {
   summarizeLedger
 } from "../taskLedgerPresentation";
 import StateNotice from "./ui/StateNotice";
+import CollectionHeader from "./ui/CollectionHeader";
 
 const TASK_TYPE_OPTIONS = ["generic", "coding", "documentation", "research", "ops"];
-const STATUS_OPTIONS = ["open", "all", "pending", "running", "needs_input", "blocked", "failed", "completed", "canceled", "finished"];
+const STATUS_OPTIONS = {
+  active: ["all", "pending", "running", "needs_input", "blocked", "failed"],
+  history: ["all", "completed", "canceled"]
+};
 
 function parseLines(value) {
   return String(value || "").split("\n").map((item) => item.trim()).filter(Boolean);
@@ -60,11 +64,29 @@ function LifecycleRail({ entry }) {
   );
 }
 
+function ledgerProgress(entry) {
+  const stage = entry.lifecycle?.currentStage || "queued";
+  const index = Math.max(0, LEDGER_STAGES.indexOf(stage));
+  return {
+    stage,
+    percent: `${Math.round((index / Math.max(1, LEDGER_STAGES.length - 1)) * 100)}%`
+  };
+}
+
+function ledgerRowSummary(entry) {
+  if (entry.status === "pending") {
+    return entry.autoRun ? "Waiting for an available worker slot" : "Ready for manual dispatch";
+  }
+  if (entry.status === "running") {
+    return `Worker active · ${formatLedgerLabel(entry.lifecycle?.currentStage, "intake")}`;
+  }
+  return ledgerOutcomeSummary(entry).replace(/^Dispatched to thread\s+\S+$/i, "Worker thread started");
+}
+
 export default function TaskLedgerPanel({
   entries,
   metadata,
   loading,
-  refreshing,
   busy,
   operation,
   error,
@@ -90,12 +112,16 @@ export default function TaskLedgerPanel({
   const [constraintsText, setConstraintsText] = useState("");
   const [verificationPlanText, setVerificationPlanText] = useState("");
   const [showOptions, setShowOptions] = useState(false);
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [ledgerView, setLedgerView] = useState("active");
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("open");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [formError, setFormError] = useState("");
   const [lastRequest, setLastRequest] = useState(null);
   const lastWorkspaceDefaultRef = useRef(String(serverWorkspacePath || "").trim());
+  const newEntryButtonRef = useRef(null);
+  const requestInputRef = useRef(null);
 
   const summary = useMemo(() => summarizeLedger(entries || []), [entries]);
   const taskTypes = useMemo(
@@ -103,8 +129,12 @@ export default function TaskLedgerPanel({
     [entries]
   );
   const visibleEntries = useMemo(
-    () => filterLedgerEntries(entries || [], { query, status: statusFilter, type: typeFilter }),
-    [entries, query, statusFilter, typeFilter]
+    () => filterLedgerEntries(entries || [], {
+      query,
+      status: statusFilter === "all" ? (ledgerView === "active" ? "open" : "finished") : statusFilter,
+      type: typeFilter
+    }),
+    [entries, ledgerView, query, statusFilter, typeFilter]
   );
 
   useEffect(() => {
@@ -128,6 +158,21 @@ export default function TaskLedgerPanel({
     setVerificationPlanText("");
     setShowOptions(false);
     setFormError("");
+  };
+
+  const openComposer = () => {
+    onClearFeedback?.();
+    resetComposer();
+    setComposerOpen(true);
+    requestAnimationFrame(() => requestInputRef.current?.focus());
+  };
+
+  const closeComposer = ({ restoreFocus = true } = {}) => {
+    resetComposer();
+    setComposerOpen(false);
+    if (restoreFocus) {
+      requestAnimationFrame(() => newEntryButtonRef.current?.focus());
+    }
   };
 
   const createPayload = () => ({
@@ -156,7 +201,7 @@ export default function TaskLedgerPanel({
     setLastRequest(request);
     setFormError("");
     const response = await onCreate?.(request.payload);
-    if (response) resetComposer();
+    if (response) closeComposer({ restoreFocus: false });
   };
 
   const runEntry = async (id) => {
@@ -176,7 +221,7 @@ export default function TaskLedgerPanel({
     }
     if (lastRequest.type === "create") {
       const response = await onCreate?.(lastRequest.payload);
-      if (response) resetComposer();
+      if (response) closeComposer();
     } else if (lastRequest.type === "run") {
       await onRunNow?.(lastRequest.id);
     } else if (lastRequest.type === "delete") {
@@ -197,35 +242,31 @@ export default function TaskLedgerPanel({
       ? "Entry dispatched"
       : "Entry deleted";
   const retryLabel = lastRequest ? `Retry ${lastRequest.type}` : "Reload ledger";
-  const filtersActive = Boolean(query || statusFilter !== "open" || typeFilter !== "all");
+  const filtersActive = Boolean(query || statusFilter !== "all" || typeFilter !== "all");
   const manualOnly = (metadata?.maxAutoAgents || 0) === 0;
+  const autoAgentSlots = metadata?.maxAutoAgents || 0;
 
   return (
     <div className="workflowStack taskLedgerStack">
-      <section className="automationOverview" aria-label="Task ledger overview">
-        <div className="workflowHero">
-          <span className="workflowBadge">TASK LEDGER</span>
-          <div className="launchTitle">Agent work queue</div>
-          <div className="launchDescription">Prioritize incoming work, follow its execution lifecycle, and hand off directly to the working thread.</div>
-          <div className="stepProgress mono">
-            {summary.open} open · {summary.finished} finished · {summary.total} total
-            {refreshing ? " · syncing" : ""}
-          </div>
-        </div>
-        <div className="automationSummaryGrid taskLedgerSummaryGrid">
-          <div className="automationSummaryItem"><span>Waiting</span><strong>{summary.pending}</strong></div>
-          <div className="automationSummaryItem"><span>Running</span><strong>{summary.running}</strong></div>
-          <div className={`automationSummaryItem ${summary.attention ? "attention" : ""}`}><span>Needs attention</span><strong>{summary.attention}</strong></div>
-          <div className="automationSummaryItem"><span>Completed</span><strong>{summary.completed}</strong></div>
-        </div>
-        <div className="workflowActionBar taskLedgerOverviewActions">
-          <span className="scheduleMetaChip mono">
-            {manualOnly ? "manual dispatch" : `${metadata.maxAutoAgents} auto-agent slot${metadata.maxAutoAgents === 1 ? "" : "s"}`}
-          </span>
-          <button type="button" className="secondaryButton" onClick={() => onReload?.()} disabled={loading || busy}>Refresh</button>
-          <button type="button" className="secondaryButton" onClick={() => onOpenIsolatedView?.()}>Open isolated view</button>
-        </div>
-      </section>
+      <CollectionHeader
+        label="Task ledger"
+        title="Agent work queue"
+        description="Filter and dispatch shared work; open lifecycle and verification evidence only when an item needs investigation."
+        stats={[
+          { label: "waiting", value: summary.pending },
+          { label: "running", value: summary.running },
+          { label: "attention", value: summary.attention, tone: summary.attention ? "attention" : "" },
+          { label: "completed", value: summary.completed }
+        ]}
+        ariaLabel="Task ledger overview"
+      >
+        <span className="collectionPolicy mono">{manualOnly ? "manual dispatch" : `${autoAgentSlots} agent slot${autoAgentSlots === 1 ? "" : "s"}`}</span>
+        <button type="button" className="secondaryButton" onClick={() => onReload?.()} disabled={loading || busy}>Refresh</button>
+        <button type="button" className="secondaryButton" onClick={() => onOpenIsolatedView?.()}>Focus queue</button>
+        {!composerOpen ? (
+          <button ref={newEntryButtonRef} type="button" className="primaryButton" onClick={openComposer} disabled={busy}>New entry</button>
+        ) : null}
+      </CollectionHeader>
 
       {loading && !entries?.length ? <StateNotice title="Loading task ledger" detail="Reading queue state and lifecycle outcomes from the server." busy /> : null}
       {operation ? <StateNotice title={operationLabel} detail="The queue remains visible while the server responds." busy compact /> : null}
@@ -244,116 +285,152 @@ export default function TaskLedgerPanel({
         <StateNotice tone="success" title={successLabel} detail="The queue has been refreshed with the latest server state." actionLabel="Dismiss" onAction={onClearFeedback} compact />
       ) : null}
 
-      <div className="scheduleWorkspace taskLedgerWorkspace">
-        <section className="consolePanel scheduleEditor">
-          <div className="panelBody workflowPanelBody">
-            <div className="workflowHero compact">
-              <span className="workflowBadge">NEW ENTRY</span>
-              <div className="launchTitle">Add work</div>
-              <div className="launchDescription">Start with the request. Add operational context only when the work needs it.</div>
+      {composerOpen ? (
+        <section className="taskLedgerComposer" aria-labelledby="task-ledger-composer-title">
+          <div className="taskLedgerComposerHeader">
+            <div>
+              <span className="sectionLabel">New entry</span>
+              <h3 id="task-ledger-composer-title">Add work</h3>
+              <p>Describe the outcome. Add operational context only when this request needs it.</p>
             </div>
-            <form className="workflowStep" onSubmit={submit} noValidate>
-              <label className="workflowField">
-                <span className="workflowFieldLabel">Task Request</span>
-                <textarea className="consoleTextarea" value={prompt} onChange={(event) => { setPrompt(event.target.value); setFormError(""); }} placeholder="Describe the work the next available agent should complete." />
-              </label>
-              <div className="workflowActionBar scheduleAdvancedToggleRow">
-                <button type="button" className="secondaryButton" aria-expanded={showOptions} onClick={() => setShowOptions((value) => !value)}>
-                  {showOptions ? "Hide more options" : "Show more options"}
-                </button>
-              </div>
-              {showOptions ? (
-                <div className="taskLedgerAdvancedFields">
-                  <div className="workflowGrid">
-                    <label className="workflowField"><span className="workflowFieldLabel">Title</span><input className="consoleInput" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Optional short label" /></label>
-                    <label className="workflowField"><span className="workflowFieldLabel">Workspace</span><input className="consoleInput mono" value={workspace} onChange={(event) => setWorkspace(event.target.value)} placeholder="/path/to/repo or project" /></label>
-                    <label className="workflowField"><span className="workflowFieldLabel">Task Type</span><select className="consoleInput" value={taskType} onChange={(event) => setTaskType(event.target.value)}>{TASK_TYPE_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
-                    <label className="workflowField toggleField"><input type="checkbox" checked={autoRun} onChange={(event) => setAutoRun(event.target.checked)} /><span>Auto-run when a worker slot is available</span></label>
-                    <label className="workflowField"><span className="workflowFieldLabel">Source Kind</span><input className="consoleInput" value={sourceKind} onChange={(event) => setSourceKind(event.target.value)} placeholder="manual, jira, github, api..." /></label>
-                    <label className="workflowField"><span className="workflowFieldLabel">Source Label / Ref</span><input className="consoleInput" value={sourceLabel} onChange={(event) => setSourceLabel(event.target.value)} placeholder="ABC-123 or inbound webhook" /></label>
-                  </div>
-                  <div className="workflowGrid">
-                    <label className="workflowField"><span className="workflowFieldLabel">Success Criteria</span><textarea className="consoleTextarea compact" value={successCriteriaText} onChange={(event) => setSuccessCriteriaText(event.target.value)} placeholder={"One item per line\nTests pass\nFeature behaves as requested"} /></label>
-                    <label className="workflowField"><span className="workflowFieldLabel">Constraints</span><textarea className="consoleTextarea compact" value={constraintsText} onChange={(event) => setConstraintsText(event.target.value)} placeholder={"One item per line\nDo not touch production config"} /></label>
-                  </div>
-                  <label className="workflowField"><span className="workflowFieldLabel">Verification Plan</span><textarea className="consoleTextarea compact" value={verificationPlanText} onChange={(event) => setVerificationPlanText(event.target.value)} placeholder={"One item per line\nnpm test\nnpm run build"} /></label>
-                  <label className="workflowField"><span className="workflowFieldLabel">External Reference</span><input className="consoleInput mono" value={sourceReferenceId} onChange={(event) => setSourceReferenceId(event.target.value)} placeholder="Optional durable source id" /></label>
-                </div>
-              ) : null}
-              <div className="workflowActionBar"><button className="primaryButton workflowAction" disabled={busy || !prompt.trim()}>{operation?.type === "create" ? "Adding..." : "Add to ledger"}</button></div>
-              {formError ? <StateNotice tone="warning" title="Task request required" detail={formError} compact /> : null}
-            </form>
+            <button type="button" className="secondaryButton" disabled={busy} onClick={closeComposer}>Cancel</button>
           </div>
+          <form className="taskLedgerComposerForm" onSubmit={submit} noValidate>
+            <label className="workflowField">
+              <span className="workflowFieldLabel">Task request</span>
+              <textarea
+                ref={requestInputRef}
+                className="consoleTextarea taskLedgerRequestInput"
+                rows={3}
+                value={prompt}
+                onChange={(event) => { setPrompt(event.target.value); setFormError(""); }}
+                placeholder="Describe the work the next available agent should complete."
+              />
+            </label>
+            <div className="taskLedgerComposerControls">
+              <button type="button" className="threadToggleButton" aria-expanded={showOptions} aria-controls="task-ledger-options" onClick={() => setShowOptions((value) => !value)}>
+                {showOptions ? "Hide context" : "Add context"}
+              </button>
+              <button className="primaryButton" disabled={busy || !prompt.trim()}>{operation?.type === "create" ? "Adding…" : "Add to ledger"}</button>
+            </div>
+            {showOptions ? (
+              <div id="task-ledger-options" className="taskLedgerAdvancedFields">
+                <div className="workflowGrid">
+                  <label className="workflowField"><span className="workflowFieldLabel">Title</span><input className="consoleInput" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Optional short label" /></label>
+                  <label className="workflowField"><span className="workflowFieldLabel">Workspace</span><input className="consoleInput mono" value={workspace} onChange={(event) => setWorkspace(event.target.value)} placeholder="/path/to/repo or project" /></label>
+                  <label className="workflowField"><span className="workflowFieldLabel">Task type</span><select className="consoleInput" value={taskType} onChange={(event) => setTaskType(event.target.value)}>{TASK_TYPE_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
+                  <label className="workflowField toggleField"><input type="checkbox" checked={autoRun} onChange={(event) => setAutoRun(event.target.checked)} /><span>Auto-run when a worker slot is available</span></label>
+                  <label className="workflowField"><span className="workflowFieldLabel">Source kind</span><input className="consoleInput" value={sourceKind} onChange={(event) => setSourceKind(event.target.value)} placeholder="manual, jira, github, api…" /></label>
+                  <label className="workflowField"><span className="workflowFieldLabel">Source label or reference</span><input className="consoleInput" value={sourceLabel} onChange={(event) => setSourceLabel(event.target.value)} placeholder="ABC-123 or inbound webhook" /></label>
+                </div>
+                <div className="workflowGrid">
+                  <label className="workflowField"><span className="workflowFieldLabel">Success criteria</span><textarea className="consoleTextarea compact" value={successCriteriaText} onChange={(event) => setSuccessCriteriaText(event.target.value)} placeholder={"One item per line\nTests pass\nFeature behaves as requested"} /></label>
+                  <label className="workflowField"><span className="workflowFieldLabel">Constraints</span><textarea className="consoleTextarea compact" value={constraintsText} onChange={(event) => setConstraintsText(event.target.value)} placeholder={"One item per line\nDo not touch production config"} /></label>
+                </div>
+                <label className="workflowField"><span className="workflowFieldLabel">Verification plan</span><textarea className="consoleTextarea compact" value={verificationPlanText} onChange={(event) => setVerificationPlanText(event.target.value)} placeholder={"One item per line\nnpm test\nnpm run build"} /></label>
+                <label className="workflowField"><span className="workflowFieldLabel">External reference</span><input className="consoleInput mono" value={sourceReferenceId} onChange={(event) => setSourceReferenceId(event.target.value)} placeholder="Optional durable source id" /></label>
+              </div>
+            ) : null}
+            {formError ? <StateNotice tone="warning" title="Task request required" detail={formError} compact /> : null}
+          </form>
         </section>
-
-        <aside className="sidePanel workflowSidePanel taskLedgerSidePanel">
-          <div className="sectionLabel">Dispatch policy</div>
-          <div className="launchSummaryValue">{manualOnly ? "Manual control" : `${metadata.maxAutoAgents} concurrent auto-agent${metadata.maxAutoAgents === 1 ? "" : "s"}`}</div>
-          <div className="panelNote">Auto-run entries wait for server capacity. Manual “Run now” dispatches a specific item immediately.</div>
-          <div className="launchContextBlock"><span className="launchSummaryLabel">Poll cadence</span><div className="sidePanelValue mono">{metadata?.pollIntervalMs ? `${Math.round(metadata.pollIntervalMs / 1000)}s server dispatch cycle` : "manual server dispatch"}</div></div>
-          <div className="launchContextBlock"><span className="launchSummaryLabel">Thread handoff</span><div className="sidePanelValue">Once dispatched, open the linked thread to supervise or continue the work.</div></div>
-        </aside>
-      </div>
+      ) : null}
 
       <section className="consolePanel scheduleLedger">
         <div className="panelBody workflowPanelBody">
-          <div className="taskLedgerCollectionHeader">
-            <div className="workflowHero compact">
-              <span className="workflowBadge">QUEUE</span>
-              <div className="launchTitle">Work and outcomes</div>
-              <div className="launchDescription">Filter before opening details; lifecycle and result context stay attached to each request.</div>
+          <div className="collectionPanelHeader taskLedgerCollectionHeader">
+            <div>
+              <div className="sectionLabel">Ledger</div>
+              <div className="collectionPanelTitle">{ledgerView === "active" ? "Active work" : "History"}</div>
             </div>
-            <div className="stepProgress mono">{visibleEntries.length} shown</div>
+            <div className="taskLedgerViewControls" role="group" aria-label="Ledger view">
+              <button
+                type="button"
+                className="threadToggleButton"
+                aria-pressed={ledgerView === "active"}
+                onClick={() => { setLedgerView("active"); setStatusFilter("all"); }}
+              >
+                Active <span className="mono">{summary.open}</span>
+              </button>
+              <button
+                type="button"
+                className="threadToggleButton"
+                aria-pressed={ledgerView === "history"}
+                onClick={() => { setLedgerView("history"); setStatusFilter("all"); }}
+              >
+                History <span className="mono">{summary.finished}</span>
+              </button>
+            </div>
           </div>
           <div className="taskLedgerFilters" role="search" aria-label="Filter task ledger">
             <label className="workflowField taskLedgerSearchField"><span className="workflowFieldLabel">Search</span><input className="consoleInput" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Title, request, source, workspace, outcome..." /></label>
-            <label className="workflowField"><span className="workflowFieldLabel">Status</span><select className="consoleInput" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>{STATUS_OPTIONS.map((status) => <option key={status} value={status}>{formatLedgerLabel(status)}</option>)}</select></label>
+            <label className="workflowField"><span className="workflowFieldLabel">State</span><select className="consoleInput" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>{STATUS_OPTIONS[ledgerView].map((status) => <option key={status} value={status}>{status === "all" ? `all ${ledgerView}` : formatLedgerLabel(status)}</option>)}</select></label>
             <label className="workflowField"><span className="workflowFieldLabel">Type</span><select className="consoleInput" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}><option value="all">all types</option>{taskTypes.map((type) => <option key={type} value={type}>{formatLedgerLabel(type)}</option>)}</select></label>
-            {filtersActive ? <button type="button" className="secondaryButton taskLedgerClearFilters" onClick={() => { setQuery(""); setStatusFilter("open"); setTypeFilter("all"); }}>Reset filters</button> : null}
+            {filtersActive ? <button type="button" className="secondaryButton taskLedgerClearFilters" onClick={() => { setQuery(""); setStatusFilter("all"); setTypeFilter("all"); }}>Reset filters</button> : null}
           </div>
 
           <div className="scheduleList taskLedgerList">
             {!visibleEntries.length && !loading ? (
-              <StateNotice title={filtersActive ? "No matching entries" : "Queue is clear"} detail={filtersActive ? "Adjust or reset the filters to broaden the result set." : "Add a request when there is new work to dispatch."} actionLabel={filtersActive ? "Reset filters" : undefined} onAction={filtersActive ? () => { setQuery(""); setStatusFilter("open"); setTypeFilter("all"); } : undefined} />
+              <StateNotice
+                title={filtersActive ? "No matching entries" : ledgerView === "active" ? "No active work" : "No completed work yet"}
+                detail={filtersActive
+                  ? "Adjust or reset the filters to broaden the result set."
+                  : ledgerView === "active" && summary.finished
+                    ? `${summary.finished} finished ${summary.finished === 1 ? "entry is" : "entries are"} available in History.`
+                    : ledgerView === "active"
+                      ? "Add a request when there is new work to dispatch."
+                      : "Completed and canceled work will appear here."}
+                actionLabel={filtersActive ? "Reset filters" : ledgerView === "active" && !composerOpen ? "Add first entry" : null}
+                onAction={filtersActive ? () => { setQuery(""); setStatusFilter("all"); setTypeFilter("all"); } : openComposer}
+              />
             ) : null}
             {visibleEntries.map((entry) => {
               const taskId = linkedLedgerTaskId(entry);
               const running = entry.status === "running";
               const entryBusy = operation?.id === entry.id;
+              const entryTitle = entry.title || "Untitled ledger entry";
+              const promptRepeatsTitle = Boolean(entry.title && String(entry.prompt || "").trim() === String(entry.title).trim());
+              const progress = ledgerProgress(entry);
               return (
-                <article key={entry.id} className="consolePanel scheduleRow taskLedgerRow">
+                <article key={entry.id} className="scheduleRow taskLedgerRow collectionRow">
                   <div className="taskLedgerRowHeader">
                     <div className="taskLedgerRowTitleBlock">
-                      <div className="workflowCardHeader">
+                      <div className="taskLedgerRowIdentity">
                         <span className={`statusPill ${getLedgerStatusTone(entry.status)}`}>{formatLedgerLabel(entry.status)}</span>
-                        <span className="scheduleMetaChip mono">{entry.taskType || "generic"}</span>
-                        <span className="scheduleMetaChip mono">{ledgerSourceSummary(entry)}</span>
+                        <div className="workflowName">{entryTitle}</div>
                       </div>
-                      <div className="workflowName">{entry.title || "Untitled ledger entry"}</div>
-                      <div className="workflowDesc taskLedgerPromptPreview">{entry.prompt}</div>
+                      {!promptRepeatsTitle ? <div className="workflowDesc taskLedgerPromptPreview">{entry.prompt}</div> : null}
+                      <div className="taskLedgerRowMeta">
+                        <span>{entry.taskType || "generic"}</span>
+                        <span>{ledgerSourceSummary(entry)}</span>
+                        <span>{entry.autoRun ? "auto-run" : "manual dispatch"}</span>
+                        {entry.attemptCount > 1 ? <span>{entry.attemptCount} attempts</span> : null}
+                      </div>
                     </div>
                     <div className="scheduleActions scheduleActionsCompact">
-                      {taskId ? <button type="button" className="miniButton" onClick={() => onOpenTask?.(taskId)}>Open thread</button> : null}
-                      {!running ? <button type="button" className="miniButton" disabled={busy} onClick={() => runEntry(entry.id)}>{entryBusy && operation?.type === "run" ? "Dispatching..." : entry.status === "completed" ? "Run again" : "Run now"}</button> : null}
-                      {!running ? <button type="button" className="miniButton" disabled={busy} onClick={() => deleteEntry(entry.id)}>{entryBusy && operation?.type === "delete" ? "Deleting..." : "Delete"}</button> : null}
+                      {taskId ? <button type="button" className="miniButton taskLedgerPrimaryRowAction" onClick={() => onOpenTask?.(taskId)}>Open thread</button> : null}
+                      {!taskId && !running ? <button type="button" className="miniButton taskLedgerPrimaryRowAction" disabled={busy} onClick={() => runEntry(entry.id)}>{entryBusy && operation?.type === "run" ? "Dispatching…" : "Run now"}</button> : null}
                     </div>
                   </div>
-                  <LifecycleRail entry={entry} />
-                  <div className={`taskLedgerOutcome ${getLedgerStatusTone(entry.status)}`}>
-                    <span className="metaLabel">Latest outcome</span>
-                    <span>{ledgerOutcomeSummary(entry)}</span>
+                  <div className="taskLedgerStageLine" aria-label={`Lifecycle stage: ${formatLedgerLabel(progress.stage)}`}>
+                    <span className="taskLedgerStageLabel">{formatLedgerLabel(progress.stage)}</span>
+                    <span className="taskLedgerStageTrack" aria-hidden="true"><span style={{ width: progress.percent }} /></span>
+                    <time>{formatTimestamp(entry.updatedAt)}</time>
                   </div>
-                  <div className="scheduleMetaInline">
-                    <span className="scheduleMetaChip mono">entry {entry.id.slice(0, 8)}</span>
-                    <span className="scheduleMetaChip mono">{entry.autoRun ? "auto-run" : "manual"}</span>
-                    <span className="scheduleMetaChip mono">attempts {entry.attemptCount || 0}</span>
-                    <span className="scheduleMetaChip mono">stage {formatLedgerLabel(entry.lifecycle?.currentStage, "queued")}</span>
-                    {entry.workspace ? <span className="scheduleMetaChip mono" title={entry.workspace}>{entry.workspace}</span> : null}
-                  </div>
+                  <div className={`taskLedgerRowSummary ${getLedgerStatusTone(entry.status)}`}>{ledgerRowSummary(entry)}</div>
                   <details className="taskLedgerDetails">
-                    <summary>Execution details</summary>
+                    <summary>Details</summary>
                     <div className="taskLedgerDetailsBody">
+                      {!running ? (
+                        <div className="taskLedgerDetailActions">
+                          {taskId ? <button type="button" className="miniButton" disabled={busy} onClick={() => runEntry(entry.id)}>{entryBusy && operation?.type === "run" ? "Dispatching…" : "Run again"}</button> : null}
+                          <button type="button" className="miniButton miniButtonDanger" disabled={busy} onClick={() => deleteEntry(entry.id)}>{entryBusy && operation?.type === "delete" ? "Deleting…" : "Delete entry"}</button>
+                        </div>
+                      ) : null}
+                      <LifecycleRail entry={entry} />
                       <div className="taskLedgerMetaGrid">
+                        <div className="metaRow"><span className="metaLabel">Entry</span><span className="metaValue mono">{entry.id.slice(0, 8)}</span></div>
+                        <div className="metaRow"><span className="metaLabel">Workspace</span><span className="metaValue mono">{entry.workspace || "Server default"}</span></div>
                         <div className="metaRow"><span className="metaLabel">Created</span><span className="metaValue mono">{formatTimestamp(entry.createdAt)}</span></div>
                         <div className="metaRow"><span className="metaLabel">Updated</span><span className="metaValue mono">{formatTimestamp(entry.updatedAt)}</span></div>
                         <div className="metaRow"><span className="metaLabel">Feasibility</span><span className="metaValue mono">{formatLedgerLabel(entry.lifecycle?.feasibility?.outcome, "unknown")}</span></div>

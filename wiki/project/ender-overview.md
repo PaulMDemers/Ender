@@ -3,6 +3,8 @@
 > Sources: Ender README.md, 2026-05-14; Knowledge base files, 2026-05-14
 > Raw: [ender-project-overview.md](../../raw/project/2026-05-14-ender-project-overview.md)
 
+> **Historical snapshot.** This article describes the 2026-05-14 implementation. Use the maintained [documentation index](../../docs/README.md) for current setup, operation, and release guidance.
+
 ## Overview
 
 Ender is a local-first agent runtime with a React/Electron control surface, guided workflows, recurring schedules, and a tool-calling execution loop built on LangChain. It is designed for operator-driven work: launch a task against a workspace, watch the live transcript, approve sensitive actions, and keep thread history on disk.
@@ -151,11 +153,11 @@ The ACP backend (`LLM_BACKEND=acp`) spawns an external ACP-compliant agent as a 
 Configuration:
 - `ACP_COMMAND` — the agent binary to spawn (e.g. `claude-code`)
 - `ACP_ARGS` — CLI args passed to the agent (default: `acp`)
-- `ENDER_ACP_HANDSHAKE_TIMEOUT_MS` — optional startup timeout for ACP `initialize`/`newSession` handshakes, default `10000`
+- `ENDER_ACP_HANDSHAKE_TIMEOUT_MS` — optional startup timeout for ACP `initialize`/`newSession` handshakes; current default `30000`
 
 The ACP runner (`src/llm/acpAgentRunner.js`) uses `@agentclientprotocol/sdk` over stdio NDJSON. Permission requests are mapped to Ender's existing tools, preserving the operator approval flow.
 
-For Codex, point Ender at an ACP adapter such as `@zed-industries/codex-acp`; the raw OpenAI Codex CLI `0.130.0` does not expose `codex acp` as an ACP server.
+For Codex, point Ender at the maintained `@agentclientprotocol/codex-acp` adapter. The former `@zed-industries/codex-acp` package is deprecated and should not be used for new configurations.
 
 ## Quality Gates
 
@@ -166,6 +168,6 @@ For Codex, point Ender at an ACP adapter such as `@zed-industries/codex-acp`; th
 
 ## See Also
 
-[Runtime Loop Details](runtime-loop.md)
-[Workflow Architecture](workflows-and-schedules.md)
+[Runtime Loop Details](../runtime/runtime-loop.md)
+[Workflow Architecture](../workflows/workflows-and-schedules.md)
 [Self-Update Architecture](../self-update/self-update.md)

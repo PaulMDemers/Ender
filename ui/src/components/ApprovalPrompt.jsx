@@ -14,32 +14,34 @@ export default function ApprovalPrompt({ approval, onApprove, onDeny }) {
   return (
     <section className="approvalCard approvalCardSticky" role="alert" aria-labelledby={titleId}>
       <div className="approvalHeader">
-        <div>
-          <div className="workflowBadge">APPROVAL REQUIRED</div>
+        <div className="approvalHeading">
+          <div className="workflowBadge">Approval required</div>
           <h2 id={titleId} className="approvalTitle">{approval.title || "Sensitive action requested"}</h2>
+          <div className="approvalDesc">
+            {approval.description || "The agent has paused because this action could change external state or perform a privileged operation."}
+          </div>
         </div>
-        <div className="approvalCode mono">{approval.type || "sensitive_action"} · {String(approval.id || "").slice(0, 8)}</div>
-      </div>
-
-      <div className="approvalDesc">
-        {approval.description || "The agent has paused because this action could change external state or perform a privileged operation."}
-      </div>
-
-      {approval.details ? (
-        <pre className="approvalDetails mono">{typeof approval.details === "string" ? approval.details : JSON.stringify(approval.details, null, 2)}</pre>
-      ) : null}
-
-      <div className="approvalFooter">
-        <div className="panelNote">Requested at {formatTimestamp(approval.requestedAt)}. Resolve this action to unblock the run; the decision is recorded in the transcript.</div>
         <div className="approvalActions">
-          <button className="primaryButton" onClick={() => onApprove?.(approval.id)}>
+          <button type="button" className="primaryButton" onClick={() => onApprove?.(approval.id)}>
             Approve
           </button>
-          <button className="dangerButton" onClick={() => onDeny?.(approval.id)}>
+          <button type="button" className="dangerButton" onClick={() => onDeny?.(approval.id)}>
             Deny
           </button>
         </div>
       </div>
+
+      <details className="approvalDisclosure">
+        <summary className="approvalDisclosureSummary">
+          <span>Review request details</span>
+          <span className="approvalCode mono">{approval.type || "sensitive_action"} · {String(approval.id || "").slice(0, 8)} · {formatTimestamp(approval.requestedAt)}</span>
+        </summary>
+        {approval.details ? (
+          <pre className="approvalDetails mono">{typeof approval.details === "string" ? approval.details : JSON.stringify(approval.details, null, 2)}</pre>
+        ) : (
+          <div className="panelNote">No additional request payload was provided.</div>
+        )}
+      </details>
     </section>
   );
 }

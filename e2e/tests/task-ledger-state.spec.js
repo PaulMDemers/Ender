@@ -41,12 +41,21 @@ test('creates a ledger entry and refreshes the domain collection', async ({ page
   await openLaunchModes(page);
   await page.getByRole('button', { name: /task ledger/i }).click();
   await expect(page.getByLabel('Title')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Show more options' }).click();
+  const newEntry = page.getByRole('button', { name: 'New entry' });
+  await newEntry.click();
+  await expect(page.getByLabel('Task request')).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Cancel' })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Add first entry' })).toHaveCount(0);
+  await expect(page.locator('.taskLedgerComposer')).toHaveScreenshot('task-ledger-composer.png', { animations: 'disabled' });
+  await page.getByRole('button', { name: 'Cancel' }).click();
+  await expect(newEntry).toBeFocused();
+  await newEntry.click();
+  await page.getByRole('button', { name: 'Add context' }).click();
   await expect(page.getByLabel('Title')).toBeVisible();
-  await page.getByLabel('Task Request').fill('Review the deployment notes and report blockers.');
+  await page.getByLabel('Task request').fill('Review the deployment notes and report blockers.');
   await page.getByRole('button', { name: 'Add to ledger' }).click();
 
   await expect(page.locator('.taskLedgerPromptPreview')).toHaveText('Review the deployment notes and report blockers.');
-  await expect(page.getByText(/1 open · 0 finished · 1 total/)).toBeVisible();
+  await expect(page.locator('.collectionStats')).toContainText('1waiting');
   await expect(page.getByRole('button', { name: 'Run now' })).toBeVisible();
 });

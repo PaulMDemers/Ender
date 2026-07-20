@@ -58,19 +58,20 @@ test('retains a structured create after failure and retries the exact request', 
   });
 
   await openLedger(page);
-  await expect(page.getByText('2 auto-agent slots')).toBeVisible();
-  await page.getByRole('button', { name: 'Show more options' }).click();
-  await page.getByLabel('Task Request').fill('Prepare the release readiness report.');
+  await expect(page.getByText('2 agent slots')).toBeVisible();
+  await page.getByRole('button', { name: 'New entry' }).click();
+  await page.getByRole('button', { name: 'Add context' }).click();
+  await page.getByLabel('Task request').fill('Prepare the release readiness report.');
   await page.getByLabel('Title').fill('Release readiness');
-  await page.getByLabel('Task Type').selectOption('ops');
-  await page.getByLabel('Source Kind').fill('jira');
-  await page.getByLabel('Source Label / Ref').fill('OPS-42');
-  await page.getByLabel('Success Criteria').fill('Checks summarized\nBlockers listed');
+  await page.getByLabel('Task type').selectOption('ops');
+  await page.getByLabel('Source kind').fill('jira');
+  await page.getByLabel('Source label or reference').fill('OPS-42');
+  await page.getByLabel('Success criteria').fill('Checks summarized\nBlockers listed');
   await page.getByRole('button', { name: 'Add to ledger' }).click();
 
   const failure = page.getByRole('alert').filter({ hasText: 'Ledger operation failed' });
   await expect(failure).toContainText('Ledger store temporarily unavailable');
-  await expect(page.getByLabel('Task Request')).toHaveValue('Prepare the release readiness report.');
+  await expect(page.getByLabel('Task request')).toHaveValue('Prepare the release readiness report.');
   await expect(page.getByLabel('Title')).toHaveValue('Release readiness');
   await failure.getByRole('button', { name: 'Retry create' }).click();
 
@@ -83,7 +84,7 @@ test('retains a structured create after failure and retries the exact request', 
     successCriteria: ['Checks summarized', 'Blockers listed']
   });
   await expect(page.getByText('Entry added')).toBeVisible();
-  await expect(page.getByLabel('Task Request')).toHaveValue('');
+  await expect(page.getByLabel('Task request')).toHaveCount(0);
   await expect(page.getByText('Release readiness', { exact: true })).toBeVisible();
 });
 
@@ -140,7 +141,7 @@ test('refreshes a persisted dispatch failure and retries into the linked thread'
   const failure = page.getByRole('alert').filter({ hasText: 'Ledger operation failed' });
   await expect(failure).toContainText('Worker launch failed');
   await expect(page.locator('.taskLedgerRow')).toContainText('failed');
-  await expect(page.locator('.taskLedgerOutcome')).toContainText('Worker launch failed');
+  await expect(page.locator('.taskLedgerRowSummary')).toContainText('Worker launch failed');
   await failure.getByRole('button', { name: 'Retry run' }).click();
 
   await expect.poll(() => runAttempts).toBe(2);
@@ -165,16 +166,17 @@ test('filters lifecycle outcomes before rendering and recovers a failed delete',
   page.on('dialog', (dialog) => dialog.accept());
 
   await openLedger(page);
+  await expect(page.locator('.taskLedgerStack')).toHaveScreenshot('task-ledger-collection.png', { animations: 'disabled' });
   await expect(page.getByText('GitHub triage')).toBeVisible();
   await expect(page.getByText('Incident follow-up')).toBeVisible();
   await expect(page.getByText('Publish notes')).toHaveCount(0);
-  await page.getByLabel('Status').selectOption('all');
   await page.getByLabel('Search').fill('jira');
   await expect(page.getByText('Incident follow-up')).toBeVisible();
   await expect(page.getByText('GitHub triage')).toHaveCount(0);
   await expect(page.getByText('Publish notes')).toHaveCount(0);
+  await page.getByText('Details', { exact: true }).click();
   await expect(page.getByLabel('Lifecycle: queued')).toBeVisible();
-  await page.getByRole('button', { name: 'Delete' }).click();
+  await page.getByRole('button', { name: 'Delete entry' }).click();
 
   const failure = page.getByRole('alert').filter({ hasText: 'Ledger operation failed' });
   await expect(failure).toContainText('Delete lock unavailable');
@@ -205,10 +207,33 @@ test('isolated queue stays responsive and hands a linked entry back to its threa
 
   await page.goto('/#/task-ledger');
   await expect(page.getByRole('heading', { name: 'Shared work queue' })).toBeVisible();
-  await page.getByLabel('Status').selectOption('all');
+  await page.getByRole('button', { name: /History 1/ }).click();
   await expect(page.getByText('All checks passed')).toBeVisible();
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   await page.getByRole('button', { name: /Standalone completed task/ }).click();
   await expect(page.locator('.headerGoal')).toHaveText('Standalone handoff thread');
   await expect(page).not.toHaveURL(/#\/task-ledger/);
+});
+
+test('background ledger polling is visually silent and preserves open row state', async ({ page }) => {
+  const entry = ledgerEntry({ id: 'ledger-stable-1', title: 'Stable polling entry' });
+  let requests = 0;
+  let completedResponses = 0;
+  await bootstrapApp(page);
+  await page.route('http://127.0.0.1:3000/task-ledger', async (route) => {
+    requests += 1;
+    if (requests > 1) await new Promise((resolve) => setTimeout(resolve, 700));
+    await fulfillJson(route, { items: [entry], maxAutoAgents: 2, pollIntervalMs: 15000 });
+    completedResponses += 1;
+  });
+
+  await openLedger(page);
+  const details = page.locator('.taskLedgerDetails');
+  await details.getByText('Details', { exact: true }).click();
+  await expect(details).toHaveAttribute('open', '');
+  await expect.poll(() => requests, { timeout: 5000 }).toBeGreaterThan(1);
+  await expect(page.getByText(/syncing/i)).toHaveCount(0);
+  await expect(details).toHaveAttribute('open', '');
+  await expect.poll(() => completedResponses, { timeout: 3000 }).toBeGreaterThan(1);
+  await expect(details).toHaveAttribute('open', '');
 });

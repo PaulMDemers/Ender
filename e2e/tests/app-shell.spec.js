@@ -16,15 +16,22 @@ test('renders the default app shell and launch modes', async ({ page }) => {
 
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Ender' })).toBeVisible();
-  await expect(page.getByText('Agent operations console')).toBeVisible();
-  await expect(page.getByText('Current server')).toBeVisible();
+  await expect(page.getByRole('button', { name: /manage server direct endpoint, connected/i })).toBeVisible();
   await expect(page.getByText('No threads on this server yet')).toBeVisible();
 
   await openLaunchModes(page);
-  await expect(page.getByRole('button', { name: /new thread/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /new task/i })).toBeVisible();
   await expect(page.getByRole('button', { name: /workflows/i })).toBeVisible();
   await expect(page.getByRole('button', { name: /schedules/i })).toBeVisible();
-  await expect(page.getByText('Start a new task')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'New task' })).toBeVisible();
+
+  const runContext = page.getByRole('button', { name: 'Change run context' });
+  await expect(runContext).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByLabel('Project')).toHaveCount(0);
+  await runContext.click();
+  await expect(page.getByRole('button', { name: 'Hide run context' })).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByLabel('Project')).toBeVisible();
+  await page.getByRole('button', { name: 'Hide run context' }).click();
 
   const runSettings = page.getByRole('button', { name: 'Review run settings' });
   await expect(runSettings).toHaveAttribute('aria-expanded', 'false');
@@ -62,13 +69,13 @@ test('primary navigation exposes destinations and current-page state', async ({ 
   const navigation = page.getByRole('navigation', { name: 'Primary' });
   await expect(navigation).toBeVisible();
   await expect(navigation.getByRole('button')).toHaveCount(4);
-  await expect(navigation.getByRole('button', { name: /new thread/i })).toHaveAttribute('aria-current', 'page');
+  await expect(navigation.getByRole('button', { name: /new task/i })).toHaveAttribute('aria-current', 'page');
 
   await navigation.getByRole('button', { name: /workflows/i }).click();
   await expect(navigation.getByRole('button', { name: /workflows/i })).toHaveAttribute('aria-current', 'page');
-  await expect(navigation.getByRole('button', { name: /new thread/i })).not.toHaveAttribute('aria-current', 'page');
+  await expect(navigation.getByRole('button', { name: /new task/i })).not.toHaveAttribute('aria-current', 'page');
   await expect(page.getByRole('heading', { name: 'Ender' })).toBeVisible();
-  await expect(page.getByText('Guided task launch')).toBeVisible();
+  await expect(page.getByText('Guided launches')).toBeVisible();
 });
 
 test('mobile navigation opens and dismisses with Escape', async ({ page }) => {
@@ -82,14 +89,14 @@ test('mobile navigation opens and dismisses with Escape', async ({ page }) => {
   await menuButton.click();
   await expect(menuButton).toHaveAttribute('aria-expanded', 'true');
   await expect(page.getByRole('complementary', { name: 'Ender navigation' })).toBeVisible();
-  await expect(page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name: /new thread/i })).toBeFocused();
+  await expect(page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name: /new task/i })).toBeFocused();
 
   await page.keyboard.press('Escape');
   await expect(menuButton).toHaveAttribute('aria-expanded', 'false');
   await expect(menuButton).toBeFocused();
 });
 
-test('disclosures expose state and controlled content', async ({ page }) => {
+test('thread disclosures expose state and controlled content', async ({ page }) => {
   const task = {
     id: 'thread-accessible-1',
     goal: 'Verify accessible disclosure controls',
@@ -103,22 +110,18 @@ test('disclosures expose state and controlled content', async ({ page }) => {
   await bootstrapApp(page, { tasks: [task] });
   await page.goto('/');
 
-  const serverDisclosure = page.getByRole('button', { name: 'Expand server details' });
-  await expect(serverDisclosure).toHaveAttribute('aria-expanded', 'false');
-  await expect(serverDisclosure).toHaveAttribute('aria-controls', 'server-summary-details');
-  await serverDisclosure.click();
-  const collapseServer = page.getByRole('button', { name: 'Collapse server details' });
-  await expect(collapseServer).toHaveAttribute('aria-expanded', 'true');
-  await expect(page.locator('#server-summary-details')).toBeVisible();
-  await collapseServer.click();
-  await expect(page.locator('#server-summary-details')).toHaveCount(0);
-
-  const threadDisclosure = page.getByRole('button', { name: 'Expand thread entry' });
+  const threadDisclosure = page.getByRole('button', { name: `Expand thread details for ${task.goal}` });
   await expect(threadDisclosure).toHaveAttribute('aria-expanded', 'false');
   await expect(threadDisclosure).toHaveAttribute('aria-controls', `thread-details-${task.id}`);
   await threadDisclosure.click();
-  await expect(page.getByRole('button', { name: 'Collapse thread entry' })).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByRole('button', { name: `Collapse thread details for ${task.goal}` })).toHaveAttribute('aria-expanded', 'true');
   await expect(page.locator(`#thread-details-${task.id}`)).toBeVisible();
+
+  const actionDisclosure = page.getByRole('button', { name: `Expand actions for ${task.goal}` });
+  await expect(actionDisclosure).toHaveAttribute('aria-expanded', 'false');
+  await actionDisclosure.press('Enter');
+  await expect(page.getByRole('button', { name: `Collapse actions for ${task.goal}` })).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByRole('button', { name: 'Pin', exact: true })).toBeVisible();
 });
 
 test('narrow layout keeps primary content inside the viewport', async ({ page }) => {
@@ -130,6 +133,27 @@ test('narrow layout keeps primary content inside the viewport', async ({ page })
   expect(overflow).toBeLessThanOrEqual(0);
   await expect(page.getByRole('button', { name: 'Open navigation' })).toBeVisible();
   await expect(page.locator('#ender-main-content')).toBeVisible();
+});
+
+test('work-first launch keeps the primary path inside a 1440 by 900 viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await bootstrapApp(page, { tasks: [] });
+  await page.goto('/');
+
+  const measurements = await page.evaluate(() => ({
+    headerHeight: document.querySelector('.mainHeader')?.getBoundingClientRect().height || 0,
+    railWidth: document.querySelector('.leftRail')?.getBoundingClientRect().width || 0,
+    startBottom: document.querySelector('.launchAction')?.getBoundingClientRect().bottom || Infinity
+  }));
+
+  expect(measurements.headerHeight).toBeLessThanOrEqual(64);
+  expect(measurements.railWidth).toBeLessThanOrEqual(288);
+  expect(measurements.startBottom).toBeLessThanOrEqual(900);
+  await expect(page.getByLabel(/Mission goal/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Start task' })).toBeVisible();
+  await expect(page.getByText('Connected target')).toHaveCount(0);
+  await expect(page.getByText('API access')).toHaveCount(0);
+  await expect(page.getByLabel('Project')).toHaveCount(0);
 });
 
 test('renders the offline server picker before any backend is connected', async ({ page }) => {

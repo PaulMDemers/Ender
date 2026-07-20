@@ -175,6 +175,7 @@ async function runTask({
     maxSteps: config.maxSteps,
     stallLimit: config.stallLimit,
     onLog,
+    provider: config.backend,
     signal
   });
   const finalText = result.result;

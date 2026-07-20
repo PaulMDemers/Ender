@@ -1,11 +1,23 @@
 const { spawn } = require("node:child_process");
+const { randomUUID } = require("node:crypto");
 const { Writable, Readable } = require("node:stream");
 const acp = require("@agentclientprotocol/sdk");
 const { createAbortError, isAbortError, throwIfAborted } = require("../utils/abort");
+const {
+  createActivityId,
+  createAssistantProgressEvent,
+  createRunPhaseEvent,
+  createToolCallEvent,
+  summarizeActivityValue
+} = require("../runtime/activityEvents");
 
-const DEFAULT_HANDSHAKE_TIMEOUT_MS = 10_000;
+const DEFAULT_HANDSHAKE_TIMEOUT_MS = 30_000;
 const AGENT_LOG_FLUSH_MS = 900;
 const AGENT_LOG_MIN_CHARS = 80;
+const CODEX_ACP_MIGRATION_MESSAGE = [
+  "The configured Codex ACP runtime is outdated or incompatible.",
+  "Set ACP_COMMAND=npx and ACP_ARGS=--yes @agentclientprotocol/codex-acp, remove any stale CODEX_PATH override, restart Ender, then run npm run smoke:acp-server."
+].join(" ");
 
 /**
  * Maps ACP capability names to Ender tool names.
@@ -235,13 +247,38 @@ function createHandshakeTimeoutError(transport, stage) {
   return err;
 }
 
+function formatAcpRuntimeError(err, output = "", transportKind = "stdio") {
+  const message = String(err?.message || err || "ACP agent failed");
+  const acpOutput = String(output || "").trim();
+  const combined = `${message}\n${acpOutput}`.toLowerCase();
+  const staleCodexRuntime = [
+    "@zed-industries/codex-acp",
+    "requires a newer version of codex",
+    "unknown variant `max`",
+    "unknown variant 'max'"
+  ].some((signal) => combined.includes(signal));
+  const outputSuffix = acpOutput && !message.includes(acpOutput)
+    ? `\nACP ${transportKind} output:\n${acpOutput.slice(-4000)}`
+    : "";
+
+  if (staleCodexRuntime) {
+    return `${CODEX_ACP_MIGRATION_MESSAGE}\nOriginal error: ${message}${outputSuffix}`;
+  }
+
+  return `${message}${outputSuffix}`;
+}
+
 function getHandshakeTimeoutMs() {
   const parsed = Number(process.env.ENDER_ACP_HANDSHAKE_TIMEOUT_MS);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_HANDSHAKE_TIMEOUT_MS;
 }
 
-function createAgentTextLogger(onLog) {
-  let buffer = "";
+function createAgentTextCollector(onLog, { turnId, provider }) {
+  const segments = [];
+  let segmentText = "";
+  let pendingText = "";
+  let segmentId = null;
+  let sequence = 0;
   let timer = null;
 
   const clearTimer = () => {
@@ -253,21 +290,41 @@ function createAgentTextLogger(onLog) {
 
   const flush = () => {
     clearTimer();
-    const text = buffer;
-    buffer = "";
+    const text = pendingText;
+    pendingText = "";
     if (text) {
-      onLog({ level: "info", data: `agent: ${text}` });
+      onLog({
+        level: "info",
+        data: createAssistantProgressEvent({
+          turnId,
+          provider,
+          segmentId,
+          sequence,
+          content: text
+        })
+      });
+      sequence += 1;
     }
+  };
+
+  const finishSegment = () => {
+    flush();
+    if (segmentText.trim()) segments.push(segmentText);
+    segmentText = "";
+    segmentId = null;
+    sequence = 0;
   };
 
   return {
     push(text) {
-      buffer += text;
+      if (!segmentId) segmentId = `assistant-progress-${randomUUID()}`;
+      segmentText += text;
+      pendingText += text;
 
       if (
-        buffer.length >= AGENT_LOG_MIN_CHARS ||
-        /[\n.!?]\s*$/.test(buffer) ||
-        /```$/.test(buffer)
+        pendingText.length >= AGENT_LOG_MIN_CHARS ||
+        /[\n.!?]\s*$/.test(pendingText) ||
+        /```$/.test(pendingText)
       ) {
         flush();
         return;
@@ -278,8 +335,61 @@ function createAgentTextLogger(onLog) {
         timer.unref?.();
       }
     },
-    flush
+    boundary: finishSegment,
+    finish() {
+      finishSegment();
+      return [...segments];
+    }
   };
+}
+
+function createToolCallTracker(onLog, { turnId, provider }) {
+  const calls = new Map();
+
+  const update = (input, { initial = false } = {}) => {
+    const toolCallId = String(input?.toolCallId || "").trim();
+    if (!toolCallId) return null;
+
+    const previous = calls.get(toolCallId) || null;
+    const next = {
+      toolCallId,
+      title: input.title ?? previous?.title ?? null,
+      toolKind: input.kind ?? previous?.toolKind ?? null,
+      status: input.status ?? previous?.status ?? (initial ? "pending" : null),
+      input: Object.prototype.hasOwnProperty.call(input, "rawInput")
+        ? summarizeActivityValue(input.rawInput)
+        : previous?.input ?? null,
+      output: Object.prototype.hasOwnProperty.call(input, "rawOutput")
+        ? summarizeActivityValue(input.rawOutput)
+        : previous?.output ?? null,
+      content: Object.prototype.hasOwnProperty.call(input, "content")
+        ? summarizeActivityValue(input.content)
+        : previous?.content ?? null,
+      locations: Array.isArray(input.locations)
+        ? input.locations.slice(0, 20).map((location) => ({ path: location.path, line: location.line ?? null }))
+        : previous?.locations ?? []
+    };
+    calls.set(toolCallId, next);
+
+    const semanticChange = !previous
+      ? Boolean(next.title || next.status)
+      : previous.status !== next.status
+        || previous.title !== next.title
+        || previous.toolKind !== next.toolKind;
+    if (!semanticChange) return next;
+
+    onLog({
+      level: next.status === "failed" ? "warn" : "info",
+      data: createToolCallEvent({
+        turnId,
+        provider,
+        ...next
+      })
+    });
+    return next;
+  };
+
+  return { update };
 }
 
 async function runAcpSession({
@@ -293,8 +403,11 @@ async function runAcpSession({
   signal = null
 }) {
   const stream = transport.stream;
+  const turnId = createActivityId("turn");
+  const provider = "acp";
   let agentOutput = "";
-  const agentTextLogger = createAgentTextLogger(onLog);
+  const agentTextCollector = createAgentTextCollector(onLog, { turnId, provider });
+  const toolCallTracker = createToolCallTracker(onLog, { turnId, provider });
 
   const endTurnStopReasons = new Set(["end_turn", "stopped"]);
 
@@ -304,16 +417,36 @@ async function runAcpSession({
         const text = getTextFromContent(params.update.content || params.update.chunk?.content);
         if (text) {
           agentOutput += text;
-          agentTextLogger.push(text);
+          agentTextCollector.push(text);
         }
+      } else if (params.update.sessionUpdate === "tool_call") {
+        agentTextCollector.boundary();
+        toolCallTracker.update(params.update, { initial: true });
       } else if (params.update.sessionUpdate === "tool_call_update") {
-        agentTextLogger.flush();
-        onLog({ level: "info", data: `tool call status: ${params.update.status}` });
+        agentTextCollector.boundary();
+        toolCallTracker.update(params.update);
+      } else if (params.update.sessionUpdate === "plan") {
+        onLog({
+          level: "info",
+          data: {
+            kind: "plan",
+            turnId,
+            provider,
+            entries: Array.isArray(params.update.entries)
+              ? params.update.entries.map((entry) => ({
+                content: String(entry.content || ""),
+                status: entry.status || "pending",
+                priority: entry.priority || "medium"
+              }))
+              : []
+          }
+        });
       }
     },
 
     requestPermission: async (params) => {
-      agentTextLogger.flush();
+      agentTextCollector.boundary();
+      if (params.toolCall) toolCallTracker.update(params.toolCall, { initial: true });
       const requested = params.capability || params.toolCall?.title || params.toolCall?.kind || "unknown";
       onLog({ level: "info", data: `acp permission request: ${requested}` });
 
@@ -334,6 +467,10 @@ async function runAcpSession({
       if (requestApproval) {
         approved = await requestApproval({
           tool: toolName,
+          type: toolName,
+          title: String(requested || "Approval required"),
+          description: `The agent needs permission to ${String(requested || "continue this operation").toLowerCase()}.`,
+          details: args,
           input: args,
           reason: `ACP agent requested: ${requested}`
         });
@@ -446,32 +583,37 @@ async function runAcpSession({
         }
       }
     }
-    promptParts.push({ type: "text", text: String(goal || "") });
+    if (!promptParts.length) {
+      promptParts.push({ type: "text", text: String(goal || "") });
+    }
+
+    onLog({
+      level: "info",
+      data: createRunPhaseEvent({ turnId, provider, phase: "thinking", status: "started", step: 1 })
+    });
 
     const response = await Promise.race([client.prompt({
       sessionId: newSessionId,
       prompt: promptParts
     }), aborted]);
 
-    agentTextLogger.flush();
+    const assistantSegments = agentTextCollector.finish();
     onLog({ level: "info", data: `acp prompt finished: stopReason=${response.stopReason}` });
 
     return {
-      result: agentOutput || `ACP agent completed with stop reason: ${response.stopReason}`,
+      result: assistantSegments.at(-1)?.trim() || agentOutput.trim() || `ACP agent completed with stop reason: ${response.stopReason}`,
       stopReason: response.stopReason,
       completed: endTurnStopReasons.has(response.stopReason)
     };
   } catch (err) {
-    agentTextLogger.flush();
+    agentTextCollector.finish();
     const output = transport.stderr().trim();
-    if (output && !err.acpOutput) {
-      err.acpOutput = output;
-      err.message = `${err.message}\nACP ${transport.kind} output:\n${output.slice(-4000)}`;
-    }
+    if (output && !err.acpOutput) err.acpOutput = output;
+    err.message = formatAcpRuntimeError(err, output, transport.kind);
     throw err;
   } finally {
     signal?.removeEventListener("abort", abort);
-    agentTextLogger.flush();
+    agentTextCollector.finish();
     transport.kill();
   }
 }
@@ -530,4 +672,4 @@ async function runAcpAgent({
   }
 }
 
-module.exports = { runAcpAgent };
+module.exports = { formatAcpRuntimeError, runAcpAgent };

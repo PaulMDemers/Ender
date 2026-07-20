@@ -1,6 +1,12 @@
 const { HumanMessage, SystemMessage, AIMessage, ToolMessage } = require("@langchain/core/messages");
 const { sanitizeJsonValue, sanitizeString } = require("../utils/jsonSafe");
 const { isAbortError, throwIfAborted } = require("../utils/abort");
+const {
+  createActivityId,
+  createAssistantProgressEvent,
+  createRunPhaseEvent,
+  createToolCallEvent
+} = require("./activityEvents");
 
 function sanitizeMessageContent(value) {
   if (Array.isArray(value)) {
@@ -20,6 +26,20 @@ function normalizeAssistantMessageContent(value) {
   }
 
   return sanitizeString(value);
+}
+
+function getAssistantText(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((part) => {
+        if (typeof part === "string") return part;
+        if (part?.type === "text" && typeof part.text === "string") return part.text;
+        return "";
+      })
+      .join("")
+      .trim();
+  }
+  return String(value || "").trim();
 }
 
 function toConversationMessage(entry) {
@@ -79,6 +99,7 @@ async function runAgentLoop({
   maxSteps = null,
   stallLimit = 4,
   onLog,
+  provider = null,
   signal = null
 }) {
   const conversation = Array.isArray(thread) && thread.length
@@ -93,6 +114,7 @@ async function runAgentLoop({
   ];
   const toolsByName = Object.fromEntries(tools.map((t) => [t.name, t]));
   const bound = model.bindTools(tools);
+  const turnId = createActivityId("turn");
   let step = 0;
   let lastFingerprint = null;
   let repeatedIterationCount = 0;
@@ -107,13 +129,29 @@ async function runAgentLoop({
       };
     }
     step += 1;
-    onLog({ level: "info", data: `step ${step}: invoking model` });
+    onLog({
+      level: "info",
+      data: createRunPhaseEvent({ turnId, provider, phase: "thinking", status: "started", step })
+    });
     const ai = await bound.invoke(messages, { signal });
     throwIfAborted(signal);
     const toolCalls = sanitizeJsonValue(ai.tool_calls || ai.toolCalls || []);
     const aiContent = normalizeAssistantMessageContent(ai.content);
+    const assistantText = getAssistantText(aiContent);
 
     messages.push(new AIMessage({ content: aiContent, tool_calls: toolCalls }));
+
+    if (assistantText && toolCalls.length) {
+      onLog({
+        level: "info",
+        data: createAssistantProgressEvent({
+          turnId,
+          provider,
+          segmentId: `${turnId}-step-${step}`,
+          content: assistantText
+        })
+      });
+    }
 
     if (!toolCalls.length) {
       const text = Array.isArray(aiContent)
@@ -131,7 +169,7 @@ async function runAgentLoop({
       throwIfAborted(signal);
       const name = call.name;
       const tool = toolsByName[name];
-      const callId = call.id;
+      const callId = call.id || createActivityId("tool");
       let args;
 
       try {
@@ -142,23 +180,51 @@ async function runAgentLoop({
           error: "tool_args_invalid_json",
           message: err?.message || "Tool arguments were not valid JSON"
         });
-        onLog({ level: "error", data: `tool args parse failed (${name}): ${content}` });
+        onLog({
+          level: "error",
+          data: createToolCallEvent({
+            turnId,
+            provider,
+            toolCallId: callId,
+            toolName: name,
+            status: "failed",
+            input: call.args,
+            output: content
+          })
+        });
         messages.push(new ToolMessage({ content, tool_call_id: callId, name }));
         continue;
       }
 
       if (!tool) {
         const err = `ERROR: unknown tool ${name}`;
-        onLog({ level: "error", data: err });
+        onLog({
+          level: "error",
+          data: createToolCallEvent({
+            turnId,
+            provider,
+            toolCallId: callId,
+            toolName: name,
+            status: "failed",
+            input: args,
+            output: err
+          })
+        });
         messages.push(new ToolMessage({ content: err, tool_call_id: callId, name }));
         continue;
       }
 
       onLog({
-        level: "debug",
-        data: `tool args (${name}): ${JSON.stringify(sanitizeJsonValue(args)).slice(0, 400)}`
+        level: "info",
+        data: createToolCallEvent({
+          turnId,
+          provider,
+          toolCallId: callId,
+          toolName: name,
+          status: "in_progress",
+          input: sanitizeJsonValue(args)
+        })
       });
-      onLog({ level: "info", data: `tool call: ${name}` });
       let result;
       try {
         result = await tool.invoke(args, { signal });
@@ -171,7 +237,18 @@ async function runAgentLoop({
           tool: name,
           message: err?.message || "Tool invocation failed"
         }));
-        onLog({ level: "error", data: `tool error (${name}): ${content}` });
+        onLog({
+          level: "error",
+          data: createToolCallEvent({
+            turnId,
+            provider,
+            toolCallId: callId,
+            toolName: name,
+            status: "failed",
+            input: sanitizeJsonValue(args),
+            output: content
+          })
+        });
         fingerprintParts.push(
           JSON.stringify({
             name,
@@ -186,7 +263,18 @@ async function runAgentLoop({
       const normalized = normalizeToolInvokeResult(result, name);
       const content = normalized.content;
       const logContent = normalized.contentForLog;
-      onLog({ level: "info", data: `tool result (${name}): ${logContent.slice(0, 400)}` });
+      onLog({
+        level: "info",
+        data: createToolCallEvent({
+          turnId,
+          provider,
+          toolCallId: callId,
+          toolName: name,
+          status: "completed",
+          input: sanitizeJsonValue(args),
+          output: logContent
+        })
+      });
       fingerprintParts.push(
         JSON.stringify({
           name,

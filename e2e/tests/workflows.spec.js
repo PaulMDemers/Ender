@@ -85,19 +85,74 @@ test('renders workflow list and advances through mocked steps', async ({ page })
   await openLaunchModes(page);
   await page.getByRole('button', { name: /workflows/i }).click();
 
-  await expect(page.getByText('Guided task launch')).toBeVisible();
+  await expect(page.getByText('Guided launches')).toBeVisible();
   await expect(page.getByRole('button', { name: /jira to repo task/i })).toBeVisible();
   await expect(page.locator('.workflowList')).toHaveScreenshot('workflow-list.png');
 
   await page.getByRole('button', { name: /jira to repo task/i }).click();
-  await expect(page.locator('.workflowHero .launchTitle')).toHaveText('Choose a project');
+  await expect(page.locator('.collectionTitle')).toHaveText('Choose a project');
   await page.locator('.workflowConsole').screenshot({ path: 'test-results/workflow-select-state.png' });
   await expect(page.locator('.workflowConsole')).toHaveScreenshot('workflow-select-state.png');
 
   await page.getByLabel('Team').selectOption('platform');
   await page.getByRole('button', { name: /engineering/i }).click();
 
-  await expect(page.locator('.workflowHero .launchTitle')).toHaveText('Provide launch details');
+  await expect(page.locator('.collectionTitle')).toHaveText('Provide launch details');
   await expect(page.getByLabel('Issue key')).toBeVisible();
   await expect(page.locator('.workflowConsole')).toHaveScreenshot('workflow-form-state.png');
+});
+
+test('accepts manual Jira input when discovery returns no selectable projects', async ({ page }) => {
+  const emptyDiscoverySession = {
+    ...selectSession,
+    id: 'session-empty-discovery-1',
+    currentStep: {
+      id: 'project',
+      type: 'form',
+      title: 'Enter Jira project',
+      description: 'No projects were returned by Jira discovery. Enter a project key to continue directly.',
+      submitLabel: 'Load boards',
+      fields: [
+        { id: 'projectKey', label: 'Jira project key', type: 'text', required: true, placeholder: 'ENG' }
+      ]
+    }
+  };
+  const boardSession = {
+    session: {
+      ...emptyDiscoverySession,
+      updatedAt: '2026-03-01T12:01:00.000Z',
+      canGoBack: true,
+      currentStep: {
+        id: 'board',
+        type: 'form',
+        title: 'Enter Jira board',
+        description: 'No boards were returned for this project. Enter a board ID to continue directly.',
+        submitLabel: 'Load issues',
+        fields: [
+          { id: 'boardId', label: 'Jira board ID', type: 'text', required: true, placeholder: '42' }
+        ]
+      }
+    }
+  };
+  let advancePayload = null;
+
+  await bootstrapApp(page, { workflows: [workflow] });
+  await mockCreateWorkflowSession(page, workflow.id, emptyDiscoverySession);
+  await page.route(`http://127.0.0.1:3000/workflow-sessions/${emptyDiscoverySession.id}/advance`, async (route) => {
+    advancePayload = route.request().postDataJSON();
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(boardSession) });
+  });
+
+  await page.goto('/');
+  await openLaunchModes(page);
+  await page.getByRole('button', { name: /workflows/i }).click();
+  await page.getByRole('button', { name: /jira to repo task/i }).click();
+
+  await expect(page.getByLabel('Jira project key')).toBeVisible();
+  await expect(page.getByText('No projects were returned by Jira discovery.')).toBeVisible();
+  await page.getByLabel('Jira project key').fill('ENG');
+  await page.getByRole('button', { name: 'Load boards' }).click();
+
+  await expect.poll(() => advancePayload).toEqual({ projectKey: 'ENG' });
+  await expect(page.getByLabel('Jira board ID')).toBeVisible();
 });

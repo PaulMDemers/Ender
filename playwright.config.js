@@ -8,7 +8,7 @@ module.exports = defineConfig({
   workers: process.env.CI ? 2 : undefined,
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
-    baseURL: 'http://127.0.0.1:4173',
+    baseURL: 'http://127.0.0.1:14173',
     viewport: { width: 1440, height: 1024 },
     colorScheme: 'dark',
     trace: 'on-first-retry',
@@ -19,13 +19,13 @@ module.exports = defineConfig({
     {
       command: 'npm run start:test:api',
       url: 'http://127.0.0.1:3000/health',
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: false,
       timeout: 120000
     },
     {
       command: 'npm run start:test:ui',
-      url: 'http://127.0.0.1:4173',
-      reuseExistingServer: !process.env.CI,
+      url: 'http://127.0.0.1:14173',
+      reuseExistingServer: false,
       timeout: 120000
     }
   ],

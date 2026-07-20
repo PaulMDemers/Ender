@@ -110,6 +110,7 @@ test('recovers a failed launch and exposes one complete docked editor lifecycle'
   await expect(dock).toBeVisible();
   await expect.poll(() => state.launchAttempts).toBe(2);
   await expect(dock.getByText('connected', { exact: true })).toBeVisible();
+  await expect(dock.getByRole('button', { name: 'Copy editor password' })).toHaveCount(0);
   await dock.getByRole('button', { name: 'Connection' }).click();
   await expect(dock.getByText(task.workspace)).toBeVisible();
   await expect(dock.getByText(editorSession.proxyUrl)).toBeVisible();
@@ -141,10 +142,22 @@ test('moves an active editor between docked, modal, and stacked responsive surfa
   await page.setViewportSize({ width: 900, height: 844 });
   const editorTab = page.getByRole('tab', { name: 'Editor' });
   await expect(editorTab).toHaveAttribute('aria-selected', 'true');
+  await expect(editorTab).toHaveAttribute('tabindex', '0');
+  await expect(editorTab).toHaveAttribute('aria-controls', 'thread-editor-panel');
   await expect(page.getByLabel('Thread workspace editor')).toBeVisible();
-  await page.getByRole('tab', { name: 'Transcript' }).click();
+  await editorTab.focus();
+  await page.keyboard.press('ArrowLeft');
+  const transcriptTab = page.getByRole('tab', { name: 'Transcript' });
+  await expect(transcriptTab).toBeFocused();
+  await expect(transcriptTab).toHaveAttribute('aria-selected', 'true');
+  await expect(transcriptTab).toHaveAttribute('tabindex', '0');
+  await expect(transcriptTab).toHaveAttribute('aria-controls', 'thread-transcript-panel');
+  await expect(editorTab).toHaveAttribute('tabindex', '-1');
+  await expect(page.getByRole('tabpanel', { name: 'Transcript' })).toBeVisible();
   await expect(page.getByText('The workspace is ready for inspection.')).toBeVisible();
-  await editorTab.click();
+  await page.keyboard.press('ArrowRight');
+  await expect(editorTab).toBeFocused();
+  await expect(page.getByRole('tabpanel', { name: 'Editor' })).toBeVisible();
 
   await page.setViewportSize({ width: 1100, height: 844 });
   const modal = page.getByRole('dialog', { name: 'Workspace editor' });

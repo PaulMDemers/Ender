@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Concurrent discovery and per-run selection of every configured provider, with multiple OpenAI, Bedrock, Azure OpenAI, and Ollama model profiles.
+- Provider-neutral activity events and compact per-turn work summaries that keep Conversation readable while preserving complete model, tool, diagnostic, and timing detail in All activity.
+- Credential-backed ACP, configured-provider, and Bedrock server smokes for validating real model execution outside the deterministic test gate.
+
+### Changed
+
+- Rebuilt the operator interface around a compact shell, progressive task settings, dense thread and automation collections, contextual server diagnostics, and accessible action names.
+- Updated the default Bedrock model to the active US Claude Sonnet 5 inference profile and migrated Codex ACP examples to the maintained `@agentclientprotocol/codex-acp` adapter.
+- Replaced legacy documentation screenshots with current deterministic Playwright baselines and made screenshot synchronization repeatable.
+
 ## [0.1.1] - 2026-05-14
 
 ### Added

@@ -3,6 +3,8 @@
 > Sources: Ender knowledge/ui-operator-console.md, 2026-05-14
 > Raw: [2026-05-14-ui-operator-console.md](../../raw/ui/2026-05-14-ui-operator-console.md)
 
+> **Historical snapshot.** Use the maintained [frontend architecture](../../FRONTEND_ARCHITECTURE.md) and [operator documentation](../../docs/README.md) for the current interface.
+
 ## Overview
 
 The React app is the operator console for Ender. It provides direct task launching, thread browsing and live log viewing, approval resolution, guided workflow execution, schedule management, and server endpoint switching.
@@ -43,7 +45,7 @@ When a thread is selected, `useTaskLogs` attaches to `/tasks/:id/stream` via `Ev
 
 ## UI Modes
 
-### New Thread
+### New task
 Shows `NewTaskForm` and launches a direct task.
 
 ### Thread

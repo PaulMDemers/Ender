@@ -46,7 +46,7 @@ test('restores the saved workflow session for the connected server', async ({ pa
   await openLaunchModes(page);
   await page.getByRole('button', { name: /workflows/i }).click();
 
-  await expect(page.locator('.workflowHero .launchTitle')).toHaveText('Resume launch details');
+  await expect(page.locator('.collectionTitle')).toHaveText('Resume launch details');
   await expect(page.getByLabel('Issue key')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Change workflow' })).toBeVisible();
 });

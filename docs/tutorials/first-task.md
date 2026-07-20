@@ -17,7 +17,7 @@ cp .env.example .env
 
 The root install includes the `ui` workspace.
 
-## 2. Configure a backend
+## 2. Configure one or more backends
 
 For the simplest local setup, use OpenAI:
 
@@ -26,6 +26,8 @@ LLM_BACKEND=openai
 OPENAI_API_KEY=...
 OPENAI_MODEL=gpt-4.1-mini
 ```
+
+`LLM_BACKEND` chooses the default. If you also configure ACP, Ollama, Bedrock, or Azure OpenAI values in the same `.env`, Ender publishes those providers alongside OpenAI. Add comma-separated `OPENAI_MODELS`, `BEDROCK_MODEL_IDS`, `AZURE_OPENAI_API_DEPLOYMENT_NAMES`, or `OLLAMA_MODELS` values to publish more than one model for a provider. The run-settings picker can select any profile per task or follow-up.
 
 ## 3. Start Ender
 
@@ -44,13 +46,13 @@ Open:
 
 - `http://localhost:3000/health`
 
-You should see `services.llm.ready: true` for your chosen backend.
+You should see `services.llm.ready: true` for the default backend. `GET /llm-profiles` lists every provider/model profile currently available to task launches.
 
 ## 5. Start a thread
 
 In the UI:
 
-1. Choose **New thread** in the primary navigation.
+1. Choose **New task** in the primary navigation.
 2. Enter a goal such as:
 
 ```text
@@ -59,7 +61,7 @@ Inspect this repo, summarize the major modules, and list the first three cleanup
 
 3. Optionally select a project and workspace.
 4. Open **Review run settings** only when you need a non-default backend profile or memory mode.
-5. Select **Launch task**.
+5. Select **Start task**.
 
 ## 6. Watch the live transcript
 
@@ -67,13 +69,9 @@ Once the task starts, the UI streams logs from:
 
 - `GET /tasks/:id/stream`
 
-You will see:
+**Conversation** keeps the run readable: it shows your messages, one compact live work summary for each turn, approvals that need action, and the final assistant response. Expand a work summary when you need its tool details.
 
-- model step boundaries
-- tool invocations
-- tool result summaries
-- approvals when a sensitive action is gated
-- final completion status
+Switch to **All activity** for the complete provider-neutral event stream, including model requests, paired tool calls and results, diagnostics, and timing. Internal phases such as model invocation are not presented as assistant speech.
 
 ## 7. Continue a thread
 
@@ -93,8 +91,9 @@ That reuses the persisted thread history and runs the loop again.
 
 LLM backend not ready:
 
-- Check `LLM_BACKEND`
+- Check the default `LLM_BACKEND`
 - Check the matching credentials in `.env`
+- Check `GET /llm-profiles` for the profile selected in the run settings
 - Re-open `/health`
 
 No workspaces appear:

@@ -60,7 +60,7 @@ test('contains modal focus, dismisses with Escape, and restores the opener', asy
   await mockServer(page, baseUrl);
 
   await page.goto('/');
-  const opener = page.getByRole('button', { name: 'Switch Server' });
+  const opener = page.getByRole('button', { name: /Manage server/ });
   await opener.click();
 
   const dialog = page.getByRole('dialog', { name: 'Server connections' });
@@ -167,18 +167,18 @@ test('switching servers resets the shell and loads the new runtime catalogs', as
   });
 
   await page.goto('/');
-  await expect(page.getByText('Current server')).toBeVisible();
-  await page.getByRole('button', { name: 'Switch Server' }).click();
+  await expect(page.getByRole('button', { name: /Manage server/ })).toBeVisible();
+  await page.getByRole('button', { name: /Manage server/ }).click();
 
   const dialog = page.getByRole('dialog', { name: 'Server connections' });
   await dialog.getByLabel('Friendly name').fill('Remote lab');
   await dialog.getByLabel('Base URL').fill(remoteUrl);
   await dialog.getByRole('button', { name: 'Save and connect' }).click();
 
-  await expect(page.locator('.serverNameDisplay')).toHaveText('Remote lab');
-  await expect(page.getByText(remoteUrl, { exact: true }).first()).toBeVisible();
+  await expect(page.locator('.serverTargetName')).toHaveText('Remote lab');
   await page.getByRole('button', { name: 'Review run settings' }).click();
   await expect(page.getByLabel('Backend profile')).toHaveValue('remote');
+  await page.getByRole('button', { name: 'Change run context' }).click();
   await expect(page.locator('.launchField').filter({ hasText: /^Project/ }).locator('option', { hasText: 'Remote project' })).toHaveCount(1);
 
   const stored = await page.evaluate(() => ({
@@ -213,7 +213,7 @@ test('health recovery refreshes tasks and periodic catalogs', async ({ page }) =
   });
 
   await page.goto('/');
-  await expect(page.getByText('Current server')).toBeVisible();
+  await expect(page.getByRole('button', { name: /Manage server/ })).toBeVisible();
   await page.getByRole('button', { name: 'Review run settings' }).click();
   await expect(page.getByLabel('Backend profile')).toHaveValue('profile-1');
   const requestsBeforeDisconnect = taskRequests;
@@ -279,7 +279,7 @@ test('shows runtime, exposure, and newer-contract diagnostics in the connection 
   });
 
   await page.goto('/');
-  await page.getByRole('button', { name: 'Switch Server' }).click();
+  await page.getByRole('button', { name: /Manage server/ }).click();
   const dialog = page.getByRole('dialog', { name: 'Server connections' });
   await expect(dialog.getByText('UI 0.1.1 · server 0.2.0')).toBeVisible();
   await expect(dialog.getByText('API v2 newer')).toBeVisible();
@@ -319,9 +319,8 @@ test('keeps last-known diagnostics through an outage and recovers with a manual 
     : { status: 503, body: { ok: false, message: 'Health probe timed out' } });
 
   await page.goto('/');
-  await page.getByRole('button', { name: 'Expand server details' }).click();
+  await page.getByRole('button', { name: /Manage server/ }).click();
   const diagnostics = page.getByRole('region', { name: 'Server diagnostics' });
-  await diagnostics.getByText('Runtime capabilities').click();
   await expect(diagnostics.getByText('ollama backend')).toBeVisible();
 
   online = false;
@@ -345,7 +344,7 @@ test('keeps connection diagnostics contained in the narrow server modal', async 
   await mockServer(page, baseUrl);
 
   await page.goto('/');
-  await page.getByRole('button', { name: 'Switch Server' }).click();
+  await page.getByRole('button', { name: /Manage server/ }).click();
   await expect(page.getByRole('dialog', { name: 'Server connections' })).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(0);

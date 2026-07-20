@@ -6,7 +6,7 @@ Start at [`docs/README.md`](docs/README.md) for the maintained knowledge path an
 
 ## Last validated environment
 
-- Date: 2026-07-18
+- Date: 2026-07-20
 - Host: macOS on arm64 (`Darwin 25.5.0`)
 - Node.js: `24.18.0`
 - npm: `11.16.0`
@@ -18,8 +18,11 @@ Start at [`docs/README.md`](docs/README.md) for the maintained knowledge path an
 
 | Surface | Local evidence | Status | Boundary not claimed |
 | --- | --- | --- | --- |
-| Browser UI | Production Vite build, built index/chunk fetches, and 41 Chromium tests | Verified on local Chromium | Safari, Firefox, mobile WebKit, and signed release hosting |
+| Browser UI | Production Vite build, built index/chunk fetches, and 58 Chromium tests | Verified on local Chromium | Safari, Firefox, mobile WebKit, and signed release hosting |
+| Conversation and provider activity | Backend contract tests cover direct-provider structured events and ACP normalization; browser tests cover compact live work summaries, legacy event reconciliation, paired tool detail, and clean final responses | Verified deterministically | Live Azure, Ollama, and non-Codex ACP agents |
 | Direct-local API | Real `src/server.js` process on an isolated loopback port; `/health`, API contract header, empty task collection, and graceful shutdown | Verified | Credential-backed model execution and external integrations |
+| Concurrent ACP and OpenAI task execution | One isolated `src/server.js` process published both profiles, honored distinct `llmProfileId` selections, and completed authenticated deterministic-marker tasks through each backend | Verified with configured Codex and OpenAI accounts | Azure, Ollama, other ACP agents, alternate accounts/models, and production network policy |
+| Bedrock model execution | Isolated `src/server.js` processes completed deterministic-marker tasks through the default Sonnet 5 profile and generated secondary Sonnet 4.6 profile | Verified with configured AWS account in `us-east-1` | Other regions/accounts, IAM/SCP policies, Azure/Ollama model variants, and production quotas |
 | Pillar-connected API | Real legacy-mode `scripts/pillar-server.js`, real Ender outbound connector, relayed `/health`, contract header, connector status, and clean shutdown | Verified locally | OIDC/Keycloak, TLS ingress, shared Postgres, and a deployed cloud relay |
 | Electron runtime | Built renderer loaded through Electron with sandboxing/context isolation; preload bridge and root verified; Content Security Policy active | Verified on macOS arm64 | Windows and Linux runtime behavior |
 | Electron package | `electron-builder --dir` produced `ui/dist/mac-arm64/Ender UI.app`; packaged renderer/preload smoke passed | Verified, unsigned | Developer ID signing, notarization, DMG installation, Windows NSIS, and Linux AppImage |
@@ -35,7 +38,15 @@ Run the complete deterministic repository gate:
 npm run verify
 ```
 
-The gate includes `npm run docs:check`, which validates maintained local Markdown links and referenced root npm scripts.
+The gate includes `npm run docs:check`, which validates local links across 68 maintained and historical Markdown files and validates referenced root npm scripts in maintained records.
+
+Refresh documentation screenshots only after reviewing an intentional visual-baseline change:
+
+```bash
+npm run docs:screenshots:sync
+```
+
+The documentation copies are exact PNG copies of tested Playwright baselines; their source mapping is recorded in [`docs/website/visual-and-screenshot-plan.md`](docs/website/visual-and-screenshot-plan.md).
 
 Run isolated production-entry checks for the direct API, built browser assets, and a real local Pillar relay:
 
@@ -44,6 +55,30 @@ npm run smoke:release:local
 ```
 
 The smoke overrides connector and persistence variables, uses temporary directories and loopback ports, does not launch an LLM task, and removes its temporary state after shutdown.
+
+Run the opt-in credential-backed Codex ACP server smoke:
+
+```bash
+npm run smoke:acp-server
+```
+
+This check starts `src/server.js` on an isolated loopback port, creates a task through the HTTP API, completes one minimal model turn, verifies a deterministic marker, and removes its temporary state. It uses the configured Codex login or API key and network access, so it is intentionally excluded from the deterministic repository gate.
+
+Run the same-server ACP and OpenAI profile smoke:
+
+```bash
+npm run smoke:configured-backends
+```
+
+This verifies that one isolated server publishes both profiles and honors distinct `llmProfileId` selections for two minimal tasks. Like the ACP-only smoke, it makes real provider requests and is excluded from `npm run verify`.
+
+Run the Bedrock profile against the same isolated real-server boundary:
+
+```bash
+npm run smoke:bedrock-server
+```
+
+This uses the configured AWS credentials, region, and `BEDROCK_MODEL_ID`; it is the release check for model lifecycle, access, and inference-profile errors that deterministic tests cannot reproduce.
 
 Run the Electron renderer/preload smoke:
 

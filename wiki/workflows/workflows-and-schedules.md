@@ -3,6 +3,8 @@
 > Sources: Ender knowledge/workflows-and-schedules.md, 2026-05-14
 > Raw: [2026-05-14-workflows-and-schedules.md](../../raw/workflows/2026-05-14-workflows-and-schedules.md)
 
+> **Historical snapshot.** Use the maintained [workflows and schedules architecture](../../docs/architecture/workflows-and-schedules.md) for current behavior.
+
 ## Overview
 
 Ender supports guided workflows (server-defined state machines) and cron-backed schedules. Workflows gather structured inputs before starting work; schedules automate recurring execution against prompt, thread, or workflow targets.

@@ -53,7 +53,6 @@ function createChatModel(config) {
     return new ChatBedrockConverse({
       region: config.bedrock.region,
       model: config.bedrock.model,
-      temperature: 0.2,
       toolChoice: "auto"
     });
   }

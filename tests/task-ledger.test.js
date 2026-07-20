@@ -18,7 +18,7 @@ function createTaskManagerDouble() {
   return {
     started,
     tasks,
-    start(prompt, workspace) {
+    start(prompt, workspace, options = {}) {
       const id = `task-${started.length + 1}`;
       const task = {
         id,
@@ -29,7 +29,7 @@ function createTaskManagerDouble() {
         workspace: workspace || null
       };
       tasks.set(id, task);
-      started.push({ id, prompt, workspace });
+      started.push({ id, prompt, workspace, options });
       return { ok: true, id };
     },
     getTaskSummary(id) {
@@ -94,7 +94,7 @@ async function waitFor(check, { timeoutMs = 4000, intervalMs = 25 } = {}) {
   }
 }
 
-test("buildTaskLedgerTaskPrompt injects the required worker procedure", () => {
+test("buildTaskLedgerTaskPrompt injects private execution context without requiring provider-specific tools", () => {
   const prompt = buildTaskLedgerTaskPrompt({
     title: "Ship the orchestration feature",
     prompt: "Implement the orchestration feature end-to-end.",
@@ -108,11 +108,11 @@ test("buildTaskLedgerTaskPrompt injects the required worker procedure", () => {
 
   assert.match(prompt, /global task ledger/i);
   assert.match(prompt, /Source: jira · ABC-123 · issue-42/i);
-  assert.match(prompt, /Required procedure and execution lifecycle:/i);
-  assert.match(prompt, /Inspect the workspace first/i);
-  assert.match(prompt, /Build a concrete plan and a checklist/i);
-  assert.match(prompt, /add tests when practical/i);
-  assert.match(prompt, /evaluate whether the task can be accomplished/i);
+  assert.match(prompt, /Execution policy:/i);
+  assert.match(prompt, /Inspect the workspace before changing files/i);
+  assert.match(prompt, /Ender owns the ledger lifecycle/i);
+  assert.match(prompt, /should not be mentioned in the final response/i);
+  assert.doesNotMatch(prompt, /call ledger_set_stage/i);
   assert.match(prompt, /Original task request:/i);
 });
 
@@ -165,8 +165,10 @@ test("TaskLedgerManager auto-dispatches pending work and marks it complete when 
   assert.deepEqual(runningEntry.constraints, ["Stay in repo"]);
   assert.deepEqual(runningEntry.verificationPlan, ["npm test"]);
   assert.equal(runningEntry.lifecycle.currentStage, "intake");
-  assert.match(taskManager.started[0].prompt, /Required procedure and execution lifecycle:/);
-  assert.match(taskManager.started[0].prompt, /Task envelope:/);
+  assert.equal(taskManager.started[0].prompt, "Add a global work ledger with slot-based auto dispatch.");
+  assert.equal(taskManager.started[0].options.title, "Implement queued orchestration");
+  assert.match(taskManager.started[0].options.executionPrompt, /Execution policy:/);
+  assert.match(taskManager.started[0].options.executionPrompt, /Task envelope:/);
 
   taskManager.tasks.set(startedTaskId, {
     id: startedTaskId,
@@ -183,6 +185,10 @@ test("TaskLedgerManager auto-dispatches pending work and marks it complete when 
   assert.equal(completedEntry.completedTaskId, startedTaskId);
   assert.equal(completedEntry.lastTaskStatus, "done");
   assert.equal(completedEntry.result, "DONE:\nfeature shipped");
+  assert.equal(completedEntry.lifecycle.currentStage, "finalize");
+  assert.equal(completedEntry.lifecycle.feasibility.outcome, "ready");
+  assert.equal(completedEntry.lifecycle.verification.status, "skipped");
+  assert.match(completedEntry.lifecycle.verification.summary, /without structured verification evidence/i);
 });
 
 test("TaskLedgerManager respects max auto agent slots and dispatches the next item after capacity frees up", async (t) => {

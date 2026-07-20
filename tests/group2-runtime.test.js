@@ -9,7 +9,9 @@ const { ScheduleManager } = require("../src/runtime/scheduleManager");
 const { TaskManager } = require("../src/runtime/taskManager");
 const { ProjectManager } = require("../src/runtime/projectManager");
 const { MemoryManager } = require("../src/runtime/memoryManager");
+const { loadConfig } = require("../src/config");
 const { LlmProfileManager } = require("../src/llm/profileManager");
+const { jiraToRepoWorkflow } = require("../src/workflows/jiraToRepoWorkflow");
 const runTaskModule = require("../src/runtime/runTask");
 
 async function makeTempDir() {
@@ -109,6 +111,34 @@ test("WorkflowManager does not persist scheduled_run sessions", async (t) => {
   assert.deepEqual(files, []);
 });
 
+test("Jira workflow exposes manual input forms when discovery returns no options", () => {
+  const cases = [
+    {
+      state: { stage: "project", projects: [] },
+      title: "Enter Jira project",
+      fieldId: "projectKey"
+    },
+    {
+      state: { stage: "board", boards: [] },
+      title: "Enter Jira board",
+      fieldId: "boardId"
+    },
+    {
+      state: { stage: "issue", issues: [] },
+      title: "Enter Jira issue",
+      fieldId: "issueKey"
+    }
+  ];
+
+  for (const { state, title, fieldId } of cases) {
+    const step = jiraToRepoWorkflow.getCurrentStep({ state });
+    assert.equal(step.type, "form");
+    assert.equal(step.title, title);
+    assert.equal(step.fields[0].id, fieldId);
+    assert.equal(step.fields[0].required, true);
+  }
+});
+
 test("ScheduleManager persists run status for prompt schedules", async (t) => {
   const root = await makeTempDir();
   t.after(async () => {
@@ -176,6 +206,112 @@ test("LlmProfileManager exposes configured profiles and builds run configs", () 
   assert.equal(runConfig.backend, "openai");
   assert.equal(runConfig.openai.model, "gpt-fast");
   assert.equal(runConfig.openai.apiKey, "openai-key");
+});
+
+test("LlmProfileManager discovers every configured environment backend without profile JSON", () => {
+  const config = loadConfig({
+    LLM_BACKEND: "acp",
+    ACP_COMMAND: "codex-acp",
+    ACP_ARGS: "",
+    OPENAI_API_KEY: "openai-key",
+    OPENAI_MODEL: "gpt-test",
+    OLLAMA_BASE_URL: "http://127.0.0.1:11434",
+    OLLAMA_MODEL: "qwen-test"
+  });
+  const manager = new LlmProfileManager(config);
+
+  assert.equal(manager.defaultProfileId, "acp");
+  assert.deepEqual(
+    manager.list().map(({ id, backend, ready }) => ({ id, backend, ready })),
+    [
+      { id: "acp", backend: "acp", ready: true },
+      { id: "openai", backend: "openai", ready: true },
+      { id: "ollama", backend: "ollama", ready: true }
+    ]
+  );
+  assert.equal(manager.buildRunConfig("openai").openai.model, "gpt-test");
+  assert.equal(manager.buildRunConfig("ollama").ollama.model, "qwen-test");
+  assert.equal(JSON.stringify(manager.list()).includes("openai-key"), false);
+});
+
+test("LlmProfileManager discovers multiple models and Azure deployments per provider", () => {
+  const config = loadConfig({
+    LLM_BACKEND: "bedrock",
+    DEFAULT_LLM_PROFILE_ID: "openai-gpt-review",
+    OPENAI_API_KEY: "openai-key",
+    OPENAI_MODEL: "gpt-default",
+    OPENAI_MODELS: "gpt-default, gpt-review",
+    AWS_REGION: "us-east-1",
+    BEDROCK_MODEL_ID: "us.anthropic.claude-sonnet-5",
+    BEDROCK_MODEL_IDS: "us.anthropic.claude-sonnet-5,us.anthropic.claude-sonnet-4-6",
+    AZURE_OPENAI_API_KEY: "azure-key",
+    AZURE_OPENAI_API_INSTANCE_NAME: "ender-test",
+    AZURE_OPENAI_API_DEPLOYMENT_NAME: "primary-deployment",
+    AZURE_OPENAI_API_DEPLOYMENT_NAMES: "primary-deployment,review-deployment",
+    OLLAMA_BASE_URL: "http://127.0.0.1:11434",
+    OLLAMA_MODEL: "llama3.1:8b",
+    OLLAMA_MODELS: "llama3.1:8b,qwen2.5-coder:14b"
+  });
+  const manager = new LlmProfileManager(config);
+
+  assert.equal(manager.defaultProfileId, "openai-gpt-review");
+  assert.deepEqual(
+    manager.list().map(({ id, backend, model }) => ({ id, backend, model })),
+    [
+      { id: "bedrock", backend: "bedrock", model: "us.anthropic.claude-sonnet-5" },
+      {
+        id: "bedrock-us-anthropic-claude-sonnet-4-6",
+        backend: "bedrock",
+        model: "us.anthropic.claude-sonnet-4-6"
+      },
+      { id: "openai", backend: "openai", model: "gpt-default" },
+      { id: "openai-gpt-review", backend: "openai", model: "gpt-review" },
+      { id: "azure", backend: "azure", model: "primary-deployment" },
+      { id: "azure-review-deployment", backend: "azure", model: "review-deployment" },
+      { id: "ollama", backend: "ollama", model: "llama3.1:8b" },
+      { id: "ollama-qwen2-5-coder-14b", backend: "ollama", model: "qwen2.5-coder:14b" }
+    ]
+  );
+  assert.deepEqual(config.openai.models, ["gpt-default", "gpt-review"]);
+  assert.equal(manager.buildRunConfig("openai-gpt-review").openai.model, "gpt-review");
+  assert.equal(manager.buildRunConfig("azure-review-deployment").azure.deploymentName, "review-deployment");
+  assert.equal(manager.buildRunConfig("ollama-qwen2-5-coder-14b").ollama.model, "qwen2.5-coder:14b");
+});
+
+test("LlmProfileManager resolves duplicate explicit ids deterministically", () => {
+  const manager = new LlmProfileManager(loadConfig({
+    LLM_BACKEND: "openai",
+    OPENAI_API_KEY: "openai-key",
+    LLM_PROFILES_JSON: JSON.stringify([
+      { id: "review", backend: "openai", model: "gpt-a" },
+      { id: "review", backend: "openai", model: "gpt-b" }
+    ])
+  }));
+
+  assert.deepEqual(manager.list().map((profile) => profile.id), ["review", "review-2"]);
+  const recreated = new LlmProfileManager(loadConfig({
+    LLM_BACKEND: "openai",
+    OPENAI_API_KEY: "openai-key",
+    LLM_PROFILES_JSON: JSON.stringify([
+      { id: "review", backend: "openai", model: "gpt-a" },
+      { id: "review", backend: "openai", model: "gpt-b" }
+    ])
+  }));
+  assert.deepEqual(recreated.list().map((profile) => profile.id), ["review", "review-2"]);
+});
+
+test("LLM_PROFILES_JSON remains authoritative for custom profile sets", () => {
+  const manager = new LlmProfileManager(loadConfig({
+    LLM_BACKEND: "acp",
+    ACP_COMMAND: "codex-acp",
+    OPENAI_API_KEY: "openai-key",
+    LLM_PROFILES_JSON: JSON.stringify([
+      { id: "review", label: "Review model", backend: "openai", model: "gpt-review" }
+    ])
+  }));
+
+  assert.deepEqual(manager.list().map((profile) => profile.id), ["review"]);
+  assert.equal(manager.defaultProfileId, "review");
 });
 
 test("ProjectManager persists projects and ensures missing workspaces with clone", async (t) => {

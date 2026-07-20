@@ -1,14 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { MAX_ATTACHMENTS, prepareMessageAttachments } from "../utils/messageAttachments";
+import { formatLlmProfileOption } from "../utils/llmProfiles";
 import DisclosureButton from "./ui/DisclosureButton";
 import StateNotice from "./ui/StateNotice";
-
-function getStatusLabel(status) {
-  if (!status) return "idle";
-  if (status === "awaiting_approval") return "approval needed";
-  if (status === "done") return "completed";
-  return String(status).replaceAll("_", " ");
-}
 
 function getAttachmentLabel(attachment) {
   if (attachment.kind === "image") return "image";
@@ -25,9 +19,6 @@ function getMemoryLabel(memoryMode) {
 export default function ThreadComposer({
   disabled,
   onSend,
-  workspace,
-  taskId,
-  status,
   llmProfiles,
   currentLlmProfileId,
   currentMemoryMode
@@ -51,6 +42,13 @@ export default function ThreadComposer({
   useEffect(() => {
     setLlmProfileId(currentLlmProfileId || "");
   }, [currentLlmProfileId]);
+
+  useEffect(() => {
+    if (!llmProfiles?.length || !llmProfileId) return;
+    if (!llmProfiles.some((profile) => profile.id === llmProfileId)) {
+      setLlmProfileId(llmProfiles[0].id);
+    }
+  }, [llmProfileId, llmProfiles]);
 
   useEffect(() => {
     setMemoryMode(currentMemoryMode || "auto");
@@ -110,18 +108,11 @@ export default function ThreadComposer({
 
   return (
     <form className="threadComposer" onSubmit={submit}>
-      <div className="composerTop">
-        <div>
-          <div className="composerEyebrow">Continue operation</div>
-          <div className="composerContext mono">
-            {taskId ? `${taskId.slice(0, 8)} · ${getStatusLabel(status)}` : "No active thread"}
-          </div>
-        </div>
-        <div className="composerContext mono">{workspace || "No workspace scope"}</div>
-      </div>
-
       <div className="composerSettingsBar">
-        <div className="composerSettingsSummary mono">{settingsSummary}</div>
+        <div className="composerSettingsCopy">
+          <span className="composerSettingsLabel">Follow-up settings</span>
+          <span className="composerSettingsSummary mono">{settingsSummary}</span>
+        </div>
         <DisclosureButton
           className="secondaryButton composerSettingsButton"
           expanded={runSettingsOpen}
@@ -129,7 +120,7 @@ export default function ThreadComposer({
           label={runSettingsOpen ? "Hide follow-up run settings" : "Review follow-up run settings"}
           onClick={() => setRunSettingsOpen((value) => !value)}
         >
-          {runSettingsOpen ? "Hide settings" : "Run settings"}
+          {runSettingsOpen ? "Done" : "Change"}
         </DisclosureButton>
       </div>
 
@@ -139,8 +130,8 @@ export default function ThreadComposer({
             <span className="workflowFieldLabel">Backend profile</span>
             <select className="consoleInput" value={llmProfileId} onChange={(event) => setLlmProfileId(event.target.value)}>
               {(llmProfiles || []).map((profile) => (
-                <option key={profile.id} value={profile.id}>
-                  {profile.label} · {profile.backend}{profile.model ? ` · ${profile.model}` : ""}
+                <option key={profile.id} value={profile.id} disabled={profile.ready === false}>
+                  {formatLlmProfileOption(profile)}
                 </option>
               ))}
             </select>
@@ -214,7 +205,7 @@ export default function ThreadComposer({
           className="composerTextarea"
           rows={2}
           aria-label="Follow-up message"
-          placeholder="Continue this thread. Shift+Enter adds a new line."
+          placeholder="Continue the thread…"
           onChange={(event) => setText(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {
@@ -231,7 +222,7 @@ export default function ThreadComposer({
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => fileInputRef.current?.click()}
           >
-            {attachmentBusy ? "Preparing..." : "Attach files"}
+            {attachmentBusy ? "Preparing…" : "Attach"}
           </button>
           <button
             type="submit"

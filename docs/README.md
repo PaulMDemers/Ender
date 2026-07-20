@@ -2,7 +2,7 @@
 
 This is the maintained entry point for operating, extending, deploying, and releasing Ender. Code and automated tests remain the runtime source of truth; the records linked here explain the supported behavior and verification boundary.
 
-![Ender console overview](website/screenshots/console-overview.jpg)
+![Ender console overview](website/screenshots/console-overview.png)
 
 ## Operate Ender
 
@@ -13,7 +13,7 @@ Start with the path that matches the job:
 3. [Create a recurring schedule](tutorials/schedules.md) or use the task ledger for durable queued work.
 4. [Troubleshoot Ender](guides/troubleshooting.md) when connection, readiness, launch, editor, workflow, schedule, or persistence behavior is unexpected.
 
-The primary navigation calls these destinations **New thread**, **Workflows**, **Schedules**, and **Task ledger**. Server switching and readiness diagnostics live in the server-connections dialog.
+The primary navigation calls these destinations **New task**, **Workflows**, **Schedules**, and **Task ledger**. Server switching and readiness diagnostics live in the server-connections dialog.
 
 ## Deploy and Release
 

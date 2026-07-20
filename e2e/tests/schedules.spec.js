@@ -49,12 +49,11 @@ test('renders the schedule editor and ledger', async ({ page }) => {
   await openLaunchModes(page);
   await page.getByRole('button', { name: /schedules/i }).click();
 
-  await expect(page.getByText('Create a recurring run')).toBeVisible();
-  await expect(page.getByLabel('Name')).toBeVisible();
-  await expect(page.getByLabel('Target type')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'New schedule' })).toBeVisible();
+  await expect(page.getByLabel('Name')).toHaveCount(0);
   await expect(page.getByText('Current schedules')).toBeVisible();
   await expect(page.getByText('Morning triage')).toBeVisible();
-  await expect(page.locator('.automationOverview')).toHaveScreenshot('schedule-overview.png', {
+  await expect(page.locator('.collectionHeader')).toHaveScreenshot('schedule-overview.png', {
     animations: 'disabled'
   });
   await expect(page.locator('.scheduleWorkspace')).toHaveScreenshot('schedule-panel.png', {
@@ -62,6 +61,14 @@ test('renders the schedule editor and ledger', async ({ page }) => {
     maxDiffPixels: 200
   });
 
+  await page.getByRole('button', { name: 'New schedule' }).click();
+  await expect(page.getByText('Create a recurring run')).toBeVisible();
+  await expect(page.getByLabel('Name')).toBeVisible();
+  await expect(page.getByLabel('Target type')).toBeVisible();
+  await expect(page.locator('.scheduleWorkspace')).toHaveScreenshot('schedule-editor-open.png', {
+    animations: 'disabled',
+    maxDiffPixels: 200
+  });
   await page.getByLabel('Target type').selectOption('thread');
   await expect(page.getByRole('combobox', { name: /^Thread/ })).toBeVisible();
   await expect(page.getByRole('textbox', { name: /^Resume prompt/ })).toBeVisible();

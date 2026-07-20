@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createProject, getHealth, listDirectories, startTask } from "../agentClient";
+import { formatLlmProfileOption } from "../utils/llmProfiles";
 import DisclosureButton from "./ui/DisclosureButton";
 import StateNotice from "./ui/StateNotice";
 
@@ -23,15 +24,20 @@ function getStartErrorHint(health) {
   return "";
 }
 
+function summarizePath(value, segmentCount = 3) {
+  const path = String(value || "").trim();
+  if (!path) return "Server workspace";
+
+  const normalized = path.replaceAll("\\", "/");
+  const segments = normalized.split("/").filter(Boolean);
+  if (segments.length <= segmentCount) return path;
+  return `…/${segments.slice(-segmentCount).join("/")}`;
+}
+
 export default function NewTaskForm({
   onStarted,
-  serverName,
-  serverUrl,
   serverWorkspacePath,
   readinessChecks,
-  selfWorkspacePath,
-  selfUpdateReady,
-  selfUpdateHint,
   llmProfiles,
   projects,
   defaultLlmProfileId,
@@ -52,14 +58,23 @@ export default function NewTaskForm({
   const [pickerParent, setPickerParent] = useState(null);
   const [pickerItems, setPickerItems] = useState([]);
   const [pickerLoading, setPickerLoading] = useState(false);
+  const [runContextOpen, setRunContextOpen] = useState(false);
   const [runSettingsOpen, setRunSettingsOpen] = useState(false);
   const taRef = useRef(null);
   const lastWorkspaceDefaultRef = useRef(String(serverWorkspacePath || "").trim());
   const selectedProfile = (llmProfiles || []).find((profile) => profile.id === llmProfileId);
+  const selectedProject = (projects || []).find((project) => project.id === projectId);
   const runSettingsSummary = [
     selectedProfile?.label || selectedProfile?.backend || "Server default",
     memoryMode === "auto" ? "Automatic memory" : memoryMode === "manual" ? "Manual memory" : "Memory off"
   ].join(" · ");
+  const runContextSummary = [
+    selectedProject?.name || "No project",
+    summarizePath(workspace)
+  ].join(" · ");
+  const launchReadinessIssues = (readinessChecks || []).filter(
+    (item) => !item.ready && (item.label === "API healthy" || item.label === "LLM ready")
+  );
 
   const autosize = () => {
     const el = taRef.current;
@@ -99,8 +114,9 @@ export default function NewTaskForm({
   }, [serverWorkspacePath, workspace]);
 
   useEffect(() => {
-    if (!llmProfileId && defaultLlmProfileId) setLlmProfileId(defaultLlmProfileId);
-  }, [defaultLlmProfileId, llmProfileId]);
+    const profileExists = (llmProfiles || []).some((profile) => profile.id === llmProfileId);
+    if ((!llmProfileId || !profileExists) && defaultLlmProfileId) setLlmProfileId(defaultLlmProfileId);
+  }, [defaultLlmProfileId, llmProfileId, llmProfiles]);
 
   const saveProject = async () => {
     const name = projectName.trim();
@@ -181,44 +197,53 @@ export default function NewTaskForm({
   };
 
   return (
-    <section className="consolePanel launchPanel">
+    <section className="launchPanel" aria-label="New task">
       <div className="panelBody launchPanelBody">
-        <div className="launchHero">
-          <div className="workflowBadge">NEW THREAD</div>
-          <h2 className="launchTitle">Launch a supervised agent run</h2>
-          <p className="launchDescription">
-            Give Ender a concrete objective and move straight into the live transcript.
-          </p>
-        </div>
-
         <form className="launchForm" onSubmit={submit}>
-          <div className="launchWorkspace">
-            <div className="launchPrimaryColumn">
-              <label className="launchField">
-                <span className="fieldLabel">Mission goal</span>
-                <span className="fieldHint">Plain language is fine. Ender preserves the thread so you can resume later.</span>
-                <textarea
-                  ref={taRef}
-                  value={goal}
-                  rows={4}
-                  className="consoleTextarea"
-                  placeholder="Example: audit the auth flow and prepare a safe remediation plan."
-                  onChange={(event) => {
-                    setGoal(event.target.value);
-                    autosize();
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey) {
-                      event.preventDefault();
-                      submit();
-                    }
-                  }}
-                />
-              </label>
+          <label className="launchField launchMissionField">
+            <span className="fieldLabel">Mission goal</span>
+            <textarea
+              ref={taRef}
+              value={goal}
+              rows={4}
+              className="consoleTextarea launchMissionInput"
+              placeholder="Describe the outcome you want Ender to achieve…"
+              onChange={(event) => {
+                setGoal(event.target.value);
+                autosize();
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  submit();
+                }
+              }}
+            />
+          </label>
 
-              <div className="launchField">
+          <div className="launchConfigStack">
+            <div className="launchSummaryRow">
+              <div className="launchSettingsCopy">
+                <span className="launchSummaryHeading">Run in</span>
+                <span className="launchSummaryText" title={`${selectedProject?.name || "No project"} · ${workspace || "Server workspace"}`}>
+                  {runContextSummary}
+                </span>
+              </div>
+              <DisclosureButton
+                className="secondaryButton launchSettingsButton"
+                expanded={runContextOpen}
+                controls="new-task-run-context"
+                label={runContextOpen ? "Hide run context" : "Change run context"}
+                onClick={() => setRunContextOpen((value) => !value)}
+              >
+                {runContextOpen ? "Done" : "Change"}
+              </DisclosureButton>
+            </div>
+
+            {runContextOpen ? (
+              <div id="new-task-run-context" className="launchContextPanel">
+                <div className="launchField">
                 <span className="fieldLabel">Project</span>
-                <span className="fieldHint">Attach reusable repo and resource context. If the workspace is missing, Ender will prepare it from the project repo.</span>
                 <div className="workspacePickerRow">
                   <select
                     className="consoleInput"
@@ -237,7 +262,7 @@ export default function NewTaskForm({
                 </div>
               </div>
 
-              {projectFormOpen ? (
+                {projectFormOpen ? (
                 <div className="pickerBox">
                   <label className="workflowField">
                     <span className="workflowFieldLabel">Project name</span>
@@ -261,11 +286,10 @@ export default function NewTaskForm({
                     Save project
                   </button>
                 </div>
-              ) : null}
+                ) : null}
 
-              <label className="launchField">
+                <label className="launchField">
                 <span className="fieldLabel">Workspace</span>
-                <span className="fieldHint">Defaults to the server workspace directory. Change it if this run should stay inside a narrower repo or folder.</span>
                 <div className="workspacePickerRow">
                   <input
                     className="consoleInput"
@@ -279,7 +303,7 @@ export default function NewTaskForm({
                 </div>
               </label>
 
-              {pickerOpen ? (
+                {pickerOpen ? (
                 <div className="pickerBox">
                   <div className="pickerHeader">
                     <div>
@@ -326,26 +350,28 @@ export default function NewTaskForm({
                       : null}
                   </div>
                 </div>
-              ) : null}
-
-              <div className="launchSettingsDisclosure">
-                <div className="launchSettingsCopy">
-                  <span className="fieldLabel">Run settings</span>
-                  <span className="fieldHint">{runSettingsSummary}</span>
-                </div>
-                <DisclosureButton
-                  className="secondaryButton launchSettingsButton"
-                  expanded={runSettingsOpen}
-                  controls="new-task-run-settings"
-                  label={runSettingsOpen ? "Hide run settings" : "Review run settings"}
-                  onClick={() => setRunSettingsOpen((value) => !value)}
-                >
-                  {runSettingsOpen ? "Hide settings" : "Review settings"}
-                </DisclosureButton>
+                ) : null}
               </div>
+            ) : null}
 
-              {runSettingsOpen ? (
-                <div id="new-task-run-settings" className="launchSettingsGrid">
+            <div className="launchSummaryRow">
+              <div className="launchSettingsCopy">
+                <span className="launchSummaryHeading">Run settings</span>
+                <span className="launchSummaryText">{runSettingsSummary}</span>
+              </div>
+              <DisclosureButton
+                className="secondaryButton launchSettingsButton"
+                expanded={runSettingsOpen}
+                controls="new-task-run-settings"
+                label={runSettingsOpen ? "Hide run settings" : "Review run settings"}
+                onClick={() => setRunSettingsOpen((value) => !value)}
+              >
+                {runSettingsOpen ? "Done" : "Settings"}
+              </DisclosureButton>
+            </div>
+
+            {runSettingsOpen ? (
+              <div id="new-task-run-settings" className="launchSettingsGrid">
                   <label className="launchField">
                     <span className="fieldLabel">Backend profile</span>
                     <select
@@ -354,8 +380,8 @@ export default function NewTaskForm({
                       onChange={(event) => setLlmProfileId(event.target.value)}
                     >
                       {(llmProfiles || []).map((profile) => (
-                        <option key={profile.id} value={profile.id}>
-                          {profile.label} · {profile.backend}{profile.model ? ` · ${profile.model}` : ""}
+                        <option key={profile.id} value={profile.id} disabled={profile.ready === false}>
+                          {formatLlmProfileOption(profile)}
                         </option>
                       ))}
                     </select>
@@ -372,42 +398,21 @@ export default function NewTaskForm({
                       <option value="off">Off</option>
                     </select>
                   </label>
-                </div>
-              ) : null}
-            </div>
-
-            <aside className="sidePanel launchSidePanel">
-              <div className="sectionLabel">Connected target</div>
-              <div className="launchSummaryValue">{serverName}</div>
-              <div className="launchSummaryMeta mono">{serverUrl}</div>
-
-              {serverWorkspacePath ? (
-                <div className="launchContextBlock">
-                  <span className="launchSummaryLabel">Server workspace</span>
-                  <div className="sidePanelValue mono" title={serverWorkspacePath}>{serverWorkspacePath}</div>
-                  <div className="panelNote">
-                    {selfWorkspacePath && selfUpdateReady
-                      ? "Supervised self-update is available for the Ender repo workspace."
-                      : selfUpdateHint || "This is the default workspace root for new supervised runs."}
-                  </div>
-                </div>
-              ) : null}
-
-              <div className="launchContextBlock">
-                <span className="launchSummaryLabel">Readiness</span>
-                <div className="launchReadiness">
-                  {(readinessChecks || []).slice(0, 4).map((item) => (
-                    <span key={item.label} className={`readinessChip ${item.ready ? "ready" : "notReady"}`}>
-                      {item.label}
-                    </span>
-                  ))}
-                </div>
               </div>
-            </aside>
+            ) : null}
           </div>
 
+          {launchReadinessIssues.length ? (
+            <StateNotice
+              tone="warning"
+              title="Launch readiness needs attention"
+              detail={launchReadinessIssues.map((item) => item.detail || `${item.label} is unavailable.`).join(" ")}
+              compact
+            />
+          ) : null}
+
           <div className="launchFooter">
-            <div className="panelNote">Press Enter to start quickly. Use Shift+Enter for a multiline objective.</div>
+            <div className="panelNote">Enter to start · Shift+Enter for a new line</div>
             <button className="primaryButton launchAction" disabled={busy || !goal.trim()}>
               {busy ? "Starting run..." : "Start task"}
             </button>

@@ -3,6 +3,8 @@
 > Sources: Ender knowledge/self-update.md, 2026-05-14
 > Raw: [2026-05-14-self-update.md](../../raw/self-update/2026-05-14-self-update.md)
 
+> **Historical snapshot.** Start with the maintained [documentation index](../../docs/README.md) and current source before relying on these implementation notes.
+
 ## Overview
 
 Ender can safely edit and restart its own repository only when running under an external supervisor process. This is intentionally separated from the normal server so that self-modification remains supervised and rollback-safe.

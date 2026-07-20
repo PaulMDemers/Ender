@@ -16,7 +16,7 @@ Ender supports three schedule target kinds:
 
 ## Create a prompt schedule
 
-Use this when you want Ender to start a new thread on a cadence.
+Use this when you want Ender to start a new task on a cadence.
 
 Example:
 

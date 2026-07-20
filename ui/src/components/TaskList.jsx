@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { hasUnseenTaskUpdates } from "../utils/taskRevision";
 import DisclosureButton from "./ui/DisclosureButton";
 
 function getStatusTone(status) {
@@ -35,6 +36,17 @@ function formatTimestamp(value) {
   }).format(new Date(value));
 }
 
+function getTaskTitle(task) {
+  const title = String(task?.title || "").trim();
+  if (title) return title;
+
+  const goal = String(task?.goal || "").trim();
+  if (goal) return goal;
+
+  const shortId = String(task?.id || "").trim().slice(0, 8);
+  return shortId ? `Untitled thread ${shortId}` : "Untitled thread";
+}
+
 export default function TaskList({
   items,
   selectedId,
@@ -51,8 +63,16 @@ export default function TaskList({
   onRerun
 }) {
   const [expandedIds, setExpandedIds] = useState(() => new Set());
+  const [moreIds, setMoreIds] = useState(() => new Set());
+  const [copiedId, setCopiedId] = useState(null);
 
   const toggleExpanded = (taskId) => {
+    setMoreIds((prev) => {
+      if (!prev.has(taskId)) return prev;
+      const next = new Set(prev);
+      next.delete(taskId);
+      return next;
+    });
     setExpandedIds((prev) => {
       const next = new Set(prev);
       if (next.has(taskId)) next.delete(taskId);
@@ -61,16 +81,39 @@ export default function TaskList({
     });
   };
 
+  const toggleMore = (taskId) => {
+    setMoreIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(taskId)) next.delete(taskId);
+      else next.add(taskId);
+      return next;
+    });
+  };
+
+  const copyThreadId = async (taskId) => {
+    try {
+      await navigator.clipboard.writeText(String(taskId));
+      setCopiedId(taskId);
+    } catch {
+      setCopiedId(null);
+    }
+  };
+
   return (
     <div className="taskList">
       {items.map((task) => {
+        const taskTitle = getTaskTitle(task);
         const expanded = expandedIds.has(task.id);
+        const moreExpanded = moreIds.has(task.id);
         const pinned = Boolean(taskState?.[task.id]?.pinned);
         const archived = Boolean(taskState?.[task.id]?.archived);
         const selected = selectedId === task.id;
+        const unseen = hasUnseenTaskUpdates(task, taskState?.[task.id]);
+        const statusLabel = getStatusLabel(task.status);
+        const statusTone = getStatusTone(task.status);
 
         return (
-          <article key={task.id} className={`threadCard ${selected ? "selected" : ""}`}>
+          <article key={task.id} className={`threadCard ${selected ? "selected" : ""} ${unseen ? "unread" : ""}`}>
             <button
               type="button"
               className="threadCardMain"
@@ -79,73 +122,90 @@ export default function TaskList({
                 onSelect?.(task.id);
               }}
             >
-              <div className="threadCardTop">
-                <div className="threadStatusRow">
-                  <span className={`statusPill ${getStatusTone(task.status)}`}>{getStatusLabel(task.status)}</span>
-                  {pinned ? <span className="threadTag">Pinned</span> : null}
-                  {task.pendingApprovalCount ? <span className="threadTag attention">Approval</span> : null}
-                </div>
-                <span className="threadTimestamp mono">{formatTimestamp(task.finishedAt || task.startedAt)}</span>
-              </div>
-
-              <div className={`threadTitle ${expanded ? "expanded" : "clamped"}`} title={task.goal}>
-                {task.goal}
-              </div>
-
-              {!expanded ? (
-                <div className="threadCardSummary mono">
-                  <span>{String(task.id).slice(0, 8)}</span>
-                  <span>runs {task.runCount || 1}</span>
-                  <span>logs {task.logCount || 0}</span>
-                  {task.projectId ? <span>{task.projectId}</span> : null}
-                </div>
-              ) : null}
+              <span
+                className={`threadUnreadSlot ${unseen ? "unread" : ""}`}
+                role={unseen ? "img" : undefined}
+                aria-label={unseen ? "Unread thread updates" : undefined}
+                title={unseen ? "Unread thread updates" : undefined}
+              />
+              <span className={`threadTitle ${expanded ? "expanded" : ""}`} title={taskTitle}>
+                {taskTitle}
+              </span>
+              {pinned ? <span className="threadRowFlag">Pinned</span> : null}
+              {task.pendingApprovalCount ? <span className="threadRowFlag attention">Approval</span> : null}
             </button>
             <div className="threadCardFooter">
               <DisclosureButton
                 className="summaryToggle threadEntryToggle"
                 expanded={expanded}
                 controls={`thread-details-${task.id}`}
-                label={expanded ? "Collapse thread entry" : "Expand thread entry"}
+                label={`${expanded ? "Collapse" : "Expand"} thread details for ${taskTitle}`}
                 onClick={() => toggleExpanded(task.id)}
               >
-                <span className="threadEntryToggleLabel">{expanded ? "Hide" : "Details"}</span>
                 <span className={`summaryToggleIcon ${expanded ? "expanded" : "collapsed"}`} aria-hidden="true" />
               </DisclosureButton>
             </div>
             {expanded ? (
               <>
                 <div id={`thread-details-${task.id}`} className="threadCardDetails">
-                  <div className="threadCardMeta">
-                    <span className="mono">{task.id}</span>
-                    <span className="mono">runs {task.runCount || 1}</span>
-                    <span className="mono">logs {task.logCount || 0}</span>
-                    {task.llmProfileId ? <span className="mono">profile {task.llmProfileId}</span> : null}
-                    {task.memoryMode ? <span className="mono">memory {task.memoryMode}</span> : null}
+                  <div className="threadMetaSummary mono" aria-label="Thread summary">
+                    <span className={`threadMetaStatus ${statusTone}`}>{statusLabel}</span>
+                    <span>{formatTimestamp(task.finishedAt || task.startedAt)}</span>
+                    {task.llmProfileId ? <span>{task.llmProfileId}</span> : null}
+                    {task.memoryMode ? <span>{task.memoryMode} memory</span> : null}
+                    <span>{task.runCount || 1} {(task.runCount || 1) === 1 ? "run" : "runs"}</span>
+                    <span>{task.logCount || 0} {(task.logCount || 0) === 1 ? "log" : "logs"}</span>
                   </div>
 
-                  {task.workspace ? <div className="threadCardWorkspace mono">{task.workspace}</div> : null}
+                  {task.workspace ? (
+                    <div className="threadCardWorkspace mono" title={task.workspace}>
+                      {task.workspace}
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="threadActions">
-                  {isActive(task.status) ? (
-                    <button type="button" className="miniButton" onClick={() => onTerminate?.(task.id)}>
-                      Terminate
-                    </button>
-                  ) : null}
-                  <button type="button" className="miniButton" onClick={() => onRerun?.(task.id)}>
+                  <button type="button" className="miniButton threadPrimaryAction" onClick={() => onRerun?.(task.id)}>
                     Re-run
                   </button>
-                  <button type="button" className="miniButton" onClick={() => onTogglePinned?.(task.id)}>
-                    {pinned ? "Unpin" : "Pin"}
-                  </button>
-                  <button type="button" className="miniButton" onClick={() => onToggleArchived?.(task.id)}>
-                    {archived ? "Restore" : "Archive"}
-                  </button>
-                  <button type="button" className="miniButton miniButtonDanger" onClick={() => onDelete?.(task.id)}>
-                    Delete
-                  </button>
+                  <DisclosureButton
+                    className="miniButton threadMoreToggle"
+                    expanded={moreExpanded}
+                    controls={`thread-actions-${task.id}`}
+                    label={`${moreExpanded ? "Collapse" : "Expand"} actions for ${taskTitle}`}
+                    onClick={() => toggleMore(task.id)}
+                  >
+                    <span>More</span>
+                    <span className={`summaryToggleIcon ${moreExpanded ? "expanded" : "collapsed"}`} aria-hidden="true" />
+                  </DisclosureButton>
                 </div>
+
+                {moreExpanded ? (
+                  <div id={`thread-actions-${task.id}`} className="threadMorePanel">
+                    <div className="threadTechnicalBar">
+                      <span className="mono" title={task.id}>Thread {String(task.id).slice(0, 8)}</span>
+                      <button type="button" className="threadCopyButton" onClick={() => copyThreadId(task.id)}>
+                        {copiedId === task.id ? "Copied" : "Copy ID"}
+                      </button>
+                    </div>
+                    <div className="threadSecondaryActions">
+                      {isActive(task.status) ? (
+                        <button type="button" className="miniButton" onClick={() => onTerminate?.(task.id)}>
+                          Terminate
+                        </button>
+                      ) : null}
+                      <button type="button" className="miniButton" onClick={() => onTogglePinned?.(task.id)}>
+                        {pinned ? "Unpin" : "Pin"}
+                      </button>
+                      <button type="button" className="miniButton" onClick={() => onToggleArchived?.(task.id)}>
+                        {archived ? "Restore" : "Archive"}
+                      </button>
+                      <button type="button" className="miniButton miniButtonDanger" onClick={() => onDelete?.(task.id)}>
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
               </>
             ) : null}
           </article>

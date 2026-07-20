@@ -117,6 +117,41 @@ test("approval publication and resolution follow the centralized event sequence"
   assert.equal(task.status, TASK_STATUS.RUNNING);
 });
 
+test("approval logs persist and stream one canonical structured event", async (t) => {
+  const manager = await createManager(t);
+  manager._runThread = () => {};
+  const started = manager.start("Request canonical approval feedback");
+  const task = manager.tasks.get(started.id);
+  const streamed = [];
+  task.subs.add({
+    write(payload) {
+      const event = String(payload).match(/^event: ([^\n]+)/)?.[1];
+      const data = String(payload).match(/^data: ([\s\S]+)$/m)?.[1];
+      if (event === "log" && data) streamed.push(JSON.parse(data));
+    },
+    end() {}
+  });
+
+  const decision = manager._requestApproval(task, {
+    type: "exec_run",
+    title: "Bind local verification port",
+    description: "Run the local HTTP verification."
+  });
+  const [approvalId] = task.pendingApprovals.keys();
+  assert.equal(manager.resolveApproval(task.id, approvalId, true).ok, true);
+  assert.equal(await decision, true);
+
+  const persisted = task.logs.at(-1);
+  assert.deepEqual(streamed.at(-1), persisted);
+  assert.deepEqual(persisted.data, {
+    kind: "approval",
+    action: "granted",
+    approvalId,
+    title: "Bind local verification port",
+    type: "exec_run"
+  });
+});
+
 test("successful execution emits assistant log, terminal status, completion, notification, then closes", async (t) => {
   const manager = await createManager(t);
   const originalRunTask = runTaskModule.runTask;

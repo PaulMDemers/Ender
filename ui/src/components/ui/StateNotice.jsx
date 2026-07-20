@@ -14,6 +14,7 @@ export default function StateNotice({
       className={`stateNotice ${tone} ${compact ? "compact" : ""} ${className}`.trim()}
       role={isError ? "alert" : "status"}
       aria-live={isError ? "assertive" : "polite"}
+      aria-busy={busy || undefined}
     >
       <span className="stateNoticeMarker" aria-hidden="true" />
       <div className="stateNoticeCopy">

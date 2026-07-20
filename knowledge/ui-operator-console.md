@@ -4,7 +4,7 @@ The maintained UI ownership map is [`FRONTEND_ARCHITECTURE.md`](../FRONTEND_ARCH
 
 ## Information architecture
 
-Primary destinations are **New thread**, **Workflows**, **Schedules**, and **Task ledger**. Selecting a task opens its live transcript. Server management is a modal with endpoint state, versions, REST/SSE compatibility, exposure mode, and runtime capabilities. The editor can be docked, modal, or stacked depending on viewport and operator choice.
+Primary destinations are **New task**, **Workflows**, **Schedules**, and **Task ledger**. Selecting a task opens its live transcript. Conversation presents a compact live work summary for each user turn; All activity retains provider-neutral model, tool, diagnostic, and timing events. Server management is a modal with endpoint state, versions, REST/SSE compatibility, exposure mode, and runtime capabilities. The editor can be docked, modal, or stacked depending on viewport and operator choice.
 
 ## State ownership
 

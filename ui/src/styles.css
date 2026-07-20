@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap");
 
 * {
   box-sizing: border-box;
@@ -56,30 +56,17 @@ body,
 body {
   margin: 0;
   color: var(--ink);
-  font-family: "Space Grotesk", sans-serif;
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   background: var(--bg);
   overflow: hidden;
 }
 
 body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
-  background-size: 36px 36px;
-  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.42), transparent 94%);
+  display: none;
 }
 
 #root {
   isolation: isolate;
-}
-
-.serverSummaryDetails,
-.mainHeaderDetails {
-  display: contents;
 }
 
 .skipLink {
@@ -108,21 +95,21 @@ body::before {
 .layout {
   position: relative;
   display: grid;
-  grid-template-columns: 360px minmax(0, 1fr);
+  grid-template-columns: 280px minmax(0, 1fr);
   height: 100%;
   transition: grid-template-columns 220ms ease;
 }
 
 .layout.withDock {
-  grid-template-columns: 360px minmax(0, 1fr) auto;
+  grid-template-columns: 280px minmax(0, 1fr) auto;
 }
 
 .layout.railCollapsed {
-  grid-template-columns: 44px minmax(0, 1fr);
+  grid-template-columns: 48px minmax(0, 1fr);
 }
 
 .layout.railCollapsed.withDock {
-  grid-template-columns: 44px minmax(0, 1fr) auto;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
 }
 
 .layout.reviewMode {
@@ -160,9 +147,9 @@ body::before {
   position: relative;
   display: grid;
   min-height: 0;
-  padding: 20px 18px 18px;
+  padding: 14px 12px 12px;
   border-right: 1px solid var(--line);
-  background: rgba(24, 26, 35, 0.96);
+  background: var(--bg-elevated);
   box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.03);
   z-index: 30;
   overflow: hidden;
@@ -172,12 +159,12 @@ body::before {
 .leftRailContent {
   position: relative;
   display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
-  gap: 16px;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 12px;
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  padding-right: 4px;
+  padding-right: 2px;
   transition: opacity 160ms ease, transform 160ms ease;
 }
 
@@ -195,8 +182,8 @@ body::before {
 
 .railCollapseToggle {
   position: absolute;
-  top: 18px;
-  right: 10px;
+  top: 16px;
+  right: 12px;
   z-index: 2;
   display: inline-flex;
   align-items: center;
@@ -204,7 +191,7 @@ body::before {
   width: 28px;
   height: 28px;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 999px;
+  border-radius: var(--radius-small);
   background: rgba(255, 255, 255, 0.05);
   color: var(--muted);
   transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
@@ -237,17 +224,8 @@ body::before {
   transform: rotate(-45deg);
 }
 
-.chevronIcon.down {
-  transform: rotate(45deg);
-}
-
-.chevronIcon.up {
-  transform: rotate(225deg);
-}
-
 .railHeader,
 .railSectionHeader,
-.connectionRow,
 .sectionHeading,
 .threadCardTop,
 .threadStatusRow,
@@ -255,12 +233,8 @@ body::before {
 .headerTopRow,
 .headerTitleGroup,
 .headerActions,
-.headerChipRow,
 .panelChrome,
 .approvalHeader,
-.approvalFooter,
-.composerTop,
-.composerFooter,
 .pickerHeader,
 .pickerActions,
 .launchFooter,
@@ -271,8 +245,7 @@ body::before {
 .serverNameRow,
 .serverRowActions,
 .scheduleRowHeader,
-.modalHeader,
-.sidePanelHeader {
+.modalHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -285,21 +258,18 @@ body::before {
 }
 
 .railSectionHeader,
-.connectionRow,
 .sectionHeading,
 .threadCardTop,
 .threadStatusRow {
   min-width: 0;
 }
 
-.connectionRow,
 .railSectionHeader,
 .threadCardTop,
 .threadStatusRow {
   flex-wrap: wrap;
 }
 
-.connectionRow > :first-child,
 .railSectionHeader > :first-child,
 .threadCardTop > :first-child,
 .threadStatusRow > :first-child {
@@ -310,14 +280,14 @@ body::before {
 .brand {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
   min-width: 0;
 }
 
 .brandMarkWrap {
-  width: 50px;
-  height: 50px;
-  border-radius: 16px;
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
   overflow: hidden;
   flex: 0 0 auto;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
@@ -335,11 +305,8 @@ body::before {
 }
 
 .brandEyebrow,
-.headerEyebrow,
 .sectionLabel,
-.workflowBadge,
-.composerEyebrow,
-.sidePanelEyebrow {
+.workflowBadge {
   font-family: "IBM Plex Mono", monospace;
   font-size: 0.72rem;
   letter-spacing: 0.16em;
@@ -348,19 +315,17 @@ body::before {
 }
 
 .title {
-  margin: 4px 0 0;
-  font-size: 1.9rem;
+  margin: 0;
+  font-size: 1.25rem;
   line-height: 1;
-  letter-spacing: 0.02em;
+  letter-spacing: -0.02em;
 }
 
 .subtitle,
 .panelNote,
-.headerMeta,
 .workflowDesc,
 .modalSubtitle,
-.fieldHint,
-.readinessMeta {
+.fieldHint {
   color: var(--muted);
   line-height: 1.45;
 }
@@ -375,7 +340,7 @@ body::before {
 .miniButton,
 .secondaryButton {
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--radius-small);
   background: rgba(255, 255, 255, 0.04);
   color: var(--ink);
   white-space: nowrap;
@@ -385,12 +350,12 @@ body::before {
 .iconButton,
 .miniButton,
 .secondaryButton {
-  padding: 10px 14px;
+  padding: 8px 12px;
 }
 
 .iconButton {
-  min-height: 50px;
-  padding: 12px 18px;
+  min-height: 38px;
+  padding: 8px 12px;
   line-height: 1;
 }
 
@@ -418,8 +383,8 @@ body::before {
 .primaryButton,
 .dangerButton {
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
-  padding: 14px 18px;
+  border-radius: var(--radius-small);
+  padding: 11px 16px;
   font-weight: 700;
   letter-spacing: 0.02em;
   box-shadow: none;
@@ -454,9 +419,7 @@ body::before {
   color: var(--ink);
 }
 
-.serverSummary,
 .threadCard,
-.sidePanel,
 .approvalCard,
 .threadComposer,
 .scheduleRow,
@@ -466,38 +429,6 @@ body::before {
   border-radius: var(--radius-card);
   background: rgba(18, 20, 30, 0.88);
   box-shadow: var(--shadow-soft);
-}
-
-.serverSummary {
-  padding: 14px;
-}
-
-.serverSummaryActions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.serverSummaryMetaRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.serverSummaryMetaChip {
-  display: inline-flex;
-  align-items: center;
-  min-height: 28px;
-  padding: 0 10px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--muted);
-  font-size: 0.7rem;
 }
 
 .summaryToggle {
@@ -521,12 +452,6 @@ body::before {
   transform: translateY(-1px);
 }
 
-.headerToggleButton {
-  width: 50px;
-  height: 50px;
-  flex: 0 0 50px;
-}
-
 .summaryToggleIcon {
   width: 10px;
   height: 10px;
@@ -544,24 +469,12 @@ body::before {
   margin-top: 2px;
 }
 
-.serverNameDisplay,
 .launchTitle,
 .workflowName,
 .approvalTitle,
 .modalTitle {
   font-weight: 700;
   letter-spacing: -0.02em;
-}
-
-.serverNameDisplay {
-  font-size: 1.05rem;
-}
-
-.serverEndpointDisplay {
-  margin-top: 8px;
-  color: var(--muted-soft);
-  font-size: 0.82rem;
-  word-break: break-all;
 }
 
 .connectionStatus,
@@ -584,8 +497,6 @@ body::before {
 
 .connectionStatus.ready,
 .scheduleStatus.ready,
-.readinessChip.ready,
-.readinessMiniItem.ready,
 .statusPill.success,
 .statusPill.running {
   color: var(--success);
@@ -593,8 +504,6 @@ body::before {
 
 .connectionStatus.notReady,
 .scheduleStatus.notReady,
-.readinessChip.notReady,
-.readinessMiniItem.notReady,
 .statusPill.warning {
   color: var(--warning);
 }
@@ -622,46 +531,9 @@ body::before {
   background: currentColor;
 }
 
-.readinessGrid,
-.headerChipRow,
-.launchCapabilities,
-.readinessMiniList,
-.scheduleMetaGrid,
 .workflowGrid {
   display: grid;
   gap: 10px;
-}
-
-.readinessGrid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin-top: 14px;
-}
-
-.readinessChip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 40px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.03);
-  text-align: center;
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 0.74rem;
-}
-
-.readinessMeta {
-  margin-top: 12px;
-  font-size: 0.82rem;
-}
-
-.errorBanner {
-  padding: 12px 14px;
-  border: 1px solid rgba(255, 127, 158, 0.24);
-  border-radius: 14px;
-  color: #ffd7e0;
-  background: rgba(255, 127, 158, 0.09);
 }
 
 .stateNotice {
@@ -755,50 +627,29 @@ body::before {
   background: rgba(255, 255, 255, 0.1);
 }
 
-.railPrimaryActions {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 8px;
-}
-
 .primaryNavigation {
   display: grid;
-  gap: 9px;
+  gap: 6px;
   min-width: 0;
-}
-
-.primaryNavigationHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 0 2px;
-}
-
-.primaryNavigationHint {
-  color: var(--muted-soft);
-  font-size: 0.68rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
 }
 
 .primaryNavigationList {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: 1fr;
+  gap: 3px;
 }
 
 .primaryNavItem {
   display: grid;
-  grid-template-columns: 30px minmax(0, 1fr);
+  grid-template-columns: 28px minmax(0, 1fr);
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   min-width: 0;
-  min-height: 62px;
-  padding: 9px 10px;
-  border: 1px solid var(--line);
-  border-radius: 15px;
-  background: rgba(255, 255, 255, 0.025);
+  min-height: 40px;
+  padding: 6px 9px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-small);
+  background: transparent;
   color: var(--ink);
   text-align: left;
   transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
@@ -810,18 +661,18 @@ body::before {
 }
 
 .primaryNavItem.active {
-  border-color: rgba(184, 96, 216, 0.38);
-  background: linear-gradient(135deg, rgba(184, 96, 216, 0.16), rgba(184, 96, 216, 0.06));
+  border-color: rgba(166, 83, 196, 0.26);
+  background: var(--accent-soft);
 }
 
 .primaryNavIcon {
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.04);
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.025);
   color: var(--muted);
 }
 
@@ -838,16 +689,13 @@ body::before {
 }
 
 .primaryNavLabel {
-  font-size: 0.82rem;
-  font-weight: 700;
+  font-size: 0.84rem;
+  font-weight: 600;
   line-height: 1.15;
 }
 
 .primaryNavMeta {
-  color: var(--muted-soft);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 0.62rem;
-  line-height: 1.25;
+  display: none;
 }
 
 .primaryNavGlyph {
@@ -932,44 +780,6 @@ body::before {
   align-items: center;
 }
 
-.modeButton {
-  display: grid;
-  gap: 2px;
-  justify-items: start;
-  align-content: start;
-  min-height: auto;
-  padding: 12px 14px;
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  text-align: left;
-  background: rgba(255, 255, 255, 0.025);
-  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease, transform 160ms ease;
-}
-
-.modeButton:hover {
-  border-color: rgba(255, 255, 255, 0.16);
-}
-
-.modeButton.active {
-  border-color: rgba(184, 96, 216, 0.28);
-  background: rgba(184, 96, 216, 0.07);
-  box-shadow: none;
-}
-
-.modeButtonSecondary {
-  min-height: auto;
-  justify-items: start;
-  align-content: start;
-  padding: 12px 14px;
-  text-align: left;
-}
-
-.modeButtonLabel {
-  font-weight: 700;
-  font-size: 0.98rem;
-}
-
-.modeButtonMeta,
 .sectionCount,
 .threadTimestamp,
 .logPanelMeta {
@@ -982,14 +792,35 @@ body::before {
 .threadCollection {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  gap: 12px;
+  gap: 8px;
   min-height: 0;
   overflow: hidden;
 }
 
+.threadCollection.hasSearch {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.threadCollection > .railSectionHeader {
+  grid-row: 1;
+}
+
+.threadCollection > .threadSearchRow {
+  grid-row: 2;
+}
+
+.threadCollection > .taskList {
+  grid-row: 2;
+}
+
+.threadCollection.hasSearch > .taskList {
+  grid-row: 3;
+}
+
 .sectionHeading {
   color: var(--muted);
-  font-size: 0.92rem;
+  font-size: 0.8rem;
+  font-weight: 600;
   min-width: 0;
   flex: 1 1 auto;
   flex-wrap: wrap;
@@ -998,12 +829,30 @@ body::before {
 .taskList {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-right: 4px;
+  padding-right: 2px;
+}
+
+.threadScopeButton {
+  min-height: 30px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.threadScopeButton:hover,
+.threadScopeButton.active {
+  border-color: var(--line);
+  color: var(--ink);
+  background: var(--bg-panel-soft);
 }
 
 .threadSearchRow {
@@ -1049,94 +898,103 @@ body::before {
 .threadCard {
   overflow: hidden;
   display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   flex: 0 0 auto;
   min-width: 0;
 }
 
 .threadCard.selected {
   border-color: rgba(184, 96, 216, 0.3);
-  background: linear-gradient(135deg, rgba(184, 96, 216, 0.08), rgba(184, 96, 216, 0.025));
+  background: rgba(166, 83, 196, 0.07);
   box-shadow: inset 3px 0 0 rgba(217, 139, 240, 0.68);
 }
 
 .threadCardMain {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
   width: 100%;
+  min-height: 42px;
   border: 0;
-  padding: 10px 10px 8px;
+  padding: 5px 4px 5px 10px;
   text-align: left;
   background: transparent;
   min-width: 0;
 }
 
 .threadTitle {
-  margin-top: 6px;
-  font-size: 0.84rem;
-  line-height: 1.32;
-  overflow-wrap: anywhere;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  -webkit-box-orient: vertical;
+  min-width: 0;
+  font-size: 0.78rem;
+  font-weight: 560;
+  line-height: 1.3;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.threadCardSummary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 8px;
-  color: var(--muted);
-  font-size: 0.68rem;
+.threadCard.unread .threadTitle {
+  font-weight: 700;
 }
 
 .threadTitle.expanded {
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
-}
-
-.threadTitle.clamped {
+  display: -webkit-box;
+  overflow: hidden;
+  white-space: normal;
+  -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   line-clamp: 2;
 }
 
-.threadCardMeta,
-.threadCardWorkspace,
-.metaList,
-.stackList {
-  display: grid;
-  gap: 8px;
-}
-
-.threadCardMeta {
-  grid-template-columns: minmax(0, 1fr) auto auto;
+.threadMetaSummary {
+  display: flex;
   align-items: center;
-  margin-top: 8px;
+  flex-wrap: wrap;
+  column-gap: 8px;
+  row-gap: 3px;
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: 0.64rem;
+  line-height: 1.35;
 }
 
-.threadCardMeta > :first-child {
-  min-width: 0;
-  overflow-wrap: anywhere;
+.threadMetaStatus {
+  font-weight: 750;
+  text-transform: capitalize;
+}
+
+.threadMetaStatus.success,
+.threadMetaStatus.running {
+  color: var(--success);
+}
+
+.threadMetaStatus.approval {
+  color: var(--accent-strong);
+}
+
+.threadMetaStatus.warning {
+  color: var(--warning);
+}
+
+.threadMetaStatus.danger {
+  color: var(--danger);
+}
+
+.threadMetaStatus.neutral {
+  color: var(--muted);
 }
 
 .threadCardWorkspace {
-  margin-top: 8px;
+  min-width: 0;
   color: var(--muted-soft);
-  font-size: 0.74rem;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  -webkit-box-orient: vertical;
+  font-size: 0.66rem;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .threadTag,
 .statusPill,
 .logMetaChip,
-.headerChipValue,
 .approvalCode {
   font-family: "IBM Plex Mono", monospace;
 }
@@ -1150,13 +1008,34 @@ body::before {
   max-width: 100%;
 }
 
-.threadTag.muted {
-  opacity: 0.8;
-}
-
 .threadTag.attention {
   color: var(--accent-strong);
   background: var(--accent-soft);
+}
+
+.threadUnreadSlot {
+  width: 8px;
+  height: 8px;
+}
+
+.threadUnreadSlot.unread {
+  border-radius: 50%;
+  color: var(--success);
+  background: currentColor;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.threadRowFlag {
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.58rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.threadRowFlag.attention {
+  color: var(--accent-strong);
 }
 
 .statusPill {
@@ -1192,44 +1071,109 @@ body::before {
 
 .threadActions {
   flex-wrap: wrap;
-  row-gap: 8px;
-  padding: 8px 10px 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  gap: 6px;
+  padding: 0 10px 8px;
   justify-content: flex-start;
 }
 
 .threadCardFooter {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
-  padding: 0 10px 8px;
+  padding: 5px 6px 5px 0;
   min-width: 0;
-  flex-wrap: wrap;
 }
 
 .threadEntryToggle {
-  width: auto;
-  min-width: 30px;
-  height: 30px;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
   flex: 0 0 auto;
-  gap: 6px;
-  padding: 0 8px;
-}
-
-.threadEntryToggleLabel {
-  color: var(--muted);
-  font-size: 0.68rem;
-  font-weight: 700;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
 }
 
 .threadCardDetails {
+  grid-column: 1 / -1;
   display: grid;
-  gap: 10px;
-  padding: 0 10px 8px;
+  gap: 5px;
+  padding: 7px 10px 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.threadCard .threadActions {
+  grid-column: 1 / -1;
 }
 
 .threadActions .miniButton {
-  padding: 8px 10px;
-  font-size: 0.78rem;
+  min-height: 30px;
+  padding: 5px 9px;
+  font-size: 0.7rem;
+}
+
+.threadPrimaryAction {
+  border-color: rgba(184, 96, 216, 0.24);
+  background: rgba(184, 96, 216, 0.1);
+}
+
+.threadMoreToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.threadMoreToggle .summaryToggleIcon {
+  width: 6px;
+  height: 6px;
+  border-width: 1.5px;
+}
+
+.threadMorePanel {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 7px;
+  padding: 8px 10px 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.threadTechnicalBar,
+.threadSecondaryActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.threadTechnicalBar {
+  justify-content: space-between;
+  min-width: 0;
+  color: var(--muted-soft);
+  font-size: 0.62rem;
+}
+
+.threadCopyButton {
+  min-height: 26px;
+  padding: 3px 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.025);
+  font-size: 0.62rem;
+}
+
+.threadSecondaryActions {
+  flex-wrap: wrap;
+}
+
+.threadSecondaryActions .miniButton {
+  min-height: 28px;
+  padding: 4px 8px;
+  font-size: 0.66rem;
+}
+
+.threadSecondaryActions .miniButtonDanger {
+  margin-left: auto;
 }
 
 .loadMoreButton,
@@ -1247,16 +1191,6 @@ body::before {
   cursor: pointer;
 }
 
-.railFooter {
-  display: grid;
-  gap: 10px;
-}
-
-.railFootnote {
-  color: var(--muted);
-  font-size: 0.72rem;
-}
-
 .mainPane {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
@@ -1269,44 +1203,45 @@ body::before {
   top: 0;
   z-index: 10;
   display: grid;
-  gap: 6px;
-  padding: 10px 16px 8px;
+  gap: 8px;
+  min-width: 0;
+  min-height: 56px;
+  padding: 8px 14px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(22, 24, 33, 0.96);
+  background: rgba(17, 19, 24, 0.97);
   backdrop-filter: none;
 }
 
 .mainHeader.reviewMode {
-  padding: 8px 14px 6px;
-  gap: 4px;
-}
-
-.mainHeader.collapsed {
-  gap: 0;
+  padding: 8px 14px;
 }
 
 .headerTitleGroup {
+  flex: 1 1 auto;
   min-width: 0;
   justify-content: flex-start;
 }
 
 .headerTitleCopy {
+  flex: 1 1 auto;
   min-width: 0;
 }
 
 .headerTopRow {
-  align-items: flex-start;
+  align-items: center;
+  min-height: 40px;
 }
 
 .headerActionColumn {
+  flex: 0 0 auto;
   display: grid;
   gap: 2px;
   justify-items: end;
-  align-content: start;
+  align-content: center;
 }
 
 .headerActions > * {
-  min-height: 40px;
+  min-height: 38px;
   flex: 0 0 auto;
 }
 
@@ -1319,19 +1254,21 @@ body::before {
 }
 
 .headerGoal {
-  margin-top: 4px;
-  font-size: clamp(1.16rem, 1.4vw, 1.4rem);
-  font-weight: 700;
+  margin: 0;
+  font-size: clamp(1rem, 1.2vw, 1.18rem);
+  font-weight: 650;
   letter-spacing: -0.02em;
   line-height: 1.15;
-  max-width: 26ch;
+  max-width: 36ch;
   overflow-wrap: anywhere;
 }
 
 .headerGoal.threadPrompt {
-  font-size: clamp(0.92rem, 0.96vw, 1rem);
-  line-height: 1.2;
-  max-width: min(68ch, 100%);
+  flex: 1 1 28ch;
+  min-width: 12ch;
+  font-size: clamp(0.86rem, 0.92vw, 0.96rem);
+  line-height: 1.25;
+  max-width: min(48ch, 100%);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   line-clamp: 2;
@@ -1339,58 +1276,45 @@ body::before {
   overflow: hidden;
 }
 
-.mainHeader.collapsed .headerGoal.threadPrompt {
-  display: none;
-}
-
-.headerMeta {
-  margin-top: 4px;
-  font-size: 0.84rem;
-  max-width: 56ch;
-}
-
-.headerChipRow {
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 8px;
-}
-
-.overviewHeaderChipRow {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.threadHeaderChipRow {
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-}
-
-.headerChip {
-  padding: 8px 11px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.04);
-  display: grid;
-  gap: 4px;
-}
-
-.threadHeaderMetaStrip {
+.headerTitleLine,
+.threadHeaderContext {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.threadHeaderContext {
+  flex: 0 1 auto;
+}
+
+.threadHeaderContext > * {
+  flex: 0 0 auto;
 }
 
 .headerMetaTag {
   display: inline-flex;
   align-items: center;
-  min-height: 28px;
-  padding: 0 10px;
-  border-radius: 999px;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.03);
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   line-height: 1;
   max-width: 100%;
   overflow-wrap: anywhere;
+}
+
+.headerWorkspaceTag {
+  flex: 0 1 28ch;
+  min-width: 0;
+  max-width: 28ch;
+  overflow: hidden;
+  overflow-wrap: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .headerMetaTag.attention {
@@ -1400,29 +1324,12 @@ body::before {
 }
 
 .headerChipLabel,
-.launchSummaryLabel,
 .workflowFieldLabel {
   font-family: "IBM Plex Mono", monospace;
   font-size: 0.76rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
-}
-
-.headerChipValue {
-  display: flex;
-  align-items: center;
-  min-height: 22px;
-  font-size: 0.76rem;
-  line-height: 1.25;
-  overflow-wrap: anywhere;
-}
-
-.headerPathValue {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .headerStatusPill {
@@ -1433,18 +1340,74 @@ body::before {
   line-height: 1;
 }
 
+.serverTargetButton {
+  display: inline-grid;
+  grid-template-columns: auto minmax(0, auto) auto;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.025);
+  text-align: left;
+}
+
+.serverTargetButton:hover {
+  border-color: var(--line-strong);
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.serverTargetButton.ready .statusDot {
+  color: var(--success);
+}
+
+.serverTargetButton.checking .statusDot {
+  color: var(--accent-strong);
+}
+
+.serverTargetButton.notReady .statusDot {
+  color: var(--warning);
+}
+
+.serverTargetButton.neutral .statusDot {
+  color: var(--muted);
+}
+
+.serverTargetName {
+  max-width: 18ch;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.serverTargetState {
+  color: inherit;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.66rem;
+}
+
 .mobileRailButton {
   display: none;
-  padding: 10px 14px;
-  border-radius: 999px;
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: var(--radius-small);
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.04);
 }
 
 .mainBody {
+  min-width: 0;
   min-height: 0;
   overflow: auto;
-  padding: 14px 16px 16px;
+  padding: 16px;
 }
 
 .mainBody.reviewMode {
@@ -1461,11 +1424,11 @@ body::before {
 .editorMetaItem,
 .editorCredential {
   display: grid;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
-  padding: 10px 12px;
+  padding: 8px 10px;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--radius-small);
   background: rgba(255, 255, 255, 0.03);
 }
 
@@ -1484,51 +1447,14 @@ body::before {
   color: var(--accent-strong);
 }
 
-.editorErrorBanner {
-  margin-top: 2px;
-}
-
-.editorPasswordButton {
-  min-width: 0;
-  max-width: min(100%, 390px);
-  min-height: 32px;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--ink);
-  font: inherit;
-  cursor: pointer;
-  transition: border-color 140ms ease, background 140ms ease;
-}
-
-.editorModalActions .editorPasswordButton,
-.editorDockActions .editorPasswordButton {
-  flex: 1 1 250px;
-}
-
-.editorPasswordButton:hover,
 .editorCredentialButton:hover {
   border-color: rgba(255, 255, 255, 0.2);
   background: rgba(255, 255, 255, 0.08);
 }
 
-.editorPasswordButton.copied,
 .editorCredentialButton.copied {
   border-color: rgba(110, 231, 183, 0.4);
   background: rgba(110, 231, 183, 0.1);
-}
-
-.editorPasswordValue {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.76rem;
 }
 
 .editorPasswordState {
@@ -1569,12 +1495,10 @@ body::before {
 
 .editorModalHeader {
   display: grid;
-  gap: 16px;
-  padding: 0 24px 18px;
+  gap: 10px;
+  padding: 0 16px 12px;
 }
 
-.editorModalActions,
-.editorDockActions,
 .editorToolbar {
   display: flex;
   gap: 8px;
@@ -1582,16 +1506,12 @@ body::before {
   align-items: center;
 }
 
-.editorModalActions .miniButton,
-.editorDockActions .miniButton,
 .editorToolbar .miniButton {
   min-height: 32px;
   padding: 6px 10px;
   font-size: 0.74rem;
 }
 
-.editorModalActions .statusPill,
-.editorDockActions .statusPill,
 .editorToolbar .statusPill {
   min-height: 22px;
   padding: 0 8px;
@@ -1602,18 +1522,15 @@ body::before {
   justify-content: flex-end;
 }
 
-.editorToolbar .editorPasswordButton {
-  flex: 1 1 230px;
-}
-
 .editorSessionDetails {
   display: grid;
-  gap: 10px;
+  gap: 8px;
+  padding-top: 2px;
 }
 
 .editorModalViewport {
   min-height: 0;
-  margin: 0 24px 24px;
+  margin: 0 16px 16px;
 }
 
 .editorFrameShell {
@@ -1621,7 +1538,7 @@ body::before {
   min-height: 0;
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 22px;
+  border-radius: var(--radius-small);
   background: rgba(10, 12, 18, 0.72);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
@@ -1690,12 +1607,12 @@ body::before {
   min-width: 420px;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  gap: 10px;
-  padding: 12px;
+  gap: 8px;
+  padding: 10px;
   border-left: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(18, 20, 30, 0.96);
+  background: var(--bg-elevated);
   box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.02);
-  z-index: 2;
+  z-index: 20;
 }
 
 body.editorDockResizing {
@@ -1734,7 +1651,7 @@ body.editorDockResizing {
 
 .editorDockHeader {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .editorDockTopBar {
@@ -1753,31 +1670,16 @@ body.editorDockResizing {
   min-width: 0;
 }
 
-.editorDockDetails {
-  display: grid;
-  gap: 8px;
-}
-
-.editorDockCredentials {
-  grid-template-columns: minmax(0, 1.25fr) minmax(180px, 0.75fr);
-}
-
 .editorDockTitle {
   margin-top: 0;
-  font-size: 0.98rem;
+  font-size: 0.9rem;
   font-weight: 700;
   letter-spacing: -0.02em;
 }
 
-.launchWorkspace,
 .scheduleWorkspace {
   display: grid;
   gap: 16px;
-}
-
-.launchWorkspace {
-  grid-template-columns: minmax(0, 1fr) 320px;
-  align-items: start;
 }
 
 .scheduleWorkspace {
@@ -1788,7 +1690,7 @@ body.editorDockResizing {
 .transcriptStack {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   min-height: 100%;
 }
 
@@ -1843,32 +1745,11 @@ body.editorDockResizing {
   min-height: 100%;
 }
 
-.threadEditorStackMeta {
-  display: grid;
-  gap: 8px;
-}
-
 .threadEditorStackViewport {
   min-height: min(66vh, 760px);
 }
 
-.sidePanelStack {
-  display: grid;
-  gap: 18px;
-  align-content: start;
-}
-
-.sidePanel {
-  padding: 18px;
-}
-
-.sidePanelValue {
-  color: var(--ink);
-  font-size: 0.82rem;
-}
-
-.metaRow,
-.readinessMiniItem {
+.metaRow {
   display: flex;
   justify-content: space-between;
   gap: 12px;
@@ -1886,41 +1767,12 @@ body.editorDockResizing {
   overflow-wrap: anywhere;
 }
 
-.readinessMiniList {
-  margin-top: 12px;
-}
-
-.readinessMiniItem {
-  padding: 10px 12px;
-  border-radius: 12px;
-  border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.03);
-  font-size: 0.84rem;
-}
-
-.miniApproval {
-  padding: 12px 14px;
-  border-radius: 14px;
-  border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.miniApprovalTitle {
-  font-weight: 600;
-}
-
-.miniApprovalMeta {
-  margin-top: 6px;
-  color: var(--muted);
-  font-size: 0.76rem;
-}
-
 .consolePanel,
 .modalCard {
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: var(--radius-panel);
-  background: rgba(24, 26, 36, 0.95);
+  background: var(--bg-panel);
   box-shadow: var(--shadow);
 }
 
@@ -1946,7 +1798,16 @@ body.editorDockResizing {
 .launchPanelBody,
 .workflowPanelBody {
   display: grid;
-  gap: 14px;
+  gap: 12px;
+}
+
+.launchPanel {
+  width: min(100%, 960px);
+  margin: 0 auto;
+}
+
+.launchPanelBody {
+  padding: 24px;
 }
 
 .workflowWorkspace {
@@ -1956,7 +1817,6 @@ body.editorDockResizing {
   align-items: start;
 }
 
-.launchHero,
 .workflowHero {
   display: grid;
   gap: 4px;
@@ -1986,26 +1846,66 @@ body.editorDockResizing {
 .workflowStep,
 .workflowSelect {
   display: grid;
-  gap: 12px;
-}
-
-.launchGrid {
-  display: grid;
-  grid-template-columns: 1.2fr 0.8fr;
   gap: 14px;
 }
 
-.launchPrimaryColumn,
-.launchSidePanel,
-.launchContextBlock {
+.launchMissionField {
+  gap: 7px;
+}
+
+.launchMissionInput {
+  min-height: 148px;
+  padding: 14px 15px;
+  font-size: 0.98rem;
+  line-height: 1.5;
+}
+
+.launchConfigStack {
+  overflow: hidden;
   display: grid;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: rgba(255, 255, 255, 0.018);
 }
 
-.launchPrimaryColumn {
+.launchSummaryRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 12px;
+  min-height: 54px;
+  padding: 8px 10px 8px 12px;
 }
 
-.launchSettingsDisclosure,
+.launchSummaryRow + .launchSummaryRow,
+.launchContextPanel + .launchSummaryRow,
+.launchSettingsGrid + .launchSummaryRow {
+  border-top: 1px solid var(--line);
+}
+
+.launchSummaryHeading {
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.launchSummaryText {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.launchContextPanel {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border-top: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.018);
+}
+
 .composerSettingsBar {
   display: flex;
   align-items: center;
@@ -2034,26 +1934,18 @@ body.editorDockResizing {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-3);
-  padding: var(--space-4);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-small);
+  padding: 14px;
+  border-top: 1px solid var(--line);
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  border-radius: 0;
   background: rgba(255, 255, 255, 0.025);
 }
 
-.launchSidePanel {
-  gap: 14px;
-  padding: 16px;
-  align-content: start;
-}
-
-.workflowSidePanel {
-  gap: 14px;
-  padding: 16px;
-  align-content: start;
-}
-
-.launchContextBlock {
-  gap: 8px;
+.composerSettingsGrid {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
 }
 
 .launchField,
@@ -2070,8 +1962,8 @@ body.editorDockResizing {
 .consoleTextarea {
   width: 100%;
   border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 12px 14px;
+  border-radius: var(--radius-small);
+  padding: 10px 12px;
   color: var(--ink);
   background: var(--bg-input);
   transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
@@ -2130,7 +2022,7 @@ body.editorDockResizing {
   width: 100%;
   padding: 12px 14px;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--radius-small);
   background: rgba(255, 255, 255, 0.03);
   text-align: left;
 }
@@ -2140,33 +2032,26 @@ body.editorDockResizing {
   background: rgba(255, 255, 255, 0.06);
 }
 
-.launchReadiness {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.launchSummaryValue {
-  font-size: 1.15rem;
-  font-weight: 700;
-}
-
-.launchSummaryMeta {
-  color: var(--muted);
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-}
-
 .launchAction,
 .workflowAction,
 .serverConnectButton {
-  min-width: 170px;
+  min-width: 140px;
   justify-self: end;
 }
 
 .launchFooter {
   align-items: center;
   gap: 10px;
+  min-height: 42px;
+}
+
+.taskList .emptyState {
+  padding: 10px 8px;
+  border: 0;
+  border-radius: var(--radius-small);
+  background: transparent;
+  font-size: 0.78rem;
+  text-align: left;
 }
 
 .logConsole {
@@ -2174,11 +2059,16 @@ body.editorDockResizing {
   height: 100%;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: rgba(18, 20, 30, 0.42);
 }
 
 .logConsoleHeader {
   display: grid;
-  gap: 8px;
+  gap: 0;
+  border-bottom: 1px solid var(--line);
+  background: rgba(14, 16, 24, 0.72);
 }
 
 .logConsoleMetaRow {
@@ -2186,26 +2076,50 @@ body.editorDockResizing {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 14px 0;
+  min-height: 48px;
+  padding: 7px 16px;
   flex-wrap: wrap;
 }
 
 .logConsoleMetaGroup {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
+}
+
+.logConsole .logPanelMeta {
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.logFilterButton {
+  padding: 3px 0;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  color: var(--muted);
+  background: transparent;
+  font-size: 0.72rem;
+  text-align: left;
+}
+
+.logFilterButton:hover {
+  border-bottom-color: rgba(255, 255, 255, 0.2);
+  color: var(--ink);
 }
 
 .logHeaderActions,
 .logViewControls {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 
 .logViewControls {
+  gap: 2px;
   padding: 3px;
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 999px;
@@ -2217,81 +2131,71 @@ body.editorDockResizing {
   background: transparent;
 }
 
-.logFilterNotice {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin: 0 14px;
-  padding: 7px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 12px;
-  color: var(--muted);
-  background: rgba(255, 255, 255, 0.02);
-  font-size: 0.76rem;
-}
-
 .logPanel {
   min-height: 0;
   overflow: auto;
+}
+
+.conversationMode .logPanel {
+  padding: 10px clamp(16px, 4vw, 48px) 24px;
+}
+
+.activityMode .logPanel {
   padding: 10px 14px 14px;
 }
 
-.logRunDetails {
-  margin: 0 14px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.02);
-  overflow: hidden;
-}
-
-.logRunDetailsSummary {
-  display: flex;
+.logRunDetailsToggle {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 7px 10px;
-  list-style: none;
-  cursor: pointer;
+  gap: 7px;
 }
 
-.logRunDetailsSummary::-webkit-details-marker {
-  display: none;
-}
-
-.logRunDetailsLabel {
-  color: var(--muted);
-  font-size: 0.74rem;
-  letter-spacing: 0.08em;
+.logRunDetailsToggle .summaryToggleIcon {
+  width: 6px;
+  height: 6px;
+  border-width: 1.5px;
 }
 
 .logRunDetailsBody {
-  display: grid;
-  gap: 6px;
-  padding: 0 12px 12px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px 18px;
+  margin: 0 16px 10px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-small);
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .logRunDetailsRow {
-  display: grid;
-  gap: 4px;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
 }
 
 .logRunDetailsKey {
   color: var(--muted);
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  font-size: 0.66rem;
+  font-weight: 700;
 }
 
 .logRunDetailsValue {
   color: #d8d2e9;
-  font-size: 0.78rem;
+  font-size: 0.68rem;
   overflow-wrap: anywhere;
 }
 
 .logStream {
   display: grid;
   gap: 8px;
+}
+
+.conversationMode .logStream {
+  width: min(100%, 76ch);
+  margin-inline: auto;
+  gap: 0;
 }
 
 .logStreamEnd {
@@ -2317,9 +2221,115 @@ body.editorDockResizing {
   align-items: start;
 }
 
+.conversationMode .logRow {
+  display: block;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.055);
+}
+
+.conversationMode .logRowAccent {
+  display: none;
+}
+
 .logTimestamp {
   color: #c5bada;
   font-size: 0.76rem;
+}
+
+.chatMessageHeader,
+.chatIdentity {
+  display: flex;
+  align-items: center;
+}
+
+.chatMessageHeader {
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.chatIdentity {
+  gap: 8px;
+  min-width: 0;
+}
+
+.chatRole {
+  color: var(--ink);
+  font-size: 0.76rem;
+  font-weight: 750;
+}
+
+.logRowChat.user .chatRole {
+  color: var(--muted);
+}
+
+.chatTimestamp {
+  color: var(--muted-soft);
+  font-size: 0.65rem;
+}
+
+.messageActions {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.messageActionsToggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--muted-soft);
+  background: transparent;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  list-style: none;
+  cursor: pointer;
+}
+
+.messageActionsToggle::-webkit-details-marker {
+  display: none;
+}
+
+.messageActionsToggle:hover,
+.messageActions[open] .messageActionsToggle {
+  border-color: var(--line);
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.messageActionsMenu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 4;
+  min-width: 148px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-soft);
+}
+
+.messageActionsItem {
+  width: 100%;
+  min-height: 30px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 0.7rem;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.messageActionsItem:hover {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .logRowAccent {
@@ -2389,21 +2399,40 @@ body.editorDockResizing {
 .logMessage {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  line-height: 1.46;
+  line-height: 1.58;
   color: #f1edf9;
-  max-width: 90ch;
+  max-width: 76ch;
 }
 
-.logChatMessage {
-  padding: 10px 12px;
-  border-radius: 12px;
+.logRowProgress {
+  padding-block: 10px;
+}
+
+.logRowProgress .chatRole {
+  color: var(--success);
+}
+
+.logProgressMessage {
+  color: var(--muted-soft);
+  font-size: 0.9rem;
+}
+
+.logProgressMessage .threadParagraph {
+  line-height: 1.5;
+}
+
+.conversationMode .logChatMessage,
+.conversationMode .logChatMessage.user {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.activityMode .logChatMessage {
+  padding: 8px 10px;
+  border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.logChatMessage.user {
   background: rgba(255, 255, 255, 0.035);
-  border-color: rgba(255, 255, 255, 0.09);
 }
 
 .threadRichMessage {
@@ -2446,8 +2475,8 @@ body.editorDockResizing {
   color: var(--muted);
   padding: 5px 8px;
   font-size: 0.68rem;
-  letter-spacing: 0.04em;
-  text-transform: lowercase;
+  letter-spacing: 0;
+  text-transform: none;
   transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
 }
 
@@ -2540,6 +2569,228 @@ body.editorDockResizing {
   gap: 5px;
 }
 
+.conversationWorkRow {
+  padding-block: 8px !important;
+}
+
+.logRowWorkSummary {
+  padding-block: 10px !important;
+}
+
+.visuallyHidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.logWorkSummary {
+  overflow: hidden;
+  border: 1px solid rgba(184, 96, 216, 0.16);
+  border-left-color: rgba(184, 96, 216, 0.5);
+  border-radius: 14px;
+  background: rgba(184, 96, 216, 0.035);
+}
+
+.logWorkSummary[open] {
+  background: rgba(184, 96, 216, 0.05);
+}
+
+.logWorkSummaryHeader {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 7px 10px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.logWorkSummaryHeader::-webkit-details-marker {
+  display: none;
+}
+
+.logWorkSummaryHeadline {
+  min-width: 0;
+  overflow: hidden;
+  color: #e7e1f1;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logWorkSummaryMeta {
+  color: var(--muted);
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
+.logWorkSummary[open] > .logWorkSummaryHeader .logToolChevron {
+  transform: rotate(225deg);
+}
+
+.logWorkSummaryBody {
+  display: grid;
+  gap: 12px;
+  padding: 4px 12px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.055);
+}
+
+.logWorkNarrativeList,
+.logWorkMilestones {
+  display: grid;
+  gap: 7px;
+  padding-top: 10px;
+}
+
+.logWorkNarrative,
+.logWorkMilestone,
+.logWorkApproval {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 9px;
+  color: var(--muted-soft);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.logWorkNarrative .threadRichMessage {
+  min-width: 0;
+}
+
+.logWorkMilestoneMarker {
+  width: 8px;
+  height: 8px;
+  margin-top: 0.38rem;
+  border: 2px solid rgba(255, 255, 255, 0.38);
+  border-radius: 50%;
+}
+
+.logWorkMilestone.completed .logWorkMilestoneMarker {
+  border-color: var(--success);
+  background: var(--success);
+}
+
+.logWorkMilestone.warning .logWorkMilestoneMarker {
+  border-color: var(--warning);
+  background: transparent;
+}
+
+.logWorkMilestoneState {
+  color: var(--warning);
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
+.logWorkBodyLabel {
+  color: var(--muted);
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.logWorkPlan {
+  display: grid;
+  gap: 4px;
+}
+
+.logWorkApproval {
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(108, 224, 180, 0.12);
+  background: rgba(108, 224, 180, 0.035);
+}
+
+.logWorkApproval.warning {
+  border-color: rgba(242, 185, 92, 0.18);
+  background: rgba(242, 185, 92, 0.04);
+}
+
+.logWorkToolsDisclosure {
+  border-top: 1px solid rgba(255, 255, 255, 0.055);
+  padding-top: 8px;
+}
+
+.logWorkToolsDisclosure > summary {
+  width: max-content;
+  max-width: 100%;
+  color: var(--muted-soft);
+  font-size: 0.76rem;
+  cursor: pointer;
+}
+
+.logWorkToolDetails {
+  display: grid;
+  gap: 8px;
+  margin-top: 9px;
+}
+
+.conversationWorkRow .logToolGroup {
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.logWorkState {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.66rem;
+  white-space: nowrap;
+}
+
+.logWorkState.warning {
+  color: var(--warning);
+}
+
+.conversationMode .conversationWorkRow .logTimestamp,
+.conversationMode .logRowPlan .logTimestamp {
+  display: none;
+}
+
+.logPlanDisclosure {
+  border-left: 2px solid rgba(184, 96, 216, 0.4);
+  padding-left: 12px;
+}
+
+.logPlanDisclosure summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted-soft);
+  cursor: pointer;
+  list-style: none;
+}
+
+.logPlanDisclosure summary::-webkit-details-marker {
+  display: none;
+}
+
+.logPlanList {
+  display: grid;
+  gap: 5px;
+  margin: 10px 0 0;
+  padding-left: 1.25rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.logPlanList .in_progress {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.logPlanList .completed {
+  color: var(--success);
+}
+
 .logToolGroup {
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 999px;
@@ -2595,36 +2846,6 @@ body.editorDockResizing {
   border-color: rgba(108, 224, 180, 0.12);
 }
 
-.logToolEntry {
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.025);
-  overflow: hidden;
-}
-
-.logToolEntry.result {
-  background: rgba(108, 224, 180, 0.035);
-  border-color: rgba(108, 224, 180, 0.12);
-}
-
-.logToolEntry.call {
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.logToolSummary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
-  list-style: none;
-  cursor: pointer;
-}
-
-.logToolSummary::-webkit-details-marker {
-  display: none;
-}
-
 .logToolLabel {
   min-width: 0;
   overflow-wrap: anywhere;
@@ -2643,22 +2864,12 @@ body.editorDockResizing {
   transition: transform 160ms ease;
 }
 
-.logToolEntry[open] .logToolChevron {
-  transform: rotate(225deg);
-}
-
 .logToolGroup[open] .logToolChevron {
   transform: rotate(225deg);
 }
 
 .logRunDetails[open] .logToolChevron {
   transform: rotate(225deg);
-}
-
-.logToolBody {
-  display: grid;
-  gap: 8px;
-  padding: 0 12px 12px;
 }
 
 .logCodeBlock {
@@ -2684,8 +2895,8 @@ body.editorDockResizing {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  min-height: 36px;
-  padding: 0 12px;
+  min-height: 30px;
+  padding: 0 10px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.03);
@@ -2693,7 +2904,7 @@ body.editorDockResizing {
 }
 
 .logProgressLabel {
-  font-size: 0.9rem;
+  font-size: 0.78rem;
 }
 
 .logProgressDots {
@@ -2733,9 +2944,9 @@ body.editorDockResizing {
 }
 
 .approvalCard {
-  padding: 18px;
+  padding: 14px 16px;
   border-color: rgba(184, 96, 216, 0.24);
-  background: rgba(37, 31, 45, 0.8);
+  background: rgba(37, 31, 45, 0.72);
   box-shadow: none;
 }
 
@@ -2746,19 +2957,51 @@ body.editorDockResizing {
 }
 
 .approvalTitle {
-  margin-top: 8px;
+  margin-top: 4px;
+  font-size: 1.08rem;
 }
 
 .approvalDesc {
-  font-size: 0.96rem;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 0.86rem;
   line-height: 1.45;
+}
+
+.approvalHeading {
+  min-width: 0;
+  max-width: 78ch;
+}
+
+.approvalDisclosure {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.approvalDisclosureSummary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  cursor: pointer;
+}
+
+.approvalDisclosureSummary::marker {
+  color: var(--accent-strong);
+}
+
+.approvalDisclosure[open] .approvalDisclosureSummary {
+  margin-bottom: 8px;
 }
 
 .approvalDetails,
 .workflowDebugPre {
   margin: 0;
-  padding: 16px;
-  border-radius: 16px;
+  padding: 10px 12px;
+  border-radius: var(--radius-small);
   border: 1px solid var(--line);
   background: rgba(0, 0, 0, 0.18);
   white-space: pre-wrap;
@@ -2768,12 +3011,14 @@ body.editorDockResizing {
 
 .approvalActions {
   display: flex;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: wrap;
+  flex: 0 0 auto;
 }
 
 .threadComposer {
-  padding: 12px 16px 14px;
+  min-width: 0;
+  padding: 8px 16px 12px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 0;
   background: rgba(17, 18, 26, 0.98);
@@ -2781,18 +3026,44 @@ body.editorDockResizing {
 }
 
 .composerBlockedState {
-  display: grid;
+  display: flex;
+  align-items: center;
   gap: 10px;
+  min-height: 48px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.composerBlockedLabel {
+  flex: 0 0 auto;
+  color: var(--accent-strong);
+  font-size: 0.78rem;
+  font-weight: 700;
 }
 
 .composerBlockedMessage {
   color: var(--muted);
+  font-size: 0.8rem;
   line-height: 1.45;
 }
 
 .composerSettingsBar {
-  margin-top: 10px;
-  padding: 8px 10px 8px 12px;
+  padding: 4px 0 6px;
+  border: 0;
+  background: transparent;
+}
+
+.composerSettingsCopy {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.composerSettingsLabel {
+  color: var(--ink);
+  font-size: 0.76rem;
+  font-weight: 650;
 }
 
 .composerSettingsSummary {
@@ -2804,8 +3075,8 @@ body.editorDockResizing {
 }
 
 .composerSettingsGrid {
-  margin-top: 10px;
-  padding: 12px;
+  margin: 0 0 8px;
+  padding: 10px;
 }
 
 .composerHiddenInput {
@@ -2821,26 +3092,19 @@ body.editorDockResizing {
 }
 
 .composerButtonStack {
-  display: grid;
-  gap: 10px;
-}
-
-.composerContext {
-  color: var(--muted);
-  font-size: 0.78rem;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
+  display: flex;
+  gap: 8px;
 }
 
 .composerTextarea {
   width: 100%;
   border: 1px solid var(--line);
-  border-radius: 18px;
-  padding: 14px 16px;
+  border-radius: var(--radius-small);
+  padding: 10px 12px;
   color: var(--ink);
   background: rgba(255, 255, 255, 0.05);
   resize: vertical;
-  min-height: 72px;
+  min-height: 58px;
 }
 
 .composerTextarea:focus {
@@ -2854,7 +3118,7 @@ body.editorDockResizing {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
   align-items: stretch;
-  margin-top: 8px;
+  margin-top: 0;
 }
 
 .composerAttachmentList {
@@ -2926,27 +3190,144 @@ body.editorDockResizing {
 
 .workflowStack {
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
 .scheduleStack {
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
-.automationOverview {
+.collectionHeader {
   display: flex;
-  align-items: end;
+  align-items: center;
   justify-content: space-between;
-  gap: 20px;
-  padding: 18px 20px;
+  gap: 16px;
+  min-height: 72px;
+  padding: 10px 14px;
   border: 1px solid var(--line);
-  border-radius: var(--radius-panel);
-  background: linear-gradient(135deg, rgba(184, 96, 216, 0.08), rgba(24, 26, 36, 0.9) 55%);
+  border-radius: var(--radius-card);
+  background: rgba(18, 20, 30, 0.72);
 }
 
-.automationOverview .workflowHero {
+.collectionHeading {
+  display: grid;
+  gap: 2px;
   min-width: 0;
+}
+
+.collectionTitle,
+.collectionPanelTitle {
+  color: var(--ink);
+  font-size: 1.08rem;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+}
+
+.collectionDescription {
+  max-width: 72ch;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.collectionHeaderTools,
+.collectionActions,
+.collectionStats,
+.collectionContextBar,
+.collectionPanelHeader,
+.scheduleRowControls {
+  display: flex;
+  align-items: center;
+}
+
+.collectionHeaderTools {
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.collectionActions,
+.collectionStats {
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.collectionStat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  min-height: 28px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.collectionStat strong {
+  color: var(--ink);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.8rem;
+}
+
+.collectionStat.attention {
+  border-color: rgba(255, 127, 158, 0.28);
+  color: #ffb7c5;
+}
+
+.collectionPolicy {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.collectionContextBar {
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.018);
+  font-size: 0.7rem;
+}
+
+.collectionWorkspace.workflowWorkspace {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.scheduleWorkspace.collectionOnly {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.scheduleWorkspace.editorOpen {
+  grid-template-columns: minmax(380px, 0.8fr) minmax(0, 1.2fr);
+}
+
+.scheduleWorkspace.editorOpen .scheduleEditor {
+  order: 2;
+}
+
+.scheduleWorkspace.editorOpen .scheduleLedger {
+  order: 1;
+}
+
+.taskLedgerWorkspace.editorOpen {
+  grid-template-columns: minmax(0, 820px);
+  justify-content: end;
+}
+
+.collectionPanelHeader {
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 34px;
+}
+
+.collectionRow {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  background: rgba(255, 255, 255, 0.018);
+  box-shadow: none;
 }
 
 .automationSummaryGrid {
@@ -2980,11 +3361,6 @@ body.editorDockResizing {
   background: rgba(255, 127, 158, 0.06);
 }
 
-.workflowIntro {
-  display: grid;
-  gap: 10px;
-}
-
 .workflowList,
 .scheduleList {
   display: grid;
@@ -2993,12 +3369,26 @@ body.editorDockResizing {
 
 .workflowCard {
   width: 100%;
-  padding: 12px 14px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 3px 12px;
+  padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.02);
   text-align: left;
   transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.workflowCard .workflowCardHeader {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: start;
+}
+
+.workflowCard .workflowName,
+.workflowCard .workflowDesc {
+  grid-column: 1;
 }
 
 .workflowCard:hover {
@@ -3017,27 +3407,24 @@ body.editorDockResizing {
 }
 
 .workflowCardFooter {
+  grid-column: 1 / -1;
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  margin-top: 10px;
+  margin-top: 5px;
   color: var(--muted);
   font-size: 0.72rem;
   overflow-wrap: anywhere;
 }
 
 .workflowName {
-  font-size: 1.04rem;
+  font-size: 0.94rem;
+  font-weight: 700;
 }
 
 .workflowToolbar,
 .workflowActionBar {
   flex-wrap: wrap;
-}
-
-.workflowToolbarCompact {
-  align-items: center;
-  gap: 10px;
 }
 
 .workflowStepHeader {
@@ -3079,9 +3466,9 @@ body.editorDockResizing {
 }
 
 .scheduleRow {
-  padding: 12px 14px;
+  padding: 10px 12px;
   display: grid;
-  gap: 8px;
+  gap: 7px;
 }
 
 .taskLedgerWorkspace {
@@ -3089,12 +3476,78 @@ body.editorDockResizing {
 }
 
 .taskLedgerStack {
-  gap: 14px;
+  gap: 10px;
 }
 
-.taskLedgerOverviewActions {
+.taskLedgerComposer {
+  display: grid;
+  gap: 12px;
+  width: min(100%, 860px);
+  margin-inline: auto;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: rgba(18, 20, 30, 0.74);
+}
+
+.taskLedgerComposerHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.taskLedgerComposerHeader h3 {
+  margin: 2px 0 0;
+  color: var(--ink);
+  font-size: 1.02rem;
+}
+
+.taskLedgerComposerHeader p {
+  margin: 3px 0 0;
+  max-width: 60ch;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.taskLedgerComposerForm {
+  display: grid;
+  gap: 10px;
+}
+
+.taskLedgerRequestInput {
+  min-height: 92px;
+}
+
+.taskLedgerComposerControls {
+  display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.taskLedgerAdvancedFields {
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.taskLedgerViewControls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.taskLedgerViewControls .threadToggleButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-color: transparent;
+  background: transparent;
 }
 
 .taskLedgerAdvancedFields,
@@ -3103,13 +3556,9 @@ body.editorDockResizing {
   gap: 14px;
 }
 
-.taskLedgerSidePanel {
-  position: sticky;
-  top: 0;
-}
-
 .taskLedgerRow {
-  gap: 12px;
+  gap: 7px;
+  padding: 10px 12px;
   overflow: hidden;
 }
 
@@ -3123,13 +3572,111 @@ body.editorDockResizing {
 
 .taskLedgerRowTitleBlock {
   display: grid;
-  gap: 6px;
-  min-width: min(100%, 520px);
+  gap: 4px;
+  flex: 1 1 480px;
+  min-width: 0;
+}
+
+.taskLedgerRowIdentity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.taskLedgerRowIdentity .workflowName {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.9rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .taskLedgerPromptPreview {
-  white-space: pre-wrap;
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.74rem;
+  line-height: 1.4;
   overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+}
+
+.taskLedgerRowMeta {
+  display: flex;
+  align-items: center;
+  gap: 6px 12px;
+  flex-wrap: wrap;
+  color: var(--muted-soft);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.63rem;
+}
+
+.taskLedgerRowMeta span + span::before {
+  content: "·";
+  margin-right: 12px;
+  color: var(--muted);
+}
+
+.taskLedgerStageLine {
+  display: grid;
+  grid-template-columns: minmax(88px, auto) minmax(80px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 0.65rem;
+}
+
+.taskLedgerStageLabel {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.taskLedgerStageTrack {
+  position: relative;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.taskLedgerStageTrack > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+.taskLedgerStageLine time {
+  font-family: "IBM Plex Mono", monospace;
+  white-space: nowrap;
+}
+
+.taskLedgerRowSummary {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.taskLedgerRowSummary.danger {
+  color: #ffb7c5;
+}
+
+.taskLedgerPrimaryRowAction {
+  color: var(--ink);
+  border-color: rgba(184, 96, 216, 0.28);
+  background: rgba(184, 96, 216, 0.1);
+}
+
+.taskLedgerDetailActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .taskLedgerDetailBlock {
@@ -3264,7 +3811,7 @@ body.editorDockResizing {
 
 .taskLedgerDetails {
   border-top: 1px solid var(--line);
-  padding-top: 10px;
+  padding-top: 7px;
 }
 
 .taskLedgerDetails summary {
@@ -3276,7 +3823,7 @@ body.editorDockResizing {
 }
 
 .taskLedgerDetailsBody {
-  padding-top: 14px;
+  padding-top: 10px;
 }
 
 .taskLedgerHistory {
@@ -3301,19 +3848,19 @@ body.editorDockResizing {
 .scheduleMetaInline {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
 }
 
 .scheduleMetaChip {
   display: inline-flex;
   align-items: center;
-  min-height: 28px;
-  padding: 0 10px;
-  border-radius: 999px;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: var(--radius-small);
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.03);
   color: var(--muted);
-  font-size: 0.76rem;
+  font-size: 0.7rem;
 }
 
 .scheduleMetaChip.success {
@@ -3402,8 +3949,21 @@ body.editorDockResizing {
 }
 
 .scheduleActionsCompact .miniButton {
-  padding: 8px 10px;
-  font-size: 0.78rem;
+  min-height: 30px;
+  padding: 5px 8px;
+  font-size: 0.72rem;
+}
+
+.scheduleRowControls {
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.scheduleLedger > .panelBody,
+.scheduleEditor > .panelBody,
+.workflowConsole > .panelBody {
+  padding: 14px;
 }
 
 .simpleLedgerPage {
@@ -3884,35 +4444,52 @@ body.editorDockResizing {
 }
 
 @media (max-width: 1260px) {
+  .mainHeader.threadMode .headerWorkspaceTag {
+    display: none;
+  }
+
+  .mainHeader.threadMode .serverTargetState {
+    display: none;
+  }
+
+  .mainHeader.threadMode .serverTargetName {
+    max-width: 10ch;
+  }
+
   .serverPickerShell {
     grid-template-columns: 1fr;
   }
 
-  .launchWorkspace,
   .workflowWorkspace,
   .scheduleWorkspace {
     grid-template-columns: 1fr;
   }
 
-  .sidePanelStack {
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  .scheduleWorkspace.editorOpen .scheduleEditor {
+    order: 1;
   }
 
-  .overviewHeaderChipRow {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .scheduleWorkspace.editorOpen .scheduleLedger {
+    order: 2;
   }
+
 }
 
 @media (max-width: 980px) {
-  .automationOverview {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
   .automationSummaryGrid {
     width: 100%;
     min-width: 0;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .collectionHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .collectionHeaderTools {
+    justify-content: space-between;
+    width: 100%;
   }
 
   .serverPickerShellPage {
@@ -3925,20 +4502,20 @@ body.editorDockResizing {
   }
 
   .layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .layout.railCollapsed {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .leftRail {
     position: fixed;
     inset: 0 auto 0 0;
-    width: min(360px, 92vw);
+    width: min(288px, 92vw);
     transform: translateX(-102%);
-    transition: transform 200ms ease;
-    padding: 20px 18px 18px;
+    transition: none;
+    padding: 14px 12px 12px;
   }
 
   .leftRail.open {
@@ -3946,8 +4523,8 @@ body.editorDockResizing {
   }
 
   .layout.railCollapsed .leftRail {
-    width: min(360px, 92vw);
-    background: rgba(24, 26, 35, 0.96);
+    width: min(288px, 92vw);
+    background: var(--bg-elevated);
   }
 
   .layout.railCollapsed .leftRailContent {
@@ -3970,12 +4547,11 @@ body.editorDockResizing {
   .mainHeader,
   .mainBody,
   .threadComposer {
-    padding-left: 18px;
-    padding-right: 18px;
+    padding-left: 14px;
+    padding-right: 14px;
   }
 
   .leftRailContent,
-  .serverSummary,
   .railSection,
   .threadCollection,
   .taskList,
@@ -3985,8 +4561,6 @@ body.editorDockResizing {
     min-width: 0;
   }
 
-  .connectionRow,
-  .serverSummaryActions,
   .railSectionHeader,
   .threadCardTop,
   .threadStatusRow {
@@ -3994,7 +4568,6 @@ body.editorDockResizing {
     flex-wrap: wrap;
   }
 
-  .serverSummaryActions,
   .threadStatusRow {
     justify-content: flex-start;
   }
@@ -4012,12 +4585,9 @@ body.editorDockResizing {
     overflow-wrap: anywhere;
   }
 
-  .railPrimaryActions,
   .scheduleTopGrid,
-  .launchGrid,
   .workflowGrid,
   .serverForm,
-  .scheduleMetaGrid,
   .taskLedgerMetaGrid {
     grid-template-columns: 1fr;
   }
@@ -4050,7 +4620,11 @@ body.editorDockResizing {
   }
 
   .mainHeader {
-    gap: 12px;
+    gap: 8px;
+  }
+
+  .launchPanelBody {
+    padding: 16px 0;
   }
 
   .threadMobileSwitcher {
@@ -4066,31 +4640,36 @@ body.editorDockResizing {
     grid-template-columns: 1fr;
   }
 
-  .launchSettingsDisclosure,
-  .composerSettingsBar {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
   .launchSettingsGrid,
   .composerSettingsGrid {
     grid-template-columns: 1fr;
   }
 
-  .composerButtonStack,
   .composerAttachmentCard {
     grid-template-columns: 1fr;
   }
 
-  .overviewHeaderChipRow,
-  .threadHeaderChipRow {
-    grid-template-columns: 1fr;
+  .composerButtonStack {
+    justify-content: flex-end;
+  }
+
+  .composerSettingsLabel {
+    display: none;
+  }
+
+  .composerSettingsSummary {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .composerButtonStack .composerButton {
+    flex: 1 1 0;
   }
 
   .headerTopRow,
   .headerActions,
   .approvalHeader,
-  .approvalFooter,
   .launchFooter,
   .workflowToolbar,
   .panelChrome,
@@ -4101,27 +4680,166 @@ body.editorDockResizing {
     flex-direction: column;
   }
 
-  .logConsoleMetaRow,
-  .logHeaderActions,
-  .logFilterNotice {
+  .taskLedgerComposerHeader {
     align-items: flex-start;
   }
 
-  .logHeaderActions {
+  .taskLedgerComposerControls {
+    align-items: stretch;
+  }
+
+  .taskLedgerComposerControls .primaryButton {
+    flex: 1 1 auto;
+  }
+
+  .taskLedgerRowHeader .scheduleActions {
     width: 100%;
+  }
+
+  .taskLedgerPrimaryRowAction {
+    width: 100%;
+  }
+
+  .collectionHeader {
+    padding: 10px 12px;
+  }
+
+  .collectionDescription {
+    display: none;
+  }
+
+  .collectionHeaderTools,
+  .collectionActions,
+  .collectionContextBar,
+  .collectionPanelHeader,
+  .scheduleRowControls {
+    align-items: flex-start;
+    width: 100%;
+  }
+
+  .scheduleRowControls {
+    justify-content: flex-start;
+  }
+
+  .collectionHeaderTools,
+  .collectionContextBar,
+  .collectionPanelHeader {
+    flex-direction: column;
+  }
+
+  .collectionActions .primaryButton,
+  .collectionActions .secondaryButton {
+    min-height: 34px;
+    padding: 7px 10px;
+  }
+
+  .collectionActions .primaryButton {
+    order: -1;
+  }
+
+  .workflowCardFooter {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .headerTopRow {
+    align-items: center;
+    flex-direction: row;
+  }
+
+  .mainHeader.threadMode .headerTopRow {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .mainHeader.threadMode .headerTitleGroup {
+    flex: 1 1 220px;
+  }
+
+  .mainHeader.threadMode .headerActionColumn {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  .mainHeader.threadMode .headerActions {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .headerActions {
+    align-items: center;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    width: auto;
+  }
+
+  .logConsoleMetaRow,
+  .logHeaderActions {
+    align-items: flex-start;
+  }
+
+  .logConsoleMetaRow {
+    align-items: stretch;
+  }
+
+  .logConsoleMetaGroup {
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .logHeaderActions {
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .logRunDetailsBody {
+    align-items: flex-start;
+    flex-direction: column;
+    margin: 0 12px 8px;
+  }
+
+  .conversationMode .logPanel {
+    padding: 6px 14px 18px;
+  }
+
+  .logWorkSummaryHeader {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: start;
+  }
+
+  .logWorkSummaryHeadline {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .logWorkSummaryMeta {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .logWorkSummaryHeader .logToolChevron {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+    margin-top: 4px;
   }
 
   .headerActionColumn {
-    justify-items: start;
-    width: 100%;
+    justify-items: end;
+    width: auto;
   }
 
-  .editorDockCredentials {
-    grid-template-columns: 1fr;
+  .threadEditorStackHeader {
+    align-items: stretch;
+    flex-direction: column;
   }
 
-  .threadHeaderMetaStrip {
+  .threadEditorStackHeader .editorToolbar {
+    justify-content: flex-start;
     width: 100%;
+    min-width: 0;
   }
 
   .threadCardMeta {
@@ -4137,7 +4855,6 @@ body.editorDockResizing {
   }
 
   .simpleLedgerFilters,
-  .taskLedgerFilters,
   .simpleLedgerSummary,
   .serverDiagnosticsSummary,
   .serverCapabilityGrid,
@@ -4153,7 +4870,11 @@ body.editorDockResizing {
   }
 
   .taskLedgerSearchField {
-    grid-column: auto;
+    grid-column: 1 / -1;
+  }
+
+  .taskLedgerFilters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .taskLedgerClearFilters,
@@ -4190,17 +4911,76 @@ body.editorDockResizing {
 
   .threadActions,
   .approvalActions,
-  .headerActions,
   .workflowActionBar {
     width: 100%;
+  }
+
+  .launchAction {
+    width: 100%;
+    justify-self: stretch;
+  }
+
+  .launchSummaryRow {
+    align-items: center;
   }
 
   .editorDockTopBar {
     flex-direction: column;
   }
 
-  .editorDockActions {
+}
+
+@media (max-width: 520px) {
+  .taskLedgerComposerHeader,
+  .taskLedgerComposerControls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .taskLedgerComposerHeader .secondaryButton,
+  .taskLedgerComposerControls > * {
     width: 100%;
+  }
+
+  .taskLedgerStageLine {
+    grid-template-columns: auto minmax(56px, 1fr);
+  }
+
+  .taskLedgerStageLine time {
+    grid-column: 1 / -1;
+  }
+
+  .stateNotice {
+    flex-wrap: wrap;
+  }
+
+  .stateNoticeAction {
+    flex: 1 0 calc(100% - 21px);
+    margin-left: 21px;
+  }
+
+  .serverTargetState,
+  .threadHeaderContext {
+    display: none;
+  }
+
+  .serverTargetName {
+    max-width: 12ch;
+  }
+
+  .headerGoal {
+    max-width: 15ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .headerGoal.threadPrompt {
+    display: block;
+    max-width: 15ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 

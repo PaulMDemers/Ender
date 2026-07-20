@@ -1,6 +1,6 @@
 # Ender Visual and Screenshot Plan
 
-This document defines the visual proof and screenshot requirements for the rebuilt Ender site.
+This document defines the visual proof and screenshot requirements for the rebuilt Ender site. Maintained product images are copied from deterministic Playwright baselines so documentation cannot silently drift away from the tested interface.
 
 ---
 
@@ -20,15 +20,32 @@ The site should feel grounded in the real product. Visuals should prove that End
 
 ---
 
+## Maintained asset manifest
+
+Run `npm run docs:screenshots:sync` after an intentional visual-baseline update. Do not edit the documentation copies independently.
+
+| Documentation asset | Tested source baseline | Current use |
+| --- | --- | --- |
+| `console-overview.png` | `app-shell-chromium-darwin.png` | Documentation overview |
+| `new-task-full.png` | `app-shell-chromium-darwin.png` | README launch surface |
+| `hero-thread-view.png` | `thread-transcript-chromium-darwin.png` | README/product thread view |
+| `approval-thread-view.png` | `approval-card-chromium-darwin.png` | Approval proof |
+| `workflow-list.png` | `workflow-list-chromium-darwin.png` | Workflow catalog |
+| `workflow-step-view.png` | `workflow-form-state-chromium-darwin.png` | Guided workflow input |
+| `schedule-manager-view.png` | `schedule-editor-open-chromium-darwin.png` | Schedule editor |
+| `schedule-ledger-detail.png` | `schedule-panel-chromium-darwin.png` | Schedule collection/detail |
+
+The previous JPEG set showed the pre-redesign shell and has been retired. PNG preserves the exact browser baseline without a second lossy conversion.
+
 ## Required Screenshot Types
 
 ### 1. Main task thread view
 
 What to show:
-- transcript area
-- live logs
+- Conversation transcript
+- compact live work summary
 - task context
-- visible operational activity
+- recoverable tool detail, or the All activity view where detailed events are the subject
 
 Why it matters:
 - This is the clearest proof that Ender is an operator console for live work.
@@ -142,5 +159,6 @@ Examples:
 
 ## Notes for the Implementer
 
-- If screenshots need to be refreshed, prioritize real product states over polished mockups.
-- If a screenshot must be staged, keep it realistic and consistent with the actual UI.
+- Refresh the deterministic Playwright baseline first, inspect it, then run `npm run docs:screenshots:sync`.
+- Prioritize real product states over polished mockups.
+- If a state must be staged, keep it realistic and consistent with the actual UI contract.

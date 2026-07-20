@@ -38,7 +38,7 @@ class TaskExecutionRunner {
 
     throwIfAborted(signal);
     return runTaskImpl({
-      goal: String(task.goal || ""),
+      goal: String(task.executionPrompt || task.goal || ""),
       thread,
       config: runConfig,
       onLog,

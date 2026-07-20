@@ -17,7 +17,7 @@ The shell exposes stable landmarks:
 
 `ui/src/navigation.js` is the single ordered definition of top-level destinations:
 
-1. New thread
+1. New task
 2. Workflows
 3. Schedules
 4. Task ledger
@@ -123,10 +123,10 @@ Thread cards expose the selected item through `aria-current`, retain status and 
 
 `LogViewer` provides two reversible presentation modes:
 
-- Conversation, the default, shows chat messages, grouped tool activity, approvals, warnings, errors, successes, and final assistant responses.
-- All activity shows the complete post-normalization runtime event stream, including routine system events.
+- Conversation, the default, shows human and assistant messages plus one compact live work summary per user turn. The summary consolidates model-authored progress and tool activity, keeps approvals and actionable failures visible, and exposes recoverable tool detail without flooding the transcript.
+- All activity shows the complete provider-neutral event stream, including model requests, paired tool calls and results, diagnostics, and timing.
 
-Conversation mode reports how many routine entries are hidden and provides a direct Show all action. This is a presentation filter only: source entries, timestamps, raw payload toggles, tool details, run metadata, and automatic scroll inputs remain intact. Long prose wraps within a readable measure, while code and tool payloads retain their own scroll containers.
+Conversation mode reports how many detailed activity entries are available and provides a direct Show all action. Internal runtime phases such as model invocation are never represented as assistant speech. This is a presentation reduction only: source entries, timestamps, raw payloads, tool details, run metadata, and automatic scroll inputs remain intact. Long prose wraps within a readable measure, while code and tool payloads retain their own scroll containers.
 
 ## State and recovery feedback
 

@@ -318,6 +318,24 @@ function getCurrentStep(session) {
   const stage = session.state.stage || "project";
 
   if (stage === "project") {
+    if (!(session.state.projects || []).length) {
+      return {
+        id: "project",
+        type: "form",
+        title: "Enter Jira project",
+        description: "No projects were returned by Jira discovery. Enter a project key to continue directly.",
+        submitLabel: "Load boards",
+        fields: [
+          {
+            id: "projectKey",
+            label: "Jira project key",
+            type: "text",
+            required: true,
+            placeholder: "ENG"
+          }
+        ]
+      };
+    }
     return {
       id: "project",
       type: "select",
@@ -332,6 +350,24 @@ function getCurrentStep(session) {
   }
 
   if (stage === "board") {
+    if (!(session.state.boards || []).length) {
+      return {
+        id: "board",
+        type: "form",
+        title: "Enter Jira board",
+        description: "No boards were returned for this project. Enter a board ID to continue directly.",
+        submitLabel: "Load issues",
+        fields: [
+          {
+            id: "boardId",
+            label: "Jira board ID",
+            type: "text",
+            required: true,
+            placeholder: "42"
+          }
+        ]
+      };
+    }
     return {
       id: "board",
       type: "select",
@@ -346,6 +382,24 @@ function getCurrentStep(session) {
   }
 
   if (stage === "issue") {
+    if (!(session.state.issues || []).length) {
+      return {
+        id: "issue",
+        type: "form",
+        title: "Enter Jira issue",
+        description: "No issues were returned for this board and filter. Enter an issue key to continue directly.",
+        submitLabel: "Load issue",
+        fields: [
+          {
+            id: "issueKey",
+            label: "Jira issue key",
+            type: "text",
+            required: true,
+            placeholder: "ENG-123"
+          }
+        ]
+      };
+    }
     return {
       id: "issue",
       type: "select",
@@ -454,7 +508,9 @@ async function advance(session, input, { config, taskManager, cloneRepositoryImp
 
   if (stage === "project") {
     const projectKey = String(input.value || input.projectKey || "").trim();
-    const selected = (session.state.projects || []).find((project) => String(project.key || project.id) === projectKey);
+    const projects = session.state.projects || [];
+    const selected = projects.find((project) => String(project.key || project.id) === projectKey)
+      || (!projects.length && projectKey ? { id: projectKey, key: projectKey, name: projectKey } : null);
     if (!selected) {
       return { ok: false, error: "Select a Jira project to continue" };
     }
@@ -488,7 +544,9 @@ async function advance(session, input, { config, taskManager, cloneRepositoryImp
 
   if (stage === "board") {
     const boardId = String(input.value || input.boardId || "").trim();
-    const selected = (session.state.boards || []).find((board) => String(board.id) === boardId);
+    const boards = session.state.boards || [];
+    const selected = boards.find((board) => String(board.id) === boardId)
+      || (!boards.length && boardId ? { id: boardId, name: `Board ${boardId}`, type: "manual" } : null);
     if (!selected) {
       return { ok: false, error: "Select a Jira board to continue" };
     }
@@ -536,7 +594,9 @@ async function advance(session, input, { config, taskManager, cloneRepositoryImp
     }
 
     const issueKey = String(input.value || input.issueKey || "").trim();
-    const selected = (session.state.issues || []).find((issue) => issue.key === issueKey);
+    const issues = session.state.issues || [];
+    const selected = issues.find((issue) => issue.key === issueKey)
+      || (!issues.length && issueKey ? { key: issueKey, fields: {} } : null);
     if (!selected) {
       return { ok: false, error: "Select a Jira issue to continue" };
     }

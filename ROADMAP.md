@@ -655,15 +655,14 @@ The exact staged candidate passed documentation checks across 54 Markdown files,
 
 ### G3. Merge and publish the modernization baseline
 
-Status: local merge complete; push blocked on GitHub authentication
+Completed: 2026-07-18
 
 - Confirmed the release-candidate worktree was clean and the local commit was exactly one commit ahead of `dev`.
 - Fetched `origin/dev` and confirmed it remained at `e1d27ac`, identical to local `dev` and an ancestor of `7dcf67f`.
 - Fast-forwarded local `dev` to the verified modernization commit without a conflict, merge commit, force update, or history rewrite.
 - Used direct Git transport because the optional GitHub CLI/PR workflow is unavailable on this host and the product owner explicitly requested a direct merge and push rather than a pull request.
-- Attempted to push the updated `dev` branch through the configured HTTPS remote; Git rejected the operation before transfer because no username/credential was available.
-- Confirmed `gh` is not installed, `GITHUB_TOKEN` and `GH_TOKEN` are unset, the configured macOS Keychain helper has no usable credential for this operation, and no `~/.ssh` identity directory exists.
-- Left local `dev` clean and two commits ahead of `origin/dev`, ready to push without another merge once GitHub authentication is configured.
+- The initial push attempt was blocked because the host had no available GitHub credential; the product owner subsequently pushed the prepared branch.
+- Confirmed local `dev` and `origin/dev` now resolve to `5c3d355` with no divergence.
 - Created no PR, tag, release artifact, merge action, or deployment beyond the requested branch update.
 
 Verification:
@@ -672,18 +671,271 @@ Verification:
 - `git fetch origin dev`
 - `git merge-base --is-ancestor origin/dev codex/modernization-release-candidate`
 - fast-forward-only merge
-- expected failed HTTPS push diagnostic: `could not read Username for 'https://github.com'`
-- local/remote divergence: local `dev` ahead by two commits, remote unchanged
+- local/remote equality at `5c3d355`
+
+### H1. Audit the current UI and define the simplification direction
+
+Completed: 2026-07-18
+
+- Audited the supplied connected launch-screen capture, current shell/navigation/launch implementation, design tokens, responsive rules, and deterministic visual baselines for the shell, transcript, workflows, schedules, and editor.
+- Identified hierarchy rather than capability as the primary issue: repeated server state, duplicate launch framing, permanently expanded low-frequency configuration, an oversized navigation rail, and card/pill styling that gives routine metadata excessive prominence.
+- Defined a work-first information hierarchy that keeps the current destination, active work, primary action, failures, approvals, and degraded readiness visible while moving healthy diagnostics and configuration behind contextual disclosure.
+- Specified a compact 272- to 288-pixel rail, 56- to 64-pixel command bar, single-source server state, streamlined mission-first launch path, and on-demand run context.
+- Defined a more mature charcoal-and-purple visual foundation with neutral body copy, restrained accent use, smaller radii, fewer pills/gradients/shadows, denser spacing, and a more neutral operational type treatment.
+- Preserved multi-server, project/workspace, runtime/memory, readiness, self-update, workflows, schedules, ledger, editor, archive, responsive, keyboard, and accessibility capabilities as explicit redesign guardrails.
+- Added `UI_AUDIT.md` with surface-by-surface recommendations, a proposed layout, measurable H2 acceptance criteria, and follow-on H3-H5 phases.
+- Made no UI or runtime implementation changes in this audit milestone.
+
+Verification:
+
+- supplied screenshot inspection
+- current source and deterministic browser-baseline inspection
+- `npm run docs:check`
+- `git diff --check`
+
+### H2. Implement the work-first shell, launch path, and foundation tokens
+
+Completed: 2026-07-18
+
+- Reduced the expanded desktop rail from 360 to 280 pixels and its collapsed state from 44 to 48 pixels, replaced the 2-by-2 navigation cards with a compact vertical list, removed marketing copy and permanent server diagnostics, and moved archive scope into the thread collection toolbar.
+- Replaced the expanded multi-row header with a 56-pixel command bar that presents one page/thread title and a single server target control; the target opens the existing full server manager and diagnostics in one interaction.
+- Kept connection-loss and thread-synchronization notices exceptional and contextual instead of reserving permanent shell space for healthy state.
+- Rebuilt the launch surface around the mission field, compact project/workspace and profile/memory summaries, progressive run-context and settings disclosures, the existing Enter/Shift+Enter behavior, and the primary Start action.
+- Removed the duplicate launch hero, four-card diagnostic strip, and permanent Connected target panel while retaining project creation, workspace browsing, profiles, memory modes, readiness warnings, and unchanged launch payloads.
+- Applied the mature charcoal-and-purple foundation: neutral system typography, neutral body copy, darker surface steps, restrained purple, smaller radii, fewer gradients, lower panel elevation, denser controls, and tighter working spacing.
+- Fixed responsive transition and editor-toolbar overflow exposed during the redesign so long transcripts and stacked editors remain contained at 390 pixels.
+- Added explicit browser contracts for the 1440-by-900 work-first geometry, hidden-by-default run context, project/workspace payload preservation, updated server-target interaction, and existing mobile containment.
+- Refreshed and inspected the intentional shell, transcript, workflow, schedule, and editor baselines.
+- Performed in-app visual QA against a disposable local API with isolated workspace/persistence directories and connectors, schedules, automatic ledger agents, and editor launching disabled; inspected the default desktop launch and collapsed/expanded 390-pixel launch states.
+
+Verification:
+
+- `npm run typecheck`
+- `npm run build`
+- focused shell, launch, server, thread-collection, transcript, and editor browser checks
+- desktop and 390-pixel in-app visual QA
+- complete `npm run test:e2e`: 43 tests passed
+- `npm run verify`
+
+### H3. Turn the thread and editor surfaces into a focused workstation
+
+Completed: 2026-07-18
+
+- Removed repeated thread ID, status, and workspace metadata from the transcript and follow-up composer; the command bar remains the single source for thread identity and scope.
+- Replaced the transcript's nested card treatment with a quieter full-height work surface, consolidated event filtering into one compact toolbar, and kept routine events plus run metadata available on demand.
+- Reduced the default follow-up composer to a concise settings summary, 58-pixel message field, horizontal attachment/send actions, and a single-line narrow layout while preserving profile, memory, attachments, retry behavior, and keyboard submission.
+- Rebuilt approvals as a compact sticky decision surface with persistent Approve/Deny actions and a disclosure for request IDs, timestamps, and raw payloads; the blocked composer is now a thin paused-state bar.
+- Made the editor viewport primary by moving passwords and connection metadata entirely behind the Connection disclosure, tightening dock/modal spacing, simplifying headings, and correcting the dock stacking order over the thread header.
+- Added browser contracts for composer height, removal of repeated metadata, hidden approval payloads, hidden-by-default editor credentials, and narrow containment.
+- Added and inspected explicit desktop composer, narrow composer, approval, transcript, and editor-dock visual baselines.
+- Performed connected in-app QA against a disposable local API and an actual isolated failed ACP thread at the default desktop viewport and 390 by 844 pixels; the normal Ender workspace and persistence directories were not used.
+
+Verification:
+
+- `npm run typecheck`
+- focused thread-view and editor-lifecycle browser checks
+- desktop and 390-pixel connected in-app visual QA
+- intentional visual-baseline refresh and inspection
+- `npm run build`
+- `npm run verify`
+
+The complete gate passed: synchronized version metadata, documentation validation across 55 Markdown files, all 118 backend tests, typechecking, syntax checks, the production UI build, and all 43 Playwright tests.
+
+### H4. Consolidate workflows, schedules, and the task ledger
+
+Completed: 2026-07-19
+
+- Added a shared collection header pattern that keeps the page purpose, attention-oriented counts, policy context, and primary actions in one compact operational bar instead of separate hero and metric cards.
+- Reworked the workflow catalog into a full-width dense list, removed the permanently visible session-status side panel, and moved recoverable session metadata plus debug history into compact contextual surfaces.
+- Made the schedule collection the default workspace and moved creation/editing behind New schedule and Edit actions; successful saves close the editor and return operators to the updated collection.
+- Consolidated schedule status and run/edit/pause/delete controls into each row header while retaining target details and outcomes as contextual row content.
+- Made the task-ledger queue the default surface, moved its structured entry composer behind New entry, and retained all source, workspace, criteria, constraint, verification, and auto-run controls within that contextual editor.
+- Reduced default ledger-row density by moving the lifecycle rail, identifiers, workspace, feasibility, and verification metadata into Execution details; meaningful failure/running/completion outcomes remain prominent.
+- Suppressed server-generated ledger request previews when they repeat the visible title verbatim and tightened the narrow filter layout so status and type remain side by side without horizontal overflow.
+- Added browser contracts for hidden-by-default schedule and ledger editors, collection-first navigation, session-title continuity, lifecycle disclosure, retained failed form input, responsive containment, and updated action naming.
+- Added and inspected collection, open-editor, workflow-step, and task-ledger visual baselines.
+- Performed connected in-app QA against a disposable isolated API: inspected the real workflow catalog, created a real schedule and ledger entry through the UI, and verified the resulting desktop and 390-pixel collection/editor layouts without using the normal Ender persistence directories.
+
+Verification:
+
+- `npm run typecheck`
+- 20 focused shell, workflow, schedule, automation, and task-ledger browser tests
+- desktop and 390-pixel connected in-app visual QA
+- intentional visual-baseline refresh and inspection
+- `npm run build`
+- `npm run verify`
+
+The complete gate passed: synchronized version metadata, documentation validation across 55 Markdown files, all 118 backend tests, typechecking, syntax checks, the production UI build, and all 43 Playwright tests.
+
+### H5. Complete cohesion, accessibility, and release validation
+
+Completed: 2026-07-19
+
+- Aligned command-bar page titles with the primary navigation names so destination identity stays concise and consistent at desktop, narrow, and zoomed layouts.
+- Raised quiet metadata contrast above the 4.5-to-1 text threshold and deepened the operational purple used for primary actions so light button text also clears the threshold without losing Ender's color identity.
+- Preserved the shared visible focus treatment across links, buttons, fields, summaries, and programmatic controls; confirmed the skip link, main-content target, mobile navigation trap, modal containment, and focus restoration behavior.
+- Completed the mobile Transcript/Editor switcher as an accessible tab interface with controlled panels, roving tab stops, Arrow/Home/End keyboard navigation, and selected-panel focus continuity.
+- Made busy notices expose `aria-busy`, retained polite/assertive live-region behavior for routine and error feedback, and verified the redesigned empty, loading, degraded, failure, retry, approval, and recovery states through the existing browser suite.
+- Preserved 44-pixel control targets for coarse pointers and eliminated meaningful transitions and animations when reduced motion is requested.
+- Added a 640-pixel layout contract as the working equivalent of a 1280-pixel viewport at 200-percent zoom, alongside the existing 390-pixel containment checks.
+- Reflowed narrow empty-state actions beneath their explanatory copy and prevented the mobile Menu control from yielding width to longer page or thread titles.
+- Added dedicated contrast, focus, reduced-motion, coarse-pointer, zoom-equivalent, and narrow empty-state browser contracts, and expanded editor lifecycle coverage for keyboard tab semantics.
+- Performed connected in-app QA against a disposable isolated API at the default desktop viewport, 640 by 900 pixels, and 390 by 844 pixels across launch, workflows, schedules, and task-ledger surfaces; no normal Ender persistence directories were used.
+- Refreshed the intentional visual baselines after the final accessible purple and responsive-state adjustments.
+
+Verification:
+
+- `npm run typecheck`
+- 8 focused accessibility and editor-lifecycle browser checks
+- desktop, 640-pixel zoom-equivalent, and 390-pixel connected in-app visual QA
+- intentional visual-baseline refresh
+- complete 48-test Playwright suite
+- `npm run verify`
+
+The complete gate passed: synchronized version metadata, documentation validation across 55 Markdown files, all 118 backend tests, typechecking, syntax checks, the production UI build, and all 48 Playwright tests.
+
+### H6. Consolidate the redesign into a review-ready delivery
+
+Completed: 2026-07-19
+
+- Reviewed the complete H1-through-H5 diff and confirmed its scope is limited to the operator interface, browser contracts, intentional visual baselines, and continuity documentation; backend and shared API behavior remain unchanged.
+- Audited every untracked artifact and confirmed that each source file, document, and PNG baseline is referenced by the delivered UI or its browser tests.
+- Removed pre-redesign copy fields that no longer render and deleted unreferenced CSS for the former server summary card, expanded header metrics, navigation cards and footer, launch side panel, compact editor-password treatment, workflow/ledger side panels, and superseded transcript-tool rows.
+- Cross-checked stylesheet class selectors against the current UI source, retaining only the external Google Fonts hostname and the six dynamically generated transcript-heading levels as expected static-analysis exceptions.
+- Reduced the production CSS bundle from 64.69 to 57.62 kilobytes and its gzip size from 12.82 to 11.64 kilobytes; the production JavaScript bundle also reduced from 348.17 to 347.59 kilobytes after dead copy removal.
+- Updated the original audit status to point to the completed implementation and added `UI_RELEASE_NOTES.md` with the operator-facing changes, preserved capabilities, compatibility boundary, accessibility behavior, and verification evidence.
+- Re-ran all 48 browser tests without updating their visual baselines after cleanup; every baseline remained unchanged, proving the removed selectors had no live visual consumer.
+
+Verification:
+
+- complete diff, untracked-artifact, and selector-consumer review
+- `git diff --check`
+- `npm run typecheck`
+- `npm run build`
+- complete 48-test Playwright suite with unchanged baselines
+- `npm run verify`
+
+The complete gate passed: synchronized version metadata, documentation validation across 56 Markdown files, all 118 backend tests, typechecking, syntax checks, the production UI build, and all 48 Playwright tests.
+
+### I1. Restore and prove maintained Codex ACP execution
+
+Completed: 2026-07-19
+
+- Traced the reported launch failure to the configured deprecated `@zed-industries/codex-acp` 0.16 runtime; Ender's OpenAI model setting was not selecting the ACP model shown in the failure because Codex owns that selection inside the ACP subprocess.
+- Migrated the active local configuration and public examples to `@agentclientprotocol/codex-acp`, whose maintained package carries a compatible Codex runtime, while documenting the `CODEX_PATH` override boundary.
+- Increased the default ACP initialize/new-session allowance from 10 to 30 seconds so a cold npx adapter launch has a practical startup window without weakening task-level completion behavior.
+- Added an actionable runtime diagnostic for the deprecated package, unsupported `max` reasoning cache, and newer-Codex-required signals; the original ACP error and subprocess output remain attached for investigation.
+- Rebuilt the server-thread smoke as an opt-in, credential-backed check that starts the actual `src/server.js` entry point on loopback, isolates every persistence/workspace directory, creates and polls a task through HTTP, verifies a deterministic model response, shuts down cleanly, and removes its temporary state.
+- Added the smoke to package scripts, syntax validation, README setup, operator troubleshooting, and the release-readiness matrix without placing a paid/network-dependent provider call inside the deterministic `verify` gate.
+
+Verification:
+
+- `node --test tests/acp-agent-runner.test.js`
+- `npm run docs:check`
+- `npm run check`
+- `npm run smoke:acp-server`
+- `npm run verify`
+
+The real ACP smoke completed a fresh Ender task as `done` with the expected `ENDER_ACP_SMOKE_OK` marker in 12.2 seconds. The complete gate then passed with synchronized version metadata, documentation validation across 56 Markdown files, all 119 backend tests, typechecking, syntax checks, the production UI build, and all 48 Playwright tests.
+
+### I2. Run multiple configured model backends concurrently
+
+Completed: 2026-07-19
+
+- Reframed `LLM_BACKEND` as the default provider instead of the server's exclusive provider, preserving the existing value and `DEFAULT_LLM_PROFILE_ID` behavior.
+- Added automatic profile discovery for the selected backend plus each other provider whose required environment values are configured; the current environment publishes ACP, OpenAI, and Bedrock from one server process.
+- Kept `LLM_PROFILES_JSON` authoritative when present so named model variants and controlled profile allowlists retain their prior behavior without duplicate automatic profiles.
+- Added profile readiness and missing-variable metadata to the public catalog without exposing credentials, and kept incomplete profiles visibly unavailable in both launch and follow-up selectors.
+- Preserved per-task and per-follow-up `llmProfileId` routing through the existing execution boundary, and made the pickers recover to the current server default if a saved profile disappears after a server switch or configuration change.
+- Generalized the isolated provider smoke so one real `src/server.js` process can validate multiple requested profiles sequentially through the HTTP task API; added `npm run smoke:configured-backends` for ACP plus OpenAI.
+- Removed the fixed-interval task-ledger flicker by making three-second background polling visually silent and deduplicating unchanged collection and metadata responses before they reach React state.
+- Added browser coverage proving backend selection reaches the task payload and background ledger refreshes preserve an expanded row without showing transient syncing copy.
+- Retained correct ACP and OpenAI product capitalization after inspecting the three copy-only visual diffs and refreshing only those intentional baselines.
+
+Verification:
+
+- focused profile-manager and ACP runner tests
+- 9 focused backend-picker and task-ledger Playwright tests
+- `npm run smoke:configured-backends`
+- `npm run verify`
+
+The same isolated server completed ACP and OpenAI tasks as `done` with their expected markers in 7.0 and 2.3 seconds respectively. The complete repository gate passed with synchronized version metadata, documentation validation across 56 Markdown files, all 121 backend tests, typechecking, syntax checks, the production UI build, and all 50 Playwright tests.
+
+### I3. Support multiple models per configured provider
+
+Completed: 2026-07-19
+
+- Confirmed against AWS's current Bedrock lifecycle and model catalog that the former Claude 3.5 Sonnet default is end-of-life and replaced it with the active US Claude Sonnet 5 inference profile.
+- Added comma-separated `OPENAI_MODELS`, `BEDROCK_MODEL_IDS`, `AZURE_OPENAI_API_DEPLOYMENT_NAMES`, and `OLLAMA_MODELS` configuration while retaining every singular variable as that provider's backward-compatible default.
+- Expanded automatic discovery to publish one profile per configured model or Azure deployment. Primary provider IDs remain stable (`openai`, `bedrock`, `azure`, and `ollama`); additional profiles use deterministic provider/model IDs, including deterministic collision suffixes.
+- Kept `LLM_PROFILES_JSON` authoritative for custom labels, credentials, and allowlists, and kept ACP as one profile because its spawned adapter owns model selection.
+- Made launch and follow-up profile labels model-aware without repeating provider/model details in native selectors, and added browser coverage proving a secondary same-provider model reaches the task payload.
+- Removed the Bedrock-wide `temperature` override after the real Sonnet 5 smoke proved that current Bedrock models reject that deprecated parameter; other provider defaults remain unchanged.
+- Added a dedicated credential-backed Bedrock server smoke and documented provider/model configuration, lifecycle troubleshooting, runtime routing, and release evidence.
+
+Verification:
+
+- focused profile-manager and model-factory tests
+- focused 4-test launch-flow Playwright suite
+- real isolated `src/server.js` task through `bedrock` using `us.anthropic.claude-sonnet-5`
+- real isolated `src/server.js` task through generated `bedrock-us-anthropic-claude-sonnet-4-6`
+- `npm run verify`
+
+Both active Bedrock profiles completed deterministic-marker tasks as `done` in approximately 2.4 seconds each. The complete repository gate passed with synchronized version metadata, documentation validation across 56 Markdown files, all 123 backend tests, typechecking, syntax checks, the production UI build, and all 50 Playwright tests without visual baseline changes.
+
+### I4. Unify provider feedback and the conversation model
+
+Completed: 2026-07-20
+
+- Added one provider-neutral activity contract for direct model backends and ACP, separating internal run phases, model-authored progress, plans, tool lifecycles, approvals, and chat responses.
+- Replaced repeated “invoking model” rows with one compact work summary per user turn in Conversation while preserving model requests, paired tool calls/results, diagnostics, and timing in All activity.
+- Normalized missing and partial tool states so legacy ACP logs remain readable without `undefined` statuses, duplicated fragments, or progress text concatenated into the final response.
+- Kept tool detail recoverable from the summary and kept approvals and actionable failures prominent.
+- Added regression coverage for active structured progress, clean final responses, legacy ACP normalization, direct-provider iteration reconciliation, and provider/model launch selection.
+
+Verification:
+
+- focused ACP runner and tool-runtime tests
+- focused thread-view and launch-flow Playwright tests
+- `npm run verify`
+
+### I5. Refresh maintained documentation and product screenshots
+
+Completed: 2026-07-20
+
+- Corrected current navigation, launch-action, transcript, provider-discovery, model-profile, ACP adapter, and handshake-timeout descriptions across the maintained operator, architecture, and continuity records.
+- Classified the May wiki and raw corpus as historical context, repaired its local links, and expanded the documentation gate to protect link integrity across both maintained and historical Markdown without treating historical commands as release guidance.
+- Replaced eight pre-redesign JPEGs with exact PNG copies of current deterministic Playwright baselines and added a repeatable screenshot synchronization command and source manifest.
+- Visually inspected all eight documentation images after synchronization.
+
+Verification:
+
+- `npm run docs:screenshots:sync`
+- `npm run docs:check`
+- `git diff --check`
+- `npm run verify`
+
+The complete gate passed with synchronized version metadata, documentation validation across 68 Markdown files, all 128 backend tests, typechecking, syntax checks, the production UI build, and all 58 Chromium Playwright tests.
 
 ## Next milestone
 
-Milestone G3 completion: configure GitHub authentication on this host, push local `dev`, and confirm `origin/dev` resolves to the local head. H1 UI refinement follows immediately after publication.
+Milestone I6: complete live provider-parity validation.
+
+Planned scope:
+
+- Run representative live tasks through Azure OpenAI, Ollama, and at least one non-Codex ACP adapter where credentials/runtime access are available.
+- Compare Conversation summaries, All activity detail, approvals, failures, and final responses against the proven OpenAI, Bedrock, and Codex ACP behavior.
+- Add provider-specific adapters only where live evidence reveals a real contract mismatch; keep the shared event vocabulary stable.
 
 Planned verification:
 
-- Install and authenticate GitHub CLI with `gh auth login`, provide a credential through the configured HTTPS helper, or configure an SSH identity for GitHub.
-- Push local `dev` without force and confirm local/remote commit equality.
-- Then run the current browser UI against the local API and begin the fresh UI audit.
+- credential-backed provider smokes
+- focused contracts for any discovered normalization defect
+- `npm run verify`
+
+Needs:
+
+- Azure credentials/deployment, an available Ollama model, and a non-Codex ACP agent/runtime as applicable.
 
 ## Working assumptions
 

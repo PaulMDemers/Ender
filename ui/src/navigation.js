@@ -1,7 +1,7 @@
 export const PRIMARY_DESTINATIONS = Object.freeze([
   Object.freeze({
     id: "new",
-    label: "New thread",
+    label: "New task",
     description: "Start agent work",
     icon: "plus"
   }),

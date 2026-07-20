@@ -44,7 +44,7 @@ test("createChatModel constructs upgraded LangChain backends", () => {
     {
       backend: "bedrock",
       openai: {},
-      bedrock: { region: "us-east-1", model: "anthropic.claude-3-5-sonnet-20240620-v1:0" },
+      bedrock: { region: "us-east-1", model: "us.anthropic.claude-sonnet-5" },
       azure: {},
       ollama: {}
     },
@@ -74,6 +74,9 @@ test("createChatModel constructs upgraded LangChain backends", () => {
     const model = createChatModel(config);
     assert.equal(typeof model?.invoke, "function", `${config.backend} should expose invoke()`);
     assert.equal(typeof model?.bindTools, "function", `${config.backend} should expose bindTools()`);
+    if (config.backend === "bedrock") {
+      assert.equal(model.temperature, undefined, "Bedrock model defaults should avoid deprecated parameters");
+    }
   }
 });
 
@@ -383,6 +386,67 @@ test("runAgentLoop sends multimodal tool results back in a provider-safe shape",
   assert.equal(invokeCount, 2);
   assert.equal(result.stopReason, "no_tool_calls");
   assert.equal(result.result, "DONE:\nvisual review complete");
+});
+
+test("runAgentLoop emits one provider-neutral activity contract for every direct backend", async () => {
+  for (const provider of ["openai", "azure", "bedrock", "ollama"]) {
+    let invokeCount = 0;
+    const logs = [];
+    const model = {
+      bindTools() {
+        return this;
+      },
+      async invoke() {
+        invokeCount += 1;
+        if (invokeCount === 1) {
+          return {
+            content: "I’ll create the project file, then verify the result.",
+            tool_calls: [
+              {
+                id: `${provider}-write-1`,
+                name: "file_write",
+                args: { path: "example/app.js", content: "export default true;" }
+              }
+            ]
+          };
+        }
+        return { content: "DONE:\nProject file created and verified.", tool_calls: [] };
+      }
+    };
+    const fileWrite = {
+      name: "file_write",
+      async invoke(args) {
+        return { ok: true, path: args.path, bytes: args.content.length };
+      }
+    };
+
+    const result = await runAgentLoop({
+      model,
+      tools: [fileWrite],
+      systemPrompt: "Test system prompt",
+      userPrompt: "Create the project",
+      provider,
+      onLog(entry) {
+        logs.push(entry);
+      }
+    });
+
+    assert.equal(result.result, "DONE:\nProject file created and verified.");
+    const phases = logs.filter((entry) => entry.data?.kind === "run_phase");
+    const progress = logs.filter((entry) => entry.data?.kind === "assistant_progress");
+    const toolEvents = logs.filter((entry) => entry.data?.kind === "tool_call");
+    assert.equal(phases.length, 2);
+    assert.ok(phases.every((entry) => entry.data.provider === provider && entry.data.turnId));
+    assert.equal(progress.length, 1);
+    assert.equal(progress[0].data.content, "I’ll create the project file, then verify the result.");
+    assert.equal(progress[0].data.provider, provider);
+    assert.deepEqual(toolEvents.map((entry) => entry.data.status), ["in_progress", "completed"]);
+    assert.ok(toolEvents.every((entry) => entry.data.toolCallId === `${provider}-write-1`));
+    assert.ok(toolEvents.every((entry) => entry.data.toolName === "file_write"));
+    assert.ok(toolEvents.every((entry) => entry.data.title === "Write file"));
+    assert.ok(toolEvents.every((entry) => entry.data.turnId === phases[0].data.turnId));
+    assert.equal(logs.some((entry) => typeof entry.data === "string" && /invoking model|tool call:|tool result/.test(entry.data)), false);
+  }
 });
 
 test("runAgentLoop preserves multimodal thread messages when replaying conversation history", async () => {

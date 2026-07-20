@@ -1,6 +1,7 @@
 import { useState } from "react";
 import WorkflowStepRenderer from "./WorkflowStepRenderer";
 import StateNotice from "./ui/StateNotice";
+import CollectionHeader from "./ui/CollectionHeader";
 
 function getWorkflowReadiness(workflow, readiness) {
   const state = readiness?.[workflow.id];
@@ -37,12 +38,11 @@ function WorkflowList({ workflows, readiness, busy, onStart }) {
           <button
             key={workflow.id}
             type="button"
-            className={`workflowCard ${state.ready ? "" : "workflowCardUnavailable"}`.trim()}
+            className={`workflowCard collectionRow ${state.ready ? "" : "workflowCardUnavailable"}`.trim()}
             onClick={() => onStart?.(workflow.id)}
             disabled={busy || !state.ready}
           >
             <div className="workflowCardHeader">
-              <span className="workflowBadge">WORKFLOW</span>
               <span className={`statusPill ${state.ready ? "success" : "warning"}`}>{state.label}</span>
             </div>
             <div className="workflowName">{workflow.name}</div>
@@ -132,36 +132,35 @@ export default function WorkflowPanel({
 
   return (
     <div className="workflowStack">
-      <section className="automationOverview" aria-label="Workflow overview">
-        <div className="workflowHero">
-          <span className="workflowBadge">{session ? "ACTIVE SESSION" : "WORKFLOWS"}</span>
-          <div className="launchTitle">{session ? step?.title || session.workflowName : "Guided task launch"}</div>
-          <div className="launchDescription">
-            {session && step?.description
-              ? step.description
-              : "Choose a server-defined flow to gather validated inputs and hand work into a supervised thread."}
-          </div>
-        </div>
-        {!session ? (
-          <div className="automationSummaryGrid">
-            <div className="automationSummaryItem"><span>Available</span><strong>{availableCount}</strong></div>
-            <div className="automationSummaryItem"><span>Needs setup</span><strong>{setupCount}</strong></div>
-            <div className="automationSummaryItem"><span>Schedulable</span><strong>{schedulableCount}</strong></div>
-          </div>
+      <CollectionHeader
+        label={session ? "Active workflow" : "Workflow catalog"}
+        title={session ? step?.title || session.workflowName : "Guided launches"}
+        description={session && step?.description
+          ? step.description
+          : "Choose a validated server-defined flow and hand the result into a supervised thread."}
+        stats={session ? [] : [
+          { label: "available", value: availableCount },
+          { label: "setup", value: setupCount, tone: setupCount ? "attention" : "" },
+          { label: "schedulable", value: schedulableCount }
+        ]}
+        ariaLabel="Workflow overview"
+      >
+        {session ? (
+          <>
+            {session.canGoBack ? <button type="button" className="secondaryButton" disabled={busy} onClick={goBack}>Back</button> : null}
+            <button type="button" className="secondaryButton" disabled={busy} onClick={reset}>Change workflow</button>
+          </>
         ) : (
-          <div className="workflowToolbar workflowToolbarCompact">
-            <div className="stepProgress mono">
-              {stepSummary} · session {session.id.slice(0, 8)} · updated {new Date(session.updatedAt).toLocaleTimeString()}
-            </div>
-            <div className="workflowActionBar">
-              <button type="button" className="secondaryButton" disabled={busy} onClick={reset}>Change workflow</button>
-              {session.canGoBack ? (
-                <button type="button" className="secondaryButton" disabled={busy} onClick={goBack}>Back</button>
-              ) : null}
-            </div>
-          </div>
+          <button type="button" className="secondaryButton" disabled={busy || loading} onClick={() => onReload?.()}>Refresh</button>
         )}
-      </section>
+      </CollectionHeader>
+
+      {session ? (
+        <div className="collectionContextBar mono">
+          <span>{stepSummary}</span>
+          <span>session {session.id.slice(0, 8)} · updated {new Date(session.updatedAt).toLocaleTimeString()}</span>
+        </div>
+      ) : null}
 
       {session?.resumedFromDisk ? (
         <StateNotice
@@ -172,7 +171,7 @@ export default function WorkflowPanel({
         />
       ) : null}
 
-      <div className="workflowWorkspace">
+      <div className="workflowWorkspace collectionWorkspace">
         <section className="consolePanel workflowConsole">
           <div className="panelBody workflowPanelBody">
             {!session ? (
@@ -204,34 +203,15 @@ export default function WorkflowPanel({
                 busy={busy || loading}
               />
             ) : null}
+
+            {historyCount ? (
+              <details className="workflowDebug">
+                <summary className="mono">Debug trace · {historyCount}</summary>
+                <pre className="workflowDebugPre">{JSON.stringify(debugEntries, null, 2)}</pre>
+              </details>
+            ) : null}
           </div>
         </section>
-
-        <aside className="sidePanel workflowSidePanel">
-          <div className="sectionLabel">Session status</div>
-          <div className="launchSummaryValue">{session ? (step?.title || session.workflowName) : "Ready to choose"}</div>
-          <div className="panelNote">
-            {session
-              ? "Inputs stay attached to this recoverable server session until the workflow creates a thread or you change workflows."
-              : "Readiness comes from the connected server. Workflows needing setup remain visible with their missing prerequisites."}
-          </div>
-          <div className="launchContextBlock">
-            <span className="launchSummaryLabel">Mode</span>
-            <div className="sidePanelValue mono">{session ? stepSummary : "interactive guided launch"}</div>
-          </div>
-          {session ? (
-            <div className="launchContextBlock">
-              <span className="launchSummaryLabel">Recovery</span>
-              <div className="sidePanelValue">Saved automatically on this server</div>
-            </div>
-          ) : null}
-          {historyCount ? (
-            <details className="workflowDebug">
-              <summary className="mono">Debug trace · {historyCount}</summary>
-              <pre className="workflowDebugPre">{JSON.stringify(debugEntries, null, 2)}</pre>
-            </details>
-          ) : null}
-        </aside>
       </div>
     </div>
   );
